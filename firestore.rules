@@ -5,11 +5,12 @@ rules_version = '2';
 // Milestone 2 introduces the `users` collection: one document per account,
 // keyed by the Firebase Authentication uid, storing the user's role.
 //
-// Rules for collections introduced by later milestones (classes, courses,
-// lessons, enrollments, assignments, submissions, comments, announcements)
-// should be added alongside those milestones. Until then, the catch-all
-// rule below denies all access to keep the default posture closed rather
-// than open.
+// Milestone 3 adds `classes`, `courses`, and `enrollments`.
+//
+// Rules for collections introduced by later milestones (lessons,
+// assignments, submissions, comments, announcements) should be added
+// alongside those milestones. Until then, the catch-all rule at the end
+// denies all access to keep the default posture closed rather than open.
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() {
@@ -38,6 +39,169 @@ service cloud.firestore {
       // escalating their own role by writing over their document.
       allow update: if false;
       allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // Milestone 3: classes, courses, enrollments.
+    //
+    // A class document's id is also the code students type to join it, so
+    // knowing that id is what authorizes a student to enroll. Membership
+    // itself lives in `enrollments`, keyed `{classId}_{studentId}`, which
+    // turns every access check below into a single `exists()` lookup.
+    // ---------------------------------------------------------------
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isTeacher() {
+      return isSignedIn() && userRole() == 'teacher';
+    }
+
+    function isStudent() {
+      return isSignedIn() && userRole() == 'student';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    function classExists(classId) {
+      return exists(/databases/$(database)/documents/classes/$(classId));
+    }
+
+    function isClassTeacher(classId) {
+      return isSignedIn()
+        && classExists(classId)
+        && get(/databases/$(database)/documents/classes/$(classId)).data.teacherId == request.auth.uid;
+    }
+
+    function isEnrolled(classId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/enrollments/$(classId + '_' + request.auth.uid));
+    }
+
+    match /classes/{classId} {
+      // Reading a single class: its teacher, an enrolled student, or an
+      // administrator. A student who is not enrolled cannot read a class
+      // even when they know its id, so the code alone never leaks class
+      // content: it only allows the enrollment write below.
+      allow get: if isSignedIn()
+        && (resource.data.teacherId == request.auth.uid || isEnrolled(classId) || isAdmin());
+
+      // Listing is deliberately narrower than `get`: a teacher may only
+      // query their own classes, and nobody else may enumerate the
+      // collection. Students reach their classes through `enrollments`.
+      allow list: if isSignedIn()
+        && (resource.data.teacherId == request.auth.uid || isAdmin());
+
+      allow create: if isTeacher()
+        && request.resource.data.id == classId
+        && request.resource.data.teacherId == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 600
+        && request.resource.data.teacherName is string
+        && request.resource.data.keys().hasOnly(
+          ['id', 'name', 'description', 'teacherId', 'teacherName', 'createdAt', 'updatedAt']);
+
+      // Only the owning teacher may edit, and only the editable fields:
+      // reassigning a class to another teacher, or rewriting its id or
+      // creation date, is never a legitimate client operation.
+      allow update: if isSignedIn()
+        && resource.data.teacherId == request.auth.uid
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.teacherId == resource.data.teacherId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 600
+        && request.resource.data.keys().hasOnly(
+          ['id', 'name', 'description', 'teacherId', 'teacherName', 'createdAt', 'updatedAt']);
+
+      allow delete: if isSignedIn() && resource.data.teacherId == request.auth.uid;
+    }
+
+    match /courses/{courseId} {
+      // `teacherId` is duplicated on the course so a teacher's own query
+      // resolves without a lookup; students are checked against their
+      // enrollment in the owning class.
+      allow read: if isSignedIn()
+        && (resource.data.teacherId == request.auth.uid
+          || isEnrolled(resource.data.classId)
+          || isAdmin());
+
+      allow create: if isTeacher()
+        && request.resource.data.id == courseId
+        && request.resource.data.teacherId == request.auth.uid
+        && isClassTeacher(request.resource.data.classId)
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 140
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 800
+        && request.resource.data.keys().hasOnly(
+          ['id', 'classId', 'teacherId', 'title', 'description', 'createdAt', 'updatedAt']);
+
+      // A course cannot be moved to another class or handed to another
+      // teacher from the client: both would sidestep the ownership checks
+      // that every other rule here depends on.
+      allow update: if isSignedIn()
+        && resource.data.teacherId == request.auth.uid
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.classId == resource.data.classId
+        && request.resource.data.teacherId == resource.data.teacherId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 140
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 800
+        && request.resource.data.keys().hasOnly(
+          ['id', 'classId', 'teacherId', 'title', 'description', 'createdAt', 'updatedAt']);
+
+      allow delete: if isSignedIn() && resource.data.teacherId == request.auth.uid;
+    }
+
+    match /enrollments/{enrollmentId} {
+      // A student sees their own enrollments; a teacher sees the roster of
+      // their own classes. Both shapes are queryable because every
+      // returned document satisfies one of these conditions.
+      allow read: if isSignedIn()
+        && (resource.data.studentId == request.auth.uid
+          || isClassTeacher(resource.data.classId)
+          || isAdmin());
+
+      // Students enroll themselves. The deterministic id is enforced here,
+      // so a student cannot create an enrollment for somebody else, and
+      // the class must exist, so a mistyped code fails rather than
+      // creating a dangling membership. `studentEmail` is checked against
+      // the authentication token; `studentName` is the student's own name
+      // and is copied so teachers can display a roster without read
+      // access to the `users` collection.
+      allow create: if isStudent()
+        && request.resource.data.studentId == request.auth.uid
+        && enrollmentId == request.resource.data.classId + '_' + request.auth.uid
+        && request.resource.data.id == enrollmentId
+        && request.resource.data.studentEmail == request.auth.token.email
+        && request.resource.data.studentName is string
+        && request.resource.data.studentName.size() > 0
+        && classExists(request.resource.data.classId)
+        && request.resource.data.keys().hasOnly(
+          ['id', 'classId', 'studentId', 'studentName', 'studentEmail', 'createdAt']);
+
+      // An enrollment is a fact, not a record to edit: leaving a class
+      // deletes it and rejoining creates it again.
+      allow update: if false;
+
+      // A student may leave a class; a teacher may remove a student from
+      // a class they own.
+      allow delete: if isSignedIn()
+        && (resource.data.studentId == request.auth.uid || isClassTeacher(resource.data.classId));
     }
 
     // Deny by default for every collection not explicitly covered above.

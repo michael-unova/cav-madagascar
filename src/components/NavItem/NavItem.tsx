@@ -7,13 +7,18 @@ export interface NavItemProps {
   label: string
   icon: string
   onNavigate?: () => void
+  /**
+   * When false, the item also stays active on nested routes, so opening a
+   * class or a course keeps its section highlighted in the navigation.
+   */
+  end?: boolean
 }
 
-export function NavItem({ to, label, icon, onNavigate }: NavItemProps) {
+export function NavItem({ to, label, icon, onNavigate, end = true }: NavItemProps) {
   return (
     <NavLink
       to={to}
-      end
+      end={end}
       onClick={onNavigate}
       className={({ isActive }) => cn(styles.item, isActive && styles.active)}
     >

@@ -13,6 +13,14 @@ export const paths = {
   dashboardStudent: '/dashboard/student',
   dashboardTeacher: '/dashboard/teacher',
   dashboardAdmin: '/dashboard/admin',
+  classes: '/classes',
+  /** Route pattern for `<Route path>`; use `classDetail()` for links. */
+  classDetailPattern: '/classes/:classId',
+  classDetail: (classId: string) => `/classes/${classId}`,
+  courses: '/courses',
+  /** Route pattern for `<Route path>`; use `courseDetail()` for links. */
+  courseDetailPattern: '/courses/:courseId',
+  courseDetail: (courseId: string) => `/courses/${courseId}`,
 } as const
 
 /**
