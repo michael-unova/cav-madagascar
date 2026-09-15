@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// Firestore Security Rules for the E-Learning Platform.
+//
+// Milestone 2 introduces the `users` collection: one document per account,
+// keyed by the Firebase Authentication uid, storing the user's role.
+//
+// Rules for collections introduced by later milestones (classes, courses,
+// lessons, enrollments, assignments, submissions, comments, announcements)
+// should be added alongside those milestones. Until then, the catch-all
+// rule below denies all access to keep the default posture closed rather
+// than open.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /users/{userId} {
+      // A user may only read their own profile document. There is no
+      // general "list all users" read access yet; that belongs to a
+      // future admin-facing milestone with its own authorization design.
+      allow read: if isSignedIn() && request.auth.uid == userId;
+
+      // A user may create their own profile document exactly once, at
+      // sign-up, and only as 'student' or 'teacher'. 'admin' accounts are
+      // never self-assignable from the client; they are provisioned
+      // manually (Firebase console or a trusted backend).
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.id == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['student', 'teacher']
+        && request.resource.data.keys().hasOnly(['id', 'email', 'displayName', 'role', 'createdAt']);
+
+      // Profile editing and role changes are not implemented in Milestone
+      // 2. Disallowing update/delete for now also prevents a user from
+      // escalating their own role by writing over their document.
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Deny by default for every collection not explicitly covered above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
