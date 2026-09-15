@@ -1,8 +1,11 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Card } from '../../components/Card/Card'
 import { Input } from '../../components/Input/Input'
 import { Button } from '../../components/Button/Button'
+import { ErrorState } from '../../components/ErrorState/ErrorState'
+import { signUp } from '../../features/auth/authService'
+import { getAuthErrorMessage } from '../../features/auth/authErrors'
 import { cn } from '../../utils/cn'
 import { paths } from '../../routes/paths'
 import styles from './RegisterPage.module.css'
@@ -14,11 +17,25 @@ export function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<RegisterRole>('student')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  // Firebase Authentication account creation is implemented in Milestone 2.
-  // This handler is a UI foundation placeholder only.
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const navigate = useNavigate()
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setErrorMessage(null)
+    setIsSubmitting(true)
+
+    try {
+      await signUp({ displayName: fullName, email, password, role })
+      // DashboardRedirect resolves the correct role-specific dashboard
+      // for the account that was just created.
+      navigate(paths.dashboard, { replace: true })
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error))
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -26,6 +43,13 @@ export function RegisterPage() {
       <Card padding="lg" className={styles.card}>
         <h1 className={styles.title}>Créer un compte</h1>
         <p className={styles.subtitle}>Rejoignez Nova Études pour enseigner ou pour apprendre.</p>
+
+        {errorMessage && (
+          <ErrorState
+            title="Inscription impossible"
+            description={errorMessage}
+          />
+        )}
 
         <div className={styles.roleToggle} role="radiogroup" aria-label="Je suis">
           <button
@@ -80,8 +104,8 @@ export function RegisterPage() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
-          <Button type="submit" fullWidth>
-            Créer mon compte
+          <Button type="submit" fullWidth disabled={isSubmitting}>
+            {isSubmitting ? 'Création en cours...' : 'Créer mon compte'}
           </Button>
         </form>
 

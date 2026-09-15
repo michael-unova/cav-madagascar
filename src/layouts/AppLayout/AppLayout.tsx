@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Logo } from '../../components/Logo/Logo'
 import { NavItem } from '../../components/NavItem/NavItem'
 import { Avatar } from '../../components/Avatar/Avatar'
 import { Badge } from '../../components/Badge/Badge'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { paths } from '../../routes/paths'
+import { useAuth } from '../../features/auth/useAuth'
+import { signOutUser } from '../../features/auth/authService'
+import { paths, roleDashboardPaths } from '../../routes/paths'
 import { cn } from '../../utils/cn'
 import type { UserRole } from '../../types'
 import styles from './AppLayout.module.css'
@@ -16,28 +18,29 @@ const roleLabels: Record<UserRole, string> = {
   student: 'Étudiant',
 }
 
-const roleDashboardPaths: Record<UserRole, string> = {
-  admin: paths.dashboardAdmin,
-  teacher: paths.dashboardTeacher,
-  student: paths.dashboardStudent,
-}
-
 export interface AppLayoutProps {
-  /**
-   * The role whose dashboard is currently being viewed. This does not
-   * enforce any authorization: it only labels which placeholder dashboard
-   * is on screen until Milestone 2 introduces real Firebase Authentication
-   * and resolves the signed in user's actual role.
-   */
-  role: UserRole
   children: ReactNode
 }
 
-export function AppLayout({ role, children }: AppLayoutProps) {
+export function AppLayout({ children }: AppLayoutProps) {
+  // AppLayout only ever renders behind ProtectedRoute, so `user` is
+  // expected to be set; the fallbacks below are defensive, not the
+  // normal path.
+  const { user } = useAuth()
+  const role = user?.role ?? 'student'
+  const displayName = user?.displayName ?? roleLabels[role]
+
   const isDesktop = useMediaQuery('(min-width: 960px)')
   const [isNavOpen, setIsNavOpen] = useState(false)
+  const navigate = useNavigate()
 
   const closeNav = () => setIsNavOpen(false)
+
+  const handleSignOut = async () => {
+    closeNav()
+    await signOutUser()
+    navigate(paths.home)
+  }
 
   const navLinks = (
     <nav className={styles.nav}>
@@ -48,16 +51,12 @@ export function AppLayout({ role, children }: AppLayoutProps) {
 
   const signOutLink = (
     <div className={styles.navFooter}>
-      {/*
-        Placeholder sign out action. Real session termination is wired up
-        in Milestone 2 once Firebase Authentication is implemented.
-      */}
-      <Link to={paths.home} className={styles.logoutLink} onClick={closeNav}>
+      <button type="button" className={styles.logoutLink} onClick={handleSignOut}>
         <svg className={styles.logoutIcon} aria-hidden="true">
           <use href="/icons.svg#icon-logout" />
         </svg>
         <span>Déconnexion</span>
-      </Link>
+      </button>
     </div>
   )
 
@@ -92,7 +91,7 @@ export function AppLayout({ role, children }: AppLayoutProps) {
 
           <div className={styles.headerUser}>
             <Badge tone="primary">{roleLabels[role]}</Badge>
-            <Avatar name={roleLabels[role]} size="sm" />
+            <Avatar name={displayName} size="sm" />
           </div>
         </header>
 

@@ -10,6 +10,8 @@ import { DashboardRedirect } from './pages/dashboards/DashboardRedirect'
 import { StudentDashboardPage } from './pages/dashboards/StudentDashboardPage'
 import { TeacherDashboardPage } from './pages/dashboards/TeacherDashboardPage'
 import { AdminDashboardPage } from './pages/dashboards/AdminDashboardPage'
+import { ProtectedRoute } from './features/auth/ProtectedRoute'
+import { PublicOnlyRoute } from './features/auth/PublicOnlyRoute'
 import { paths } from './routes/paths'
 
 function App() {
@@ -17,42 +19,71 @@ function App() {
     <Routes>
       <Route element={<PublicLayout />}>
         <Route path={paths.home} element={<LandingPage />} />
-        <Route path={paths.login} element={<LoginPage />} />
-        <Route path={paths.register} element={<RegisterPage />} />
+        <Route
+          path={paths.login}
+          element={
+            <PublicOnlyRoute>
+              <LoginPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path={paths.register}
+          element={
+            <PublicOnlyRoute>
+              <RegisterPage />
+            </PublicOnlyRoute>
+          }
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
 
-      <Route path={paths.dashboard} element={<DashboardRedirect />} />
+      <Route
+        path={paths.dashboard}
+        element={
+          <ProtectedRoute>
+            <DashboardRedirect />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path={paths.dashboardStudent}
         element={
-          <AppLayout role="student">
-            <StudentDashboardPage />
-          </AppLayout>
+          <ProtectedRoute allowedRoles={['student']}>
+            <AppLayout>
+              <StudentDashboardPage />
+            </AppLayout>
+          </ProtectedRoute>
         }
       />
       <Route
         path={paths.dashboardTeacher}
         element={
-          <AppLayout role="teacher">
-            <TeacherDashboardPage />
-          </AppLayout>
+          <ProtectedRoute allowedRoles={['teacher']}>
+            <AppLayout>
+              <TeacherDashboardPage />
+            </AppLayout>
+          </ProtectedRoute>
         }
       />
       <Route
         path={paths.dashboardAdmin}
         element={
-          <AppLayout role="admin">
-            <AdminDashboardPage />
-          </AppLayout>
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AppLayout>
+              <AdminDashboardPage />
+            </AppLayout>
+          </ProtectedRoute>
         }
       />
       <Route
         path={paths.profile}
         element={
-          <AppLayout role="student">
-            <ProfilePage />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <ProfilePage />
+            </AppLayout>
+          </ProtectedRoute>
         }
       />
     </Routes>
