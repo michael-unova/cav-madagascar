@@ -5,6 +5,10 @@ import { LandingPage } from './pages/LandingPage/LandingPage'
 import { LoginPage } from './pages/LoginPage/LoginPage'
 import { RegisterPage } from './pages/RegisterPage/RegisterPage'
 import { ProfilePage } from './pages/ProfilePage/ProfilePage'
+import { ClassesPage } from './pages/classes/ClassesPage'
+import { ClassDetailPage } from './pages/classes/ClassDetailPage'
+import { CoursesPage } from './pages/courses/CoursesPage'
+import { CourseDetailPage } from './pages/courses/CourseDetailPage'
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage'
 import { DashboardRedirect } from './pages/dashboards/DashboardRedirect'
 import { StudentDashboardPage } from './pages/dashboards/StudentDashboardPage'
@@ -72,6 +76,46 @@ function App() {
           <ProtectedRoute allowedRoles={['admin']}>
             <AppLayout>
               <AdminDashboardPage />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={paths.classes}
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <ClassesPage />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={paths.classDetailPattern}
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <ClassDetailPage />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={paths.courses}
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <CoursesPage />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={paths.courseDetailPattern}
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <CourseDetailPage />
             </AppLayout>
           </ProtectedRoute>
         }

@@ -45,6 +45,20 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navLinks = (
     <nav className={styles.nav}>
       <NavItem to={roleDashboardPaths[role]} label="Tableau de bord" icon="icon-home" onNavigate={closeNav} />
+      <NavItem
+        to={paths.classes}
+        label={role === 'admin' ? 'Classes' : 'Mes classes'}
+        icon="icon-graduation"
+        end={false}
+        onNavigate={closeNav}
+      />
+      <NavItem
+        to={paths.courses}
+        label={role === 'admin' ? 'Cours' : 'Mes cours'}
+        icon="icon-book"
+        end={false}
+        onNavigate={closeNav}
+      />
       <NavItem to={paths.profile} label="Profil" icon="icon-user" onNavigate={closeNav} />
     </nav>
   )
