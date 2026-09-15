@@ -1,0 +1,28 @@
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-ink-muted);
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 500;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.item:hover {
+  background-color: var(--color-surface-muted);
+  color: var(--color-ink);
+}
+
+.icon {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+}
+
+.active {
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary-dark);
+}

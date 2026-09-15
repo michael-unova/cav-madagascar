@@ -1,75 +1,58 @@
-# React + TypeScript + Vite
+# Nova Études : E-learning platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A French-language e-learning platform where teachers and students interact
+around classes, courses, lessons, and progress tracking.
 
-Currently, two official plugins are available:
+This repository currently contains **Milestone 1: Foundation and
+Architecture**: the application shell, routing, layouts, UI components, and
+Firebase foundation that later milestones build on. See `HANDOFF.md` for a
+full record of what has been implemented and what comes next, and
+`PROJECT_RULES.md` for the rules that govern this project.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+- React + TypeScript + Vite
+- React Router for client-side routing
+- CSS Modules for component styling (no CSS framework)
+- Firebase SDK (Authentication and Firestore foundations only at this stage)
+- ESLint
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Getting started
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+cp .env.example .env   # then fill in your Firebase project's values
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Scripts
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `npm run dev`: start the local dev server
+- `npm run build`: type-check and build for production
+- `npm run lint`: run ESLint
+- `npm run preview`: preview the production build locally
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Environment variables
 
+Firebase configuration is read from environment variables (see
+`.env.example`). Never commit a real `.env` file.
+
+## Project structure
+
+```text
+src/
+├── components/    Shared, reusable UI components
+├── layouts/       PublicLayout and AppLayout
+├── pages/         Route-level pages, including role dashboards
+├── features/      Feature-specific code (grows with future milestones)
+├── lib/firebase/  Firebase app, auth, and firestore foundations
+├── hooks/         Shared React hooks
+├── types/         Shared TypeScript types
+├── routes/        Route path constants
+└── utils/         Small shared utilities
 ```
+
+## Language
+
+All user-facing text is in French. Code (variables, functions, components,
+file names, Firestore field names) stays in English.

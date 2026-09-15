@@ -1,0 +1,73 @@
+.page {
+  min-height: calc(100vh - var(--header-height));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.25rem;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.title {
+  font-size: 1.6rem;
+}
+
+.subtitle {
+  margin-top: 0.4rem;
+  color: var(--color-ink-muted);
+  font-size: 0.92rem;
+}
+
+.roleToggle {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.3rem;
+  background-color: var(--color-surface-muted);
+  border-radius: var(--radius-sm);
+  margin-top: 1.5rem;
+}
+
+.roleOption {
+  flex: 1;
+  padding: 0.55rem;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 3px);
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.roleOptionActive {
+  background-color: var(--color-surface);
+  color: var(--color-primary-dark);
+  box-shadow: var(--shadow-sm);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin-top: 1.25rem;
+}
+
+.footerText {
+  margin-top: 1.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--color-ink-muted);
+}
+
+.link {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
