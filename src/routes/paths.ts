@@ -21,6 +21,9 @@ export const paths = {
   /** Route pattern for `<Route path>`; use `courseDetail()` for links. */
   courseDetailPattern: '/courses/:courseId',
   courseDetail: (courseId: string) => `/courses/${courseId}`,
+  /** Route pattern for `<Route path>`; use `lessonDetail()` for links. */
+  lessonDetailPattern: '/lessons/:lessonId',
+  lessonDetail: (lessonId: string) => `/lessons/${lessonId}`,
 } as const
 
 /**

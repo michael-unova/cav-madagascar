@@ -8,19 +8,25 @@ import { EmptyState } from '../../components/EmptyState/EmptyState'
 import { ErrorState } from '../../components/ErrorState/ErrorState'
 import { ConfirmDialog } from '../../components/ConfirmDialog/ConfirmDialog'
 import { CourseFormModal } from '../../features/courses/CourseFormModal'
+import { LessonFormModal } from '../../features/lessons/LessonFormModal'
+import { LessonListItem } from '../../features/lessons/LessonListItem'
 import { useAuth } from '../../features/auth/useAuth'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { getClass } from '../../lib/firebase/classes'
-import { deleteCourse, getCourse } from '../../lib/firebase/courses'
+import { getCourse } from '../../lib/firebase/courses'
+import { listLessonsByCourse, swapLessonOrder } from '../../lib/firebase/lessons'
+import { deleteLessonWithContent, deleteCourseWithContent } from '../../lib/firebase/lessonStorage'
 import { getFirestoreErrorMessage } from '../../lib/firebase/firestoreErrors'
+import { getStorageErrorMessage } from '../../lib/firebase/storageErrors'
 import { paths } from '../../routes/paths'
 import { formatDate } from '../../utils/formatDate'
-import type { Class, Course, User } from '../../types'
+import type { Class, Course, Lesson, User } from '../../types'
 import styles from './CourseDetailPage.module.css'
 
 interface CourseDetailData {
   course: Course | null
   classItem: Class | null
+  lessons: Lesson[]
 }
 
 export function CourseDetailPage() {
@@ -40,19 +46,25 @@ function CourseDetailView({ user, courseId }: { user: User; courseId: string }) 
     const course = await getCourse(courseId)
 
     if (!course) {
-      return { course: null, classItem: null }
+      return { course: null, classItem: null, lessons: [] }
     }
 
-    // Anyone allowed to read the course is also allowed to read its class,
-    // so the class name can be shown without a second permission check.
-    const classItem = await getClass(course.classId)
-    return { course, classItem }
+    // Anyone allowed to read the course is also allowed to read its class
+    // and its lessons, so both load without a separate permission check.
+    const [classItem, lessons] = await Promise.all([getClass(course.classId), listLessonsByCourse(courseId)])
+    return { course, classItem, lessons }
   }, [courseId])
 
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [isPending, setIsPending] = useState(false)
   const [pendingError, setPendingError] = useState<string | null>(null)
+
+  const [isLessonFormOpen, setIsLessonFormOpen] = useState(false)
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null)
+  const [deletingLesson, setDeletingLesson] = useState<Lesson | null>(null)
+  const [isLessonPending, setIsLessonPending] = useState(false)
+  const [lessonError, setLessonError] = useState<string | null>(null)
 
   if (isLoading) {
     return <LoadingState label="Chargement du cours" />
@@ -90,6 +102,7 @@ function CourseDetailView({ user, courseId }: { user: User; courseId: string }) 
   }
 
   const classItem = data?.classItem ?? null
+  const lessons = data?.lessons ?? []
   const isOwner = course.teacherId === user.id
 
   const handleDelete = async () => {
@@ -97,13 +110,44 @@ function CourseDetailView({ user, courseId }: { user: User; courseId: string }) 
     setIsPending(true)
 
     try {
-      await deleteCourse(course.id)
+      await deleteCourseWithContent(course.id)
       navigate(classItem ? paths.classDetail(classItem.id) : paths.courses, { replace: true })
     } catch (error) {
-      setPendingError(
-        getFirestoreErrorMessage(error, "Le cours n'a pas pu être supprimé. Veuillez réessayer."),
-      )
+      setPendingError(getStorageErrorMessage(error))
       setIsPending(false)
+    }
+  }
+
+  const handleMoveLesson = async (lesson: Lesson, direction: 'up' | 'down') => {
+    const index = lessons.findIndex((item) => item.id === lesson.id)
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    const target = lessons[targetIndex]
+    if (!target) return
+
+    setLessonError(null)
+
+    try {
+      await swapLessonOrder(lesson, target)
+      refresh()
+    } catch (error) {
+      setLessonError(getFirestoreErrorMessage(error, "L'ordre des leçons n'a pas pu être modifié. Veuillez réessayer."))
+    }
+  }
+
+  const handleDeleteLesson = async () => {
+    if (!deletingLesson) return
+
+    setLessonError(null)
+    setIsLessonPending(true)
+
+    try {
+      await deleteLessonWithContent(deletingLesson.id, deletingLesson.videoPath)
+      setDeletingLesson(null)
+      refresh()
+    } catch (error) {
+      setLessonError(getStorageErrorMessage(error))
+    } finally {
+      setIsLessonPending(false)
     }
   }
 
@@ -146,18 +190,55 @@ function CourseDetailView({ user, courseId }: { user: User; courseId: string }) 
       )}
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Leçons</h2>
-        <Card>
-          <EmptyState
-            icon="icon-file"
-            title="Aucune leçon pour le moment"
-            description={
-              isOwner
-                ? 'Les leçons, vidéos et supports de cours arriveront dans une prochaine version.'
-                : 'Les leçons de ce cours seront disponibles prochainement.'
-            }
-          />
-        </Card>
+        <div className={styles.sectionHead}>
+          <h2 className={styles.sectionTitle}>Leçons</h2>
+          {isOwner && lessons.length > 0 && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setIsLessonFormOpen(true)}>
+              Ajouter une leçon
+            </Button>
+          )}
+        </div>
+
+        {lessonError && <ErrorState title="Action impossible" description={lessonError} />}
+
+        {lessons.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon="icon-file"
+              title="Aucune leçon pour le moment"
+              description={
+                isOwner
+                  ? 'Créez une première leçon, puis ajoutez-y une vidéo et des supports de cours.'
+                  : 'Les leçons de ce cours seront disponibles prochainement.'
+              }
+              action={
+                isOwner ? (
+                  <Button type="button" onClick={() => setIsLessonFormOpen(true)}>
+                    Créer une leçon
+                  </Button>
+                ) : undefined
+              }
+            />
+          </Card>
+        ) : (
+          <Card>
+            <ul className={styles.lessonList}>
+              {lessons.map((lesson, index) => (
+                <LessonListItem
+                  key={lesson.id}
+                  lesson={lesson}
+                  isOwner={isOwner}
+                  canMoveUp={index > 0}
+                  canMoveDown={index < lessons.length - 1}
+                  onMoveUp={() => handleMoveLesson(lesson, 'up')}
+                  onMoveDown={() => handleMoveLesson(lesson, 'down')}
+                  onEdit={() => setEditingLesson(lesson)}
+                  onDelete={() => setDeletingLesson(lesson)}
+                />
+              ))}
+            </ul>
+          </Card>
+        )}
       </section>
 
       {isOwner && isEditOpen && (
@@ -175,12 +256,52 @@ function CourseDetailView({ user, courseId }: { user: User; courseId: string }) 
         <ConfirmDialog
           isOpen={isDeleteOpen}
           title="Supprimer le cours"
-          message={`Le cours "${course.title}" sera définitivement supprimé pour tous les étudiants de la classe.`}
+          message={`Le cours "${course.title}", ses leçons, vidéos et supports seront définitivement supprimés pour tous les étudiants de la classe.`}
           confirmLabel="Supprimer définitivement"
           pendingLabel="Suppression..."
           isPending={isPending}
           onConfirm={handleDelete}
           onClose={() => setIsDeleteOpen(false)}
+        />
+      )}
+
+      {isOwner && isLessonFormOpen && (
+        <LessonFormModal
+          isOpen
+          onClose={() => setIsLessonFormOpen(false)}
+          courseId={course.id}
+          classId={course.classId}
+          teacherId={user.id}
+          onSaved={refresh}
+        />
+      )}
+
+      {isOwner && editingLesson && (
+        <LessonFormModal
+          isOpen
+          onClose={() => setEditingLesson(null)}
+          courseId={course.id}
+          classId={course.classId}
+          teacherId={user.id}
+          lesson={editingLesson}
+          onSaved={refresh}
+        />
+      )}
+
+      {isOwner && (
+        <ConfirmDialog
+          isOpen={deletingLesson !== null}
+          title="Supprimer la leçon"
+          message={
+            deletingLesson
+              ? `La leçon "${deletingLesson.title}", sa vidéo et ses supports de cours seront définitivement supprimés.`
+              : ''
+          }
+          confirmLabel="Supprimer définitivement"
+          pendingLabel="Suppression..."
+          isPending={isLessonPending}
+          onConfirm={handleDeleteLesson}
+          onClose={() => setDeletingLesson(null)}
         />
       )}
     </div>

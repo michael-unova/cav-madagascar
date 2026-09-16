@@ -1,0 +1,99 @@
+rules_version = '2';
+
+// Cloud Storage Security Rules for the E-Learning Platform.
+//
+// First introduced in Milestone 4, alongside `lessons` and its `materials`
+// subcollection in `firestore.rules`. Storage has no user-role or
+// enrollment data of its own; instead, every rule below reads the matching
+// Firestore lesson document with `firestore.get()` / `firestore.exists()`,
+// a cross-service feature of Security Rules, so the same
+// already-reviewed authorization model (a teacher manages their own
+// class's content; a student may only reach what they are enrolled in)
+// governs both services, rather than maintaining the ownership logic
+// twice.
+//
+// Every object lives under `lessons/{lessonId}/...`, so a lesson's own
+// Firestore document (read once via `lessonData(lessonId)` below) is
+// always enough to decide who may read, write, or delete it. No rule here
+// needs a second lookup through `courses` or `classes`.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    function lessonData(lessonId) {
+      return firestore.get(/databases/(default)/documents/lessons/$(lessonId)).data;
+    }
+
+    function isLessonTeacher(lessonId) {
+      return isSignedIn() && lessonData(lessonId).teacherId == request.auth.uid;
+    }
+
+    function isEnrolledInLesson(lessonId) {
+      return isSignedIn()
+        && firestore.exists(
+          /databases/(default)/documents/enrollments/$(lessonData(lessonId).classId + '_' + request.auth.uid));
+    }
+
+    function canReadLesson(lessonId) {
+      return isLessonTeacher(lessonId) || isEnrolledInLesson(lessonId) || isAdmin();
+    }
+
+    match /lessons/{lessonId}/video/{fileName} {
+      allow read: if canReadLesson(lessonId);
+
+      // Only the lesson's own teacher may upload or replace its video, and
+      // only an actual video file under the size mirrored in
+      // `lessonStorage.ts` (`MAX_VIDEO_SIZE_BYTES`). `request.resource`
+      // does not exist on a delete request, so this condition (and
+      // therefore this `allow write`) never matches one; deletion is its
+      // own rule below.
+      allow write: if isLessonTeacher(lessonId)
+        && request.resource.size <= 500 * 1024 * 1024
+        && request.resource.contentType.matches('video/.*');
+
+      allow delete: if isLessonTeacher(lessonId);
+    }
+
+    match /lessons/{lessonId}/materials/{materialId}/{fileName} {
+      allow read: if canReadLesson(lessonId);
+
+      // Mirrors `isAllowedMaterialType` and `MAX_MATERIAL_SIZE_BYTES` in
+      // `lessonStorage.ts`. The allow-list is intentionally narrow: it
+      // covers the document types a course-material upload realistically
+      // needs (PDFs, images, Office documents, plain text, zip archives),
+      // not arbitrary files.
+      allow write: if isLessonTeacher(lessonId)
+        && request.resource.size <= 25 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'application/msword'
+          || request.resource.contentType
+            == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          || request.resource.contentType
+            == 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+          || request.resource.contentType
+            == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          || request.resource.contentType == 'text/plain'
+          || request.resource.contentType == 'application/zip'
+        );
+
+      allow delete: if isLessonTeacher(lessonId);
+    }
+
+    // Deny by default for every path not explicitly covered above.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
