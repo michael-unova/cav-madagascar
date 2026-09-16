@@ -7,10 +7,14 @@ rules_version = '2';
 //
 // Milestone 3 adds `classes`, `courses`, and `enrollments`.
 //
-// Rules for collections introduced by later milestones (lessons,
-// assignments, submissions, comments, announcements) should be added
-// alongside those milestones. Until then, the catch-all rule at the end
-// denies all access to keep the default posture closed rather than open.
+// Milestone 4 adds `lessons` and, nested under each lesson, its
+// `materials` subcollection. Lesson videos and material files themselves
+// live in Cloud Storage; see `storage.rules`.
+//
+// Rules for collections introduced by later milestones (assignments,
+// submissions, comments, announcements) should be added alongside those
+// milestones. Until then, the catch-all rule at the end denies all access
+// to keep the default posture closed rather than open.
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() {
@@ -202,6 +206,142 @@ service cloud.firestore {
       // a class they own.
       allow delete: if isSignedIn()
         && (resource.data.studentId == request.auth.uid || isClassTeacher(resource.data.classId));
+    }
+
+    // ---------------------------------------------------------------
+    // Milestone 4: lessons, and each lesson's materials subcollection.
+    //
+    // A lesson's video is not stored here: Firestore only holds a pointer
+    // to it (`videoPath`, a Cloud Storage path). The bytes themselves, for
+    // both the video and every material, live in Cloud Storage, whose
+    // rules are in `storage.rules`. Those rules re-derive the same
+    // teacher/enrollment checks used below by reading these very documents
+    // through the `firestore.get()`/`firestore.exists()` functions Storage
+    // Security Rules can call, so one ownership model governs both
+    // services instead of two independently-maintained ones.
+    // ---------------------------------------------------------------
+
+    function courseClassId(courseId) {
+      return get(/databases/$(database)/documents/courses/$(courseId)).data.classId;
+    }
+
+    match /lessons/{lessonId} {
+      // Same shape as `courses`: the owning teacher, an enrolled student
+      // (via the denormalized `classId`), or an administrator.
+      allow read: if isSignedIn()
+        && (resource.data.teacherId == request.auth.uid
+          || isEnrolled(resource.data.classId)
+          || isAdmin());
+
+      // `classId` must actually be the class of `courseId`: without this
+      // check, a teacher could create a lesson under their own course but
+      // stamp it with a different class's id, which would let students of
+      // that other class read a lesson that has nothing to do with their
+      // own course list. A new lesson never has a video yet: it is
+      // uploaded afterward through `allow update` below, once the lesson
+      // (and therefore the Storage path that names it) exists.
+      allow create: if isTeacher()
+        && request.resource.data.id == lessonId
+        && request.resource.data.teacherId == request.auth.uid
+        && isClassTeacher(request.resource.data.classId)
+        && courseClassId(request.resource.data.courseId) == request.resource.data.classId
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 140
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 800
+        && request.resource.data.order is int
+        && request.resource.data.order >= 0
+        && request.resource.data.videoPath == null
+        && request.resource.data.videoName == null
+        && request.resource.data.videoSizeBytes == null
+        && request.resource.data.keys().hasOnly([
+          'id', 'courseId', 'classId', 'teacherId', 'title', 'description',
+          'order', 'videoPath', 'videoName', 'videoSizeBytes', 'createdAt', 'updatedAt']);
+
+      // A lesson cannot change which course or class it belongs to, or
+      // change hands to another teacher, for the same reason as `courses`
+      // above. `order` is editable (the "move up" / "move down" controls
+      // in `swapLessonOrder`), and the three video fields are editable
+      // only as a group: `updateLessonVideo` always sets all three
+      // together after a Storage upload succeeds, or clears all three
+      // together when a video is removed, so a lesson is never left
+      // pointing at a video name without a path or vice versa.
+      allow update: if isSignedIn()
+        && resource.data.teacherId == request.auth.uid
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.courseId == resource.data.courseId
+        && request.resource.data.classId == resource.data.classId
+        && request.resource.data.teacherId == resource.data.teacherId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 140
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 800
+        && request.resource.data.order is int
+        && request.resource.data.order >= 0
+        && (request.resource.data.videoPath is string || request.resource.data.videoPath == null)
+        && (request.resource.data.videoName is string || request.resource.data.videoName == null)
+        && (request.resource.data.videoSizeBytes is number || request.resource.data.videoSizeBytes == null)
+        && request.resource.data.keys().hasOnly([
+          'id', 'courseId', 'classId', 'teacherId', 'title', 'description',
+          'order', 'videoPath', 'videoName', 'videoSizeBytes', 'createdAt', 'updatedAt']);
+
+      // Deleting a lesson document does not delete its video or materials
+      // from Storage; the client (`deleteLessonWithContent`) always removes
+      // those first, while this document still exists to authorize that
+      // removal in `storage.rules`. See the note there for why the order
+      // matters.
+      allow delete: if isSignedIn() && resource.data.teacherId == request.auth.uid;
+
+      match /materials/{materialId} {
+        function lessonTeacherId() {
+          return get(/databases/$(database)/documents/lessons/$(lessonId)).data.teacherId;
+        }
+
+        function lessonClassId() {
+          return get(/databases/$(database)/documents/lessons/$(lessonId)).data.classId;
+        }
+
+        allow read: if isSignedIn()
+          && (lessonTeacherId() == request.auth.uid || isEnrolled(lessonClassId()) || isAdmin());
+
+        // A material document is written only after its file has already
+        // been uploaded to Storage (see `addLessonMaterial` in
+        // `lessonStorage.ts`), so this write is really a receipt for an
+        // upload `storage.rules` already had to authorize separately. The
+        // checks below stand on their own regardless: `classId` is
+        // cross-checked against the parent lesson so a material can never
+        // be filed under a class other than its lesson's.
+        allow create: if isSignedIn()
+          && lessonTeacherId() == request.auth.uid
+          && request.resource.data.id == materialId
+          && request.resource.data.lessonId == lessonId
+          && request.resource.data.teacherId == request.auth.uid
+          && request.resource.data.classId == lessonClassId()
+          && request.resource.data.courseId is string
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 200
+          && request.resource.data.storagePath is string
+          && request.resource.data.storagePath.size() > 0
+          && request.resource.data.sizeBytes is number
+          && request.resource.data.sizeBytes > 0
+          && request.resource.data.sizeBytes <= 25 * 1024 * 1024
+          && request.resource.data.contentType is string
+          && request.resource.data.keys().hasOnly([
+            'id', 'lessonId', 'courseId', 'classId', 'teacherId', 'name',
+            'storagePath', 'sizeBytes', 'contentType', 'createdAt']);
+
+        // Materials are immutable: replacing one means deleting it and
+        // adding a new one (see `LessonMaterialsPanel`). This keeps a
+        // material's Storage path, which is derived from its original file
+        // name, from ever disagreeing with a renamed `name` field.
+        allow update: if false;
+
+        allow delete: if isSignedIn() && lessonTeacherId() == request.auth.uid;
+      }
     }
 
     // Deny by default for every collection not explicitly covered above.

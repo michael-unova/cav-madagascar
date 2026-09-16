@@ -1,0 +1,47 @@
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  color: var(--color-ink-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--color-primary);
+}
+
+.backIcon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  transform: rotate(180deg);
+}
+
+.headerActions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.meta {
+  margin-top: -0.75rem;
+  margin-bottom: 1.5rem;
+  color: var(--color-ink-faint);
+  font-size: 0.85rem;
+}
+
+.descriptionCard {
+  margin-bottom: 1.75rem;
+}
+
+.description {
+  color: var(--color-ink-muted);
+  font-size: 0.95rem;
+  max-width: 70ch;
+  white-space: pre-wrap;
+}

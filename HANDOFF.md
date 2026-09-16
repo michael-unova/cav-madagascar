@@ -12,10 +12,15 @@
 
 ## Current Status
 
-**Milestone 1: Foundation and Architecture is complete.**
-**Milestone 2: Authentication + Roles is complete.**
-**Milestone 3: Classes + Courses is complete** (on the branch
-`milestone-3-classes-courses`, not yet merged into `main`).
+**Milestone 1: Foundation and Architecture is complete**, merged into
+`main`.
+**Milestone 2: Authentication + Roles is complete**, merged into `main`,
+deployed, and verified end to end by the maintainer.
+**Milestone 3: Classes + Courses is complete**, merged into `main`. Its
+Security Rules have been deployed by the maintainer.
+**Milestone 4: Lessons + video + materials is complete** (on the branch
+`milestone-4-lessons-video-materials`, not yet merged into `main`, and not
+yet deployed; see Known Issues).
 
 ### Completed (previous baseline)
 
@@ -258,6 +263,121 @@ than during render. Both were lint errors, not style preferences.
 mirroring `features/auth/authErrors.ts`, so raw SDK error text never
 reaches the interface.
 
+### Completed (Milestone 4)
+
+- **Firestore `lessons` collection**, following the `courses.ts` pattern:
+  typed accessors in `src/lib/firebase/lessons.ts`, with `courseId`,
+  `classId`, and `teacherId` all denormalized onto each lesson so both the
+  interface and Security Rules resolve ownership and enrollment without an
+  extra read.
+- **A `materials` subcollection under each lesson**
+  (`lessons/{lessonId}/materials/{materialId}`), typed accessors in
+  `src/lib/firebase/lessonMaterials.ts`. See "Key architecture decisions"
+  below for why this is a subcollection rather than an array field on the
+  lesson.
+- **First use of Firebase Storage.** `src/lib/firebase/storage.ts` adds the
+  Storage singleton; `src/lib/firebase/lessonStorage.ts` adds upload,
+  download-URL, and delete helpers, plus the orchestration functions
+  (`replaceLessonVideo`, `removeLessonVideo`, `addLessonMaterial`,
+  `removeLessonMaterial`, `deleteLessonWithContent`) that keep a Storage
+  file and its Firestore record from disagreeing with each other. A new
+  `storage.rules` file at the repository root authorizes access to it; see
+  "Key architecture decisions" for how it reuses the Firestore ownership
+  model instead of re-implementing it.
+- **Teacher**: create, edit, reorder (move up / move down), and delete
+  lessons inside a course they own; upload, replace, and remove a lesson's
+  video; upload and delete learning materials.
+- **Student**: see the ordered lesson list of a course they are enrolled
+  in, watch a lesson's video in the browser, and download its materials.
+- `CourseDetailPage`'s previous "Aucune leçon pour le moment" placeholder
+  is replaced with the real, ordered lesson list. A new
+  `LessonDetailPage` (`/lessons/:lessonId`) hosts the video player and the
+  materials list.
+
+#### Key architecture decisions
+
+**Materials live in a subcollection, not an array field on the lesson.**
+An array of material objects on `Lesson` was considered and rejected:
+Security Rules cannot validate the shape of individual array elements the
+way `keys().hasOnly(...)` validates a document, so a malformed or
+oversized entry could not be rejected on write, only on read (too late).
+A subcollection keeps each material as its own document, validated the
+same way every other document in this project is, and lets a single
+material be deleted without rewriting the lesson document it belongs to
+(and therefore without racing anything else editing that document at the
+same time).
+
+**Storage Security Rules reuse the Firestore ownership model through
+cross-service rules, rather than re-implementing it.** The Milestone 3
+handoff flagged this as an open question: "reading an enrollment from a
+Storage rule is not possible the way it is from a Firestore rule." That
+turned out to be solvable directly: Cloud Storage Security Rules can call
+`firestore.get()` and `firestore.exists()` to read the default Firestore
+database. `storage.rules` uses this to read the lesson document named by
+each Storage path (`lessons/{lessonId}/...`) and apply the exact same
+"owning teacher, or an enrolled student, or an admin" check already
+written once in `firestore.rules`. The alternative, encoding enough
+information directly into the Storage path to authorize without any
+Firestore lookup, was rejected: it would have meant duplicating the
+enrollment/ownership logic in a second place, with no mechanism to keep
+the two in sync as the rules evolve.
+
+**A lesson never has a video at creation.** `createLesson` only accepts a
+title and description; `videoPath`, `videoName`, and `videoSizeBytes` are
+always written as `null`. The video is uploaded afterward, from
+`LessonDetailPage`, once the lesson document (and therefore its id, which
+the Storage path is built from) already exists. This is also why
+`firestore.rules`' `create` rule for `lessons` requires those three fields
+to be `null`: a lesson is never created already pointing at a file that
+could not yet have been uploaded.
+
+**Uploads are recorded only after they succeed, and in an order that
+tolerates a failure partway through.** Both `replaceLessonVideo` and
+`addLessonMaterial` upload to Storage first and only then write (or
+update) the corresponding Firestore document; a failed Firestore write
+after a successful material upload deletes the orphaned Storage file
+rather than leaving it unreachable. Deletion runs in the opposite order,
+for a reason specific to Storage Rules reading Firestore: `storage.rules`
+authorizes a delete by reading the lesson's Firestore document, so that
+document (and, for a material, its subcollection document) is always
+deleted last, after the Storage objects it authorizes removing.
+`deleteLessonWithContent` and the cascades that call it
+(`deleteCourseWithContent` in `lessonStorage.ts`, and the extended
+`deleteClassWithContent` in `classes.ts`) all follow this order.
+
+**Deleting a course or a class now cascades into Storage, not just
+Firestore.** Milestone 3's `deleteClassWithContent` already cascaded into
+`courses` and `enrollments`, with a documented caveat that an interrupted
+delete could leave orphaned Firestore documents behind, judged acceptable
+because they would be unreachable through the interface. That reasoning
+does not extend to Storage: an orphaned video or material file has no
+Firestore document left pointing at it, and therefore no path through the
+interface that could ever reach it again to clean it up, and it keeps
+counting against Storage usage indefinitely. `deleteCourseWithContent` and
+the updated `deleteClassWithContent` therefore cascade-delete every
+lesson's video and materials before removing the Firestore documents that
+contained them.
+
+**Reordering swaps two `order` values in a batch, rather than
+renumbering.** "Move up" / "move down" only ever touches the two adjacent
+lessons, so `swapLessonOrder` is a two-document `writeBatch`, not a
+rewrite of every lesson in the course. `order` is assigned automatically
+on creation (one past the current highest in the course) rather than
+typed by the teacher, so there is no manual numbering to get wrong or to
+collide.
+
+**Client-side upload validation (file type, file size) mirrors
+`storage.rules` exactly**, in `isAllowedVideoType` / `isAllowedMaterialType`
+/ `MAX_VIDEO_SIZE_BYTES` / `MAX_MATERIAL_SIZE_BYTES` (`lessonStorage.ts`).
+This is a UX convenience, giving an immediate French error before a
+transfer starts, not the actual enforcement: the Storage rule is what
+actually enforces the limit, since a client-side check alone can always be
+bypassed.
+
+**French error messages for Storage** live in
+`src/lib/firebase/storageErrors.ts` (`getStorageErrorMessage`), mirroring
+`authErrors.ts` and `firestoreErrors.ts` from the previous milestones.
+
 ### Files Changed (Milestone 3)
 
 Modified: `firestore.rules`, `src/App.tsx`, `src/routes/paths.ts`,
@@ -287,6 +407,23 @@ are now used by more than one feature: `Textarea` (multi-line counterpart
 to `Input`, same label/helper/error handling) and `ConfirmDialog` (used
 before deleting a class, deleting a course, and leaving a class).
 
+### Files Changed (Milestone 4)
+
+Modified: `firestore.rules`, `src/App.tsx`, `src/routes/paths.ts`,
+`src/types/index.ts`, `src/types/lesson.ts` (rewritten from the Milestone 1
+placeholder), `src/lib/firebase/classes.ts` (cascade delete extended into
+Storage), `src/pages/courses/CourseDetailPage.tsx`,
+`src/pages/courses/CourseDetailPage.module.css`, `public/icons.svg` (added
+`icon-play`, `icon-upload`, `icon-download`, `icon-trash`)
+
+Added: `storage.rules`, `src/types/lessonMaterial.ts`,
+`src/lib/firebase/storage.ts`, `src/lib/firebase/storageErrors.ts`,
+`src/lib/firebase/lessons.ts`, `src/lib/firebase/lessonMaterials.ts`,
+`src/lib/firebase/lessonStorage.ts`, `src/utils/formatFileSize.ts`,
+`src/features/lessons/` (`LessonFormModal`, `LessonListItem`,
+`LessonVideoPanel`, `LessonMaterialsPanel`), `src/pages/lessons/`
+(`LessonDetailPage`)
+
 ### Architecture
 
 The app is organized by concern rather than by feature at this stage, since
@@ -302,18 +439,23 @@ src/
 │   │             French error messages (Milestone 2)
 │   ├── classes/  Class cards, create/edit and join modals, code panel,
 │   │             useClassesAndCourses (Milestone 3)
-│   └── courses/  Course cards, create/edit modal (Milestone 3)
-├── lib/firebase/ Firebase singletons, users, classes, courses,
-│                 enrollments, timestamp + error helpers
+│   ├── courses/  Course cards, create/edit modal (Milestone 3)
+│   └── lessons/  Lesson form modal, ordered list row, video panel,
+│                 materials panel (Milestone 4)
+├── lib/firebase/ Firebase singletons (app, auth, Firestore, Storage),
+│                 users, classes, courses, enrollments, lessons, lesson
+│                 materials, lesson Storage helpers, timestamp + error
+│                 helpers (Firestore and Storage)
 ├── hooks/        useMediaQuery (responsive nav), useAsyncData
-├── types/        User, UserRole, Class, Course, Lesson, Enrollment
+├── types/        User, UserRole, Class, Course, Lesson, LessonMaterial,
+│                 Enrollment
 ├── routes/       Centralized path constants + role-to-dashboard map
-└── utils/        cn() classnames helper, formatDate()
+└── utils/        cn() classnames helper, formatDate(), formatFileSize()
 ```
 
 `features/auth` is the first folder under `features/`, as anticipated in
-Milestone 1. Future milestones are expected to add `features/classes`,
-`features/courses`, etc. following the same pattern.
+Milestone 1. `features/lessons` (Milestone 4) follows the same pattern
+established by `features/classes` and `features/courses`.
 
 Styling uses plain CSS Modules, no CSS framework was added, in line with
 "do not unnecessarily add dependencies."
@@ -322,9 +464,12 @@ Styling uses plain CSS Modules, no CSS framework was added, in line with
 
 `src/lib/firebase/config.ts`, `auth.ts`, and `firestore.ts` provide lazily
 initialized singleton accessors (`getFirebaseApp`, `getFirebaseAuth`,
-`getFirebaseFirestore`), unchanged since Milestone 1. No credentials are
-hard-coded; all configuration comes from `VITE_FIREBASE_*` environment
-variables documented in `.env.example`. No `.env` file was created or
+`getFirebaseFirestore`), unchanged since Milestone 1. `storage.ts`
+(Milestone 4) adds `getFirebaseStorage()` following the same pattern. No
+credentials are hard-coded; all configuration comes from `VITE_FIREBASE_*`
+environment variables documented in `.env.example`, including
+`VITE_FIREBASE_STORAGE_BUCKET`, which was already present from Milestone 1
+even though Storage went unused until now. No `.env` file was created or
 committed.
 
 As of Milestone 2, `src/lib/firebase/users.ts` adds real Firestore
@@ -333,23 +478,39 @@ singletons, and `src/features/auth/authService.ts` adds real Firebase
 Authentication sign-up, sign-in, sign-out, and auth-state subscription.
 
 `firestore.rules` at the repository root covers the `users` collection
-(Milestone 2) and the `classes`, `courses`, and `enrollments` collections
-(Milestone 3), followed by a catch-all rule that denies everything else.
-Milestone 2's `users` block was not modified. Per the maintainer,
-Milestone 2's rules are already deployed and authentication has been
-tested end to end; **the Milestone 3 additions have not been deployed**: this sandboxed working environment has no Firebase CLI
-credentials and no network access to Firebase's own APIs (only GitHub, npm,
-and a few package registries are reachable). The maintainer has said they will deploy the
-Milestone 3 rules themselves. Until that happens, the live project still
-enforces only the Milestone 2 `users` rules, which means the catch-all
-deny is what governs `classes`, `courses`, and `enrollments`: every read
-and write to the new collections will be rejected, and the Milestone 3
-interface will appear broken against the live project until the rules are
+(Milestone 2), the `classes`, `courses`, and `enrollments` collections
+(Milestone 3), and the `lessons` collection with its nested `materials`
+subcollection (Milestone 4), followed by a catch-all rule that denies
+everything else. Milestone 2's `users` block was not modified. Per the
+maintainer, Milestone 2's rules and Milestone 3's rules (`classes`,
+`courses`, `enrollments`) are both deployed to the live project, and the
+Milestone 3 flows have been confirmed working. **The Milestone 4 additions
+to `firestore.rules`, and the new `storage.rules` file, have not been
+deployed**: this sandboxed working environment has no Firebase CLI
+credentials and no network access to Firebase's own APIs (only GitHub,
+npm, and a few package registries are reachable), and the maintainer has
+said they will deploy both files themselves. Until that happens, the live
+project's catch-all deny governs `lessons` and its `materials`
+subcollection, and Storage has no rules deployed to it at all (an empty
+Storage ruleset denies everything by default), so nothing in this
+milestone will work against the live project until both files are
 applied.
 
+**`storage.rules` is a new file, alongside `firestore.rules`.** No
+`firebase.json` exists in this repository (rule deployment has evidently
+been done outside version control so far, since none was needed for
+`firestore.rules` either), so nothing was added to wire the two files
+together for a single `firebase deploy`; the maintainer will need to apply
+`storage.rules` however they already apply `firestore.rules` (Firebase
+console, or `firebase deploy --only storage` / `firestore:rules` with an
+ad hoc `firebase.json`, whichever that is). Cloud Storage rules default to
+denying all access when none are deployed, so this is not a case where an
+open-by-default fallback is silently in effect in the meantime.
+
 No Firestore composite indexes are required (see the Milestone 3
-architecture decisions), so there is nothing to deploy beyond the rules
-file itself.
+architecture decisions; Milestone 4's lesson list is sorted in memory the
+same way). No Storage indexes exist as a concept. There is nothing to
+deploy beyond the two rules files themselves.
 
 ### Routing
 
@@ -378,14 +539,16 @@ Authenticated (wrapped in `ProtectedRoute`, then `AppLayout`):
   owner's edit/delete actions). What is visible is decided per role, and
   backed by Security Rules rather than by the route.
 - `/courses` : every course the signed-in user may see, across classes
-- `/courses/:courseId` : course detail, with a placeholder section for the
-  lessons that arrive in Milestone 4
+- `/courses/:courseId` : course detail (description, and the ordered
+  lesson list with the owner's create/reorder/edit/delete controls)
+- `/lessons/:lessonId` : lesson detail (video player, materials list, and
+  the owner's edit/delete actions), added in Milestone 4
 - `/profile` : `ProtectedRoute` (any signed-in role), profile page
 
-The class and course routes are guarded by `ProtectedRoute` without
-`allowedRoles`, because all three roles legitimately reach them; the
-difference between roles is in what the page renders and, more
-importantly, in what Firestore will return.
+The class, course, and lesson routes are all guarded by `ProtectedRoute`
+without `allowedRoles`, because all three roles legitimately reach them;
+the difference between roles is in what the page renders and, more
+importantly, in what Firestore and Storage will return.
 
 `ProtectedRoute` redirects unauthenticated visitors to `/login`, and a
 signed-in user visiting a dashboard route for a different role is sent to
@@ -404,6 +567,12 @@ their own dashboard instead of seeing that role's placeholder content.
   always, this is a navigation convenience, not a substitute for
   Firestore Security Rules, which are the actual authorization boundary
   for data.
+- Milestone 4 follows the same empty-state discipline: no video shows a
+  distinct "Aucune vidéo pour le moment" (teacher) / "Vidéo indisponible"
+  (student) state instead of an empty player, no materials shows an
+  `EmptyState` with an upload action for the teacher, and every upload
+  shows a percentage-based progress state on its own button rather than a
+  bare spinner.
 
 ### Tests
 
@@ -451,6 +620,21 @@ their own dashboard instead of seeing that role's placeholder content.
   milestone is verified only by the type checker, the linter, and the
   build. See Known Issues for what to smoke-test first.
 
+**Milestone 4:**
+- Lint: **pass** (`npm run lint`, 0 errors, 0 warnings).
+- Build: **pass** (`npm run build`, `tsc -b && vite build`). The bundle is
+  now ~918 kB unminified / ~274 kB gzipped (the `firebase/storage` module
+  adds to what Milestone 2 already bundled), so Vite's "chunk larger than
+  500 kB" warning still fires. See Technical Debt.
+- Tests: still none. No test runner is configured.
+- Manual verification: **not performed**, for the same reason as Milestone
+  3: no network access to Firebase in this environment, and per the
+  Firebase section above, `storage.rules` and the Milestone 4 additions to
+  `firestore.rules` are not deployed yet, so nothing in this milestone
+  could be exercised against the live project even if the network were
+  reachable. See Known Issues for what to smoke-test first once both rules
+  files are deployed.
+
 ### Known Issues
 
 - ~~`/dashboard` always redirects to the student dashboard~~ Resolved in
@@ -463,19 +647,33 @@ their own dashboard instead of seeing that role's placeholder content.
   been exercised against a live Firebase project~~ Resolved: the
   maintainer has deployed Milestone 2's `users` rules and tested
   authentication end to end.
-- **The Milestone 3 Security Rules are not deployed.** The live project
-  still denies all access to `classes`, `courses`, and `enrollments`
-  through the catch-all rule, so this milestone's features cannot work
-  against it until the maintainer applies the updated `firestore.rules`.
-- Nothing in Milestone 3 has been exercised against live Firebase. Once
-  the rules are deployed, the sequence worth smoke-testing first is: a
-  teacher creates a class and a course; a second account, signed up as a
-  student, joins with the code and sees that course; the student cannot
-  reach a class they have not joined (try `/classes/<another code>`
-  directly, which should show the permission error rather than the
-  class); the teacher removes the student and the class disappears from
-  the student's list; deleting the class removes its courses and
-  enrollments too.
+- ~~The Milestone 3 Security Rules are not deployed~~ Resolved: the
+  maintainer has deployed the `classes`, `courses`, and `enrollments`
+  rules, and the Milestone 3 flows work against the live project.
+- **The Milestone 4 additions to `firestore.rules`, and the new
+  `storage.rules`, are not deployed.** The live project's catch-all rule
+  denies all access to `lessons` and `materials`, and Storage has no rules
+  deployed to it at all, so this milestone's features cannot work against
+  it until the maintainer applies both files. Once they are, the sequence
+  worth smoke-testing first: a teacher creates a lesson, uploads a video
+  and a material to it, and reorders it against a sibling lesson; a
+  student enrolled in that class can watch the video and download the
+  material; a student in a different class cannot reach the lesson
+  directly by URL; the teacher deletes the lesson and both the video and
+  the material become unreachable (confirm in the Storage console, since
+  the interface itself cannot prove a negative); deleting the course, and
+  separately deleting the whole class, both take the lesson's video and
+  materials with them.
+- Nothing in Milestone 3 has been exercised against live Firebase from
+  this session (the maintainer's own testing is separate from what this
+  sandboxed environment can verify; see Tests above). The sequence worth
+  smoke-testing, if not already covered by the maintainer: a teacher
+  creates a class and a course; a second account, signed up as a student,
+  joins with the code and sees that course; the student cannot reach a
+  class they have not joined (try `/classes/<another code>` directly,
+  which should show the permission error rather than the class); the
+  teacher removes the student and the class disappears from the student's
+  list; deleting the class removes its courses and enrollments too.
 - Class codes cannot be rotated, since the code is the class document id
   (see the Milestone 3 architecture decisions). A leaked code means
   recreating the class.
@@ -483,11 +681,35 @@ their own dashboard instead of seeing that role's placeholder content.
   is not verifiable by Security Rules. A student cannot forge another
   student's identity (the id and the email are both checked against the
   authentication token), but they can present an arbitrary display name.
-- Deleting a class cascades from the client, so an interrupted delete can
-  leave orphaned courses or enrollments behind. They are unreachable
-  through the interface, since every route resolves them through their
-  class, but they are still billable documents. This belongs in a Cloud
-  Function once lessons, materials, and submissions hang off a class.
+- Deleting a class or a course cascades from the client. As of Milestone 4
+  this cascade also removes every lesson's video and materials from
+  Storage (see the Milestone 4 architecture decisions), which meaningfully
+  narrows the original concern here (an interrupted delete used to be able
+  to leave orphaned, unreachable-but-billable documents behind); an
+  interruption partway through a cascade can still leave some documents or
+  files deleted and others not, though nothing left behind is reachable
+  through the interface. Full atomicity belongs in a Cloud Function once
+  assignments and submissions hang off a class too.
+- Two lessons created concurrently in the same course (two browser tabs,
+  or two teachers with access to the same account) can be assigned the
+  same `order`, since `createLesson` computes "one past the current
+  highest" from a read that is not part of a transaction. At the volumes
+  one teacher creating lessons for their own course implies, this is a
+  theoretical race rather than a practical one; `swapLessonOrder` still
+  works correctly afterward (it operates on whichever two lessons are
+  adjacent, regardless of whether their `order` values happen to collide
+  with a third).
+- A lesson's video and each material are played or downloaded through a
+  Firebase Storage download URL, which embeds a long-lived access token in
+  the URL itself rather than expiring shortly after being issued. Only a
+  user Security Rules already allowed to read the file can obtain that URL
+  in the first place, but once obtained, the URL itself is not further
+  access-controlled: anyone who has it (a student who shared it, a link
+  pasted somewhere public) can use it until the token is manually revoked
+  in the Firebase console. This is standard behaviour for Firebase Storage
+  download URLs, not a bug specific to this implementation, and is the
+  same trade-off `PROJECT_RULES.md` already anticipates for DRM ("not
+  included in V1 unless explicitly requested").
 - `ProfilePage` shows the real signed-in user's name and email but has no
   edit functionality yet (inputs are disabled, as before). This is by
   design for this milestone's scope, not a bug.
@@ -500,17 +722,20 @@ their own dashboard instead of seeing that role's placeholder content.
 - Provider sign-in (Google, etc.), beyond the email/password baseline
 - Admin account provisioning tooling (currently: manual, via Firebase
   console or a trusted backend, never via the client)
-- Deployment of `firestore.rules` to the live Firebase project (file
-  exists, not yet applied, see Known Issues)
+- Deployment of the Milestone 4 additions to `firestore.rules`, and of
+  `storage.rules` (files exist, not yet applied, see Known Issues)
 - ~~Firestore reads/writes for classes and courses~~ Implemented in
-  Milestone 3. Lessons remain unimplemented.
+  Milestone 3.
+- ~~Firestore reads/writes for lessons; Firebase Storage for video and
+  materials~~ Implemented in Milestone 4.
 - Class codes that can be regenerated or revoked
 - Teacher-initiated invitations (a teacher cannot add a student by email;
   students join with the code). Adding one would need a readable user
   directory or a trusted backend, neither of which is in scope yet.
 - Archiving a class; classes are either present or deleted
 - Pagination anywhere. Every list loads in full
-- Video upload or playback
+- Video captions, thumbnails, transcoding, or adaptive-bitrate streaming;
+  a lesson's video is played back exactly as uploaded
 - Assignments, submissions, discussions, announcements (real data)
 - Progress tracking (real data)
 - Offline video, DRM, payments, subscriptions, live classes, AI tutoring,
@@ -636,9 +861,9 @@ Implemented" above.
 
 ### Milestone 3: Classes + Courses
 
-**Status:** Complete on the branch `milestone-3-classes-courses`, not yet
-merged and not yet verified against live Firebase (the rules for the new
-collections still need deploying; see Known Issues).
+**Status:** Complete, merged into `main`, and deployed: the maintainer has
+applied the Milestone 3 `firestore.rules` and confirmed the class, course,
+and enrollment flows work against the live project.
 
 Objectives (all met):
 
@@ -655,6 +880,33 @@ Objectives (all met):
 Deliberately out of scope, as future-milestone work: lessons, video,
 materials, and anything touching Firebase Storage, which is still unused.
 
+### Milestone 4: Lessons + video + materials
+
+**Status:** Complete on the branch `milestone-4-lessons-video-materials`,
+not yet merged, and not yet verified against live Firebase: `storage.rules`
+and the Milestone 4 additions to `firestore.rules` still need deploying
+(see Known Issues).
+
+Objectives (all met):
+
+- Firestore `lessons` collection, and a `materials` subcollection under
+  each lesson, with typed accessors in `src/lib/firebase/`, following the
+  `courses.ts` pattern
+- Teachers create, edit, reorder, and delete lessons inside a course they
+  own; upload, replace, and remove a lesson's video; upload and delete its
+  learning materials
+- Students see the ordered lesson list of a course they are enrolled in,
+  watch a lesson's video, and download its materials
+- First use of Firebase Storage, with `storage.rules` authorizing access
+  by reading the matching Firestore lesson document (the enrollment
+  question flagged as open in the Milestone 3 handoff; see the Milestone 4
+  architecture decisions for how it was resolved)
+- Deleting a course or a class now also removes every lesson's video and
+  materials from Storage, extending Milestone 3's Firestore cascade
+
+Deliberately out of scope, as future-milestone work: assignments,
+submissions, discussions, announcements, and progress tracking.
+
 ## Milestone Roadmap
 
 ```text
@@ -668,7 +920,7 @@ Milestone 3
 Classes + courses (complete)
 
 Milestone 4
-Lessons + video + materials
+Lessons + video + materials (complete)
 
 Milestone 5
 Assignments + submissions + discussions
@@ -682,36 +934,40 @@ Security review + testing + MVP polish
 
 Future milestones may be adjusted if architectural discoveries require it.
 
-### Next Milestone: Milestone 4 (Lessons + video + materials)
+### Next Milestone: Milestone 5 (Assignments + submissions + discussions)
 
 Recommended scope (adjust after inspecting the repository, per the
 Working Protocol below; this is a starting point, not a locked spec):
 
-- A `lessons` collection under courses, following the same pattern as
-  `courses`: typed accessors in `src/lib/firebase/`, ownership denormalized
-  onto the document where it keeps a rule cheap, Security Rules added to
-  `firestore.rules` alongside the existing blocks. The `Lesson` type in
-  `src/types/lesson.ts` is still the untouched Milestone 1 placeholder,
-  so treat its shape as a proposal rather than a decision.
-- `CourseDetailPage` already renders an explicit "Aucune leçon pour le
-  moment" section: that is where the lesson list belongs.
-- First use of Firebase Storage, for video and learning materials. Storage
-  has its own security rules, separate from `firestore.rules`, and they
-  will need the same treatment: a teacher may write only within their own
-  class's scope, a student may read only what their enrollment entitles
-  them to. Reading an enrollment from a Storage rule is not possible the
-  way it is from a Firestore rule, so the path layout has to carry enough
-  information to authorize on its own, or a Cloud Function has to mint
-  access. Decide this before uploading anything.
-- Ordering lessons within a course will be the first real need for sorted
-  queries. The current "no composite indexes" choice is worth revisiting
-  at that point rather than working around it.
+- `assignments` and `submissions` collections, following the `lessons.ts` /
+  `lessonMaterials.ts` pattern from this milestone: ownership and
+  enrollment denormalized onto each document, Security Rules added
+  alongside the existing blocks. `submissions` will likely need the same
+  subcollection-versus-array reasoning worked through in Milestone 4
+  (a submission per student per assignment, with its own attached files
+  reusing the Storage-authorization approach from `storage.rules`).
+- Submitted work is very likely to include file uploads again (a student
+  attaching a document or image to their submission). The
+  `lessonStorage.ts` upload/delete/orchestration helpers, and the
+  cross-service `firestore.get()` approach in `storage.rules`, should
+  generalize rather than being reinvented per feature; consider whether
+  they need to move to a more general location if this milestone confirms
+  the pattern is reused a third time.
+- `comments` (discussions) is the collection PROJECT_RULES.md's Firestore
+  model lists for this scope; scoping a comment to a lesson, an
+  assignment, or a course is a design decision to make explicit before
+  writing its rules, since it changes what "does this user have access to
+  the parent" means.
+- A grade or "reviewed" state on a submission is implied by "assignments"
+  as a concept but not detailed anywhere yet; confirm scope with the
+  maintainer before assuming a full grading workflow versus a simpler
+  submitted/not-submitted status for the MVP.
 
-Before starting, confirm with the maintainer that the Milestone 3 rules
-have been deployed and that the class/course/enrollment flows actually
-work against the live project. Building Milestone 4 on top of an
-unverified Milestone 3 would make it hard to tell which milestone
-introduced a given bug.
+Before starting, confirm with the maintainer that `storage.rules` and the
+Milestone 4 additions to `firestore.rules` have been deployed and that the
+lesson, video, and materials flows actually work against the live project.
+Building Milestone 5 on top of an unverified Milestone 4 would make it
+hard to tell which milestone introduced a given bug.
 
 ## Working Protocol for the Next Claude Session
 
@@ -751,46 +1007,60 @@ Before completion:
 ## Technical Debt
 
 - No automated tests exist yet (no test runner configured), and the case
-  for them is stronger after Milestone 3 than it was after Milestone 2.
-  Worth testing first: `getAuthErrorMessage` and
-  `getFirestoreErrorMessage`'s code-to-message mappings, `ProtectedRoute`'s
-  redirect logic, `AuthProvider`'s state resolution, `useAsyncData`'s
-  stale-result handling, and `createClassCode`'s alphabet and length.
-  Separately, the Firestore Security Rules are now the single most
-  security-critical artifact in the repository and are the one thing here
-  that can be tested exhaustively and offline, with
-  `@firebase/rules-unit-testing` against the Firestore emulator. That is
-  the highest-value testing work available.
-- The production JS bundle is now ~826 kB unminified (~249 kB gzipped),
-  triggering Vite's chunk-size warning, because the Firebase Authentication
-  and Firestore SDKs are bundled into the single main chunk. Not addressed
-  in Milestone 2 since it is a build-tuning concern, not a functional one,
-  but worth revisiting (e.g. dynamic `import()` for Firebase, or adjusting
-  `build.chunkSizeWarningLimit`) once more Firebase-backed features land
-  and the bundle grows further.
-- The Milestone 3 rules are written but not deployed (the maintainer
-  deploys them). Repeated here because nothing in this milestone is
-  verified against a live project until that happens.
+  for them is stronger after every milestone that adds Security Rules.
+  Worth testing first: `getAuthErrorMessage`, `getFirestoreErrorMessage`,
+  and `getStorageErrorMessage`'s code-to-message mappings,
+  `ProtectedRoute`'s redirect logic, `AuthProvider`'s state resolution,
+  `useAsyncData`'s stale-result handling, `createClassCode`'s alphabet and
+  length, and `swapLessonOrder` / the lesson `order` assignment race noted
+  in Known Issues. Separately, the Firestore and Storage Security Rules
+  are now the single most security-critical artifact in the repository and
+  are the one thing here that can be tested exhaustively and offline, with
+  `@firebase/rules-unit-testing` against the Firestore and Storage
+  emulators. That is the highest-value testing work available, and now
+  covers two rule files instead of one.
+- The production JS bundle keeps growing: ~918 kB unminified / ~274 kB
+  gzipped as of Milestone 4 (`firebase/storage` added to what Milestone 2
+  already bundled), still triggering Vite's chunk-size warning. Not
+  addressed in any milestone so far since it is a build-tuning concern,
+  not a functional one, but worth revisiting (e.g. dynamic `import()` for
+  Firebase, or adjusting `build.chunkSizeWarningLimit`) once more
+  Firebase-backed features land.
+- `storage.rules` and the Milestone 4 additions to `firestore.rules` are
+  written but not deployed (the maintainer deploys them, and no
+  `firebase.json` exists to script the two together; see the Firebase
+  section). Repeated here because nothing in this milestone is verified
+  against a live project until that happens.
 - Denormalized names (`Class.teacherName`, `Enrollment.studentName` /
   `studentEmail`) will go stale once profile editing exists. Propagating a
   changed display name across classes and enrollments is Cloud Function
   work, not client work.
-- Deleting a class cascades from the client and can leave orphans if
-  interrupted (see Known Issues).
+- Deleting a class or a course cascades from the client and can leave
+  documents or Storage files behind if interrupted partway through (see
+  Known Issues for how Milestone 4 narrowed, but did not eliminate, this).
 - Every list loads in full, with no pagination and no query cursors. Fine
-  at MVP volumes, and the point at which it stops being fine is probably
-  the lesson list in Milestone 4.
-- The production bundle keeps growing (~868 kB unminified / ~259 kB
-  gzipped) and still triggers Vite's chunk-size warning.
+  at MVP volumes; the lesson list is the first one with real potential to
+  grow past what that comfortably covers.
+- A lesson's `order` can collide under concurrent creation (see Known
+  Issues). Worth revisiting with a Firestore transaction if lessons ever
+  need to be created from more than one place at once.
+- Lesson video download URLs do not expire (see Known Issues); this is
+  the same trade-off as the DRM/offline-video items `PROJECT_RULES.md`
+  already defers, not new debt introduced by an implementation choice.
 
 ## Next Action
 
-1. Review and merge the `milestone-3-classes-courses` branch.
-2. Deploy the updated `firestore.rules`. Until then the live project
-   denies all access to `classes`, `courses`, and `enrollments`, so the
-   Milestone 3 interface will not work against it. No indexes need
-   deploying.
-3. Smoke-test the flows listed in Known Issues, in particular that a
-   student cannot open a class they have not joined.
-4. Then begin **Milestone 4: Lessons + video + materials** after explicit
-   authorization.
+1. Review and merge the `milestone-4-lessons-video-materials` branch.
+2. Deploy the Milestone 4 additions to `firestore.rules`, and the new
+   `storage.rules` file. Until then the live project denies all access to
+   `lessons`, `materials`, and every Storage object, so the Milestone 4
+   interface will not work against it. No indexes need deploying, for
+   either service.
+3. Smoke-test the flows listed in Known Issues: lesson CRUD and reordering,
+   video upload/playback, material upload/download, and that a student in
+   a different class cannot reach a lesson directly by URL. Also confirm
+   that deleting a lesson, a course, and a class each remove the expected
+   video and material files from the Storage console, since the interface
+   itself cannot prove a file is gone.
+4. Then begin **Milestone 5: Assignments + submissions + discussions**
+   after explicit authorization.

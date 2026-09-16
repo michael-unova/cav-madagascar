@@ -18,6 +18,7 @@ import { getFirebaseFirestore } from './firestore'
 import { toIsoString } from './timestamps'
 import { COURSES_COLLECTION } from './courses'
 import { ENROLLMENTS_COLLECTION } from './enrollments'
+import { deleteLessonsForCourse } from './lessonStorage'
 import type { Class } from '../../types'
 
 export const CLASSES_COLLECTION = 'classes'
@@ -176,6 +177,15 @@ export async function updateClass(classId: string, { name, description }: Update
  * course or enrollment through its class), but it is the kind of work that
  * belongs in a Cloud Function once lessons, materials, and submissions
  * exist underneath a class.
+ *
+ * As of Milestone 4, each course's lessons (and their video and material
+ * files in Firebase Storage) are cascaded first, via
+ * `deleteLessonsForCourse`. Storage objects have no equivalent of a
+ * Firestore batch delete, and leaving them behind would be worse than the
+ * Firestore orphans described above: unlike an orphaned Firestore document,
+ * an orphaned Storage file has no path left in the interface that could
+ * ever reach it again to clean it up, and it keeps counting against
+ * storage usage indefinitely.
  */
 export async function deleteClassWithContent(classId: string): Promise<void> {
   const firestore = getFirebaseFirestore()
@@ -184,6 +194,10 @@ export async function deleteClassWithContent(classId: string): Promise<void> {
     getDocs(query(collection(firestore, COURSES_COLLECTION), where('classId', '==', classId))),
     getDocs(query(collection(firestore, ENROLLMENTS_COLLECTION), where('classId', '==', classId))),
   ])
+
+  for (const courseDoc of courseSnapshot.docs) {
+    await deleteLessonsForCourse(courseDoc.id)
+  }
 
   const children = [...courseSnapshot.docs, ...enrollmentSnapshot.docs]
 

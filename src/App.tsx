@@ -9,6 +9,7 @@ import { ClassesPage } from './pages/classes/ClassesPage'
 import { ClassDetailPage } from './pages/classes/ClassDetailPage'
 import { CoursesPage } from './pages/courses/CoursesPage'
 import { CourseDetailPage } from './pages/courses/CourseDetailPage'
+import { LessonDetailPage } from './pages/lessons/LessonDetailPage'
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage'
 import { DashboardRedirect } from './pages/dashboards/DashboardRedirect'
 import { StudentDashboardPage } from './pages/dashboards/StudentDashboardPage'
@@ -116,6 +117,16 @@ function App() {
           <ProtectedRoute>
             <AppLayout>
               <CourseDetailPage />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={paths.lessonDetailPattern}
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <LessonDetailPage />
             </AppLayout>
           </ProtectedRoute>
         }

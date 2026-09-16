@@ -1,0 +1,35 @@
+.card {
+  margin-bottom: 1.75rem;
+}
+
+.title {
+  font-size: 1.1rem;
+  margin-bottom: 0.9rem;
+}
+
+.video {
+  width: 100%;
+  max-height: 480px;
+  border-radius: var(--radius-md);
+  background-color: #000;
+  display: block;
+}
+
+.meta {
+  margin-top: 0.6rem;
+  color: var(--color-ink-faint);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.hiddenInput {
+  display: none;
+}
