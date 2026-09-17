@@ -85,6 +85,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/enrollments/$(classId + '_' + request.auth.uid));
     }
 
+    function isCourseTeacher(courseId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/courses/$(courseId))
+        && get(/databases/$(database)/documents/courses/$(courseId)).data.teacherId == request.auth.uid;
+    }
+
     match /classes/{classId} {
       // Reading a single class: its teacher, an enrolled student, or an
       // administrator. A student who is not enrolled cannot read a class
@@ -134,8 +140,25 @@ service cloud.firestore {
       // `teacherId` is duplicated on the course so a teacher's own query
       // resolves without a lookup; students are checked against their
       // enrollment in the owning class.
+      //
+      // Read uses `isClassTeacher(resource.data.classId)` rather than
+      // `resource.data.teacherId == request.auth.uid` directly, even
+      // though the two are always equal in practice (enforced by the
+      // `create`/`update` rules below). This is not a stylistic choice:
+      // `listCoursesByClass` queries with `where('classId', '==', classId)`,
+      // and Cloud Firestore validates a list query's shape against the rule
+      // BEFORE looking at any data, using only the query's own filters. A
+      // `classId` filter lets Firestore resolve `isClassTeacher(resource
+      // .data.classId)` to a single provable boolean; it cannot do the same
+      // for `resource.data.teacherId`, since nothing in the query
+      // constrains that field, and denies the entire query as
+      // unprovable, regardless of whether any document would actually have
+      // violated it. This bit a real teacher viewing a real class with
+      // zero courses in it: the list was denied outright, not returned
+      // empty, because the rule as originally written could never be
+      // proven safe for that query shape at all, empty or not.
       allow read: if isSignedIn()
-        && (resource.data.teacherId == request.auth.uid
+        && (isClassTeacher(resource.data.classId)
           || isEnrolled(resource.data.classId)
           || isAdmin());
 
@@ -228,8 +251,16 @@ service cloud.firestore {
     match /lessons/{lessonId} {
       // Same shape as `courses`: the owning teacher, an enrolled student
       // (via the denormalized `classId`), or an administrator.
+      //
+      // Teacher access uses `isCourseTeacher(resource.data.courseId)`
+      // rather than `resource.data.teacherId == request.auth.uid`, for the
+      // same list-query-provability reason documented on `courses` above:
+      // `listLessonsByCourse` queries with `where('courseId', '==',
+      // courseId)`, so the rule must be provable from a bound `courseId`,
+      // not from an unconstrained `teacherId` field, or Cloud Firestore
+      // denies the whole query regardless of what data actually exists.
       allow read: if isSignedIn()
-        && (resource.data.teacherId == request.auth.uid
+        && (isCourseTeacher(resource.data.courseId)
           || isEnrolled(resource.data.classId)
           || isAdmin());
 
