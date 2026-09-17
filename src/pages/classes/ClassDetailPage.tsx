@@ -43,7 +43,14 @@ export function ClassDetailPage() {
 function ClassDetailView({ user, classId }: { user: User; classId: string }) {
   const navigate = useNavigate()
   const { data, isLoading, errorMessage, refresh } = useAsyncData<ClassDetailData>(async () => {
-    const classItem = await getClass(classId)
+    // Each read is tagged before rethrowing so the console shows exactly
+    // which one failed, instead of one generic error that could be any of
+    // the three. Temporary-in-spirit but harmless to leave permanently:
+    // it only ever fires on the error path, never on success.
+    const classItem = await getClass(classId).catch((error: unknown) => {
+      console.error('[ClassDetailPage] getClass failed:', error)
+      throw error
+    })
 
     if (!classItem) {
       return { classItem: null, courses: [], enrollments: [] }
@@ -55,8 +62,16 @@ function ClassDetailView({ user, classId }: { user: User; classId: string }) {
     const canSeeRoster = classItem.teacherId === user.id || user.role === 'admin'
 
     const [courses, enrollments] = await Promise.all([
-      listCoursesByClass(classId),
-      canSeeRoster ? listEnrollmentsByClass(classId) : Promise.resolve([]),
+      listCoursesByClass(classId).catch((error: unknown) => {
+        console.error('[ClassDetailPage] listCoursesByClass failed:', error)
+        throw error
+      }),
+      canSeeRoster
+        ? listEnrollmentsByClass(classId).catch((error: unknown) => {
+            console.error('[ClassDetailPage] listEnrollmentsByClass failed:', error)
+            throw error
+          })
+        : Promise.resolve([]),
     ])
 
     return { classItem, courses, enrollments }

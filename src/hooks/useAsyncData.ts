@@ -50,6 +50,11 @@ export function useAsyncData<TData>(loader: () => Promise<TData>, keys: unknown[
         if (isCurrent) setResult({ signature, data, errorMessage: null })
       })
       .catch((error: unknown) => {
+        // The UI only ever shows the mapped French message, so without this
+        // the original error (code, message, which request actually failed)
+        // is invisible in the browser console, making failures on this page
+        // undiagnosable from the outside.
+        console.error('useAsyncData load failed:', error)
         if (isCurrent) {
           setResult({ signature, data: null, errorMessage: getFirestoreErrorMessage(error) })
         }
