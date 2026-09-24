@@ -1,14 +1,15 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { PublicLayout } from '../layouts/PublicLayout'
+import { PublicOnlyRoute, ProtectedRoute } from '../features/auth'
 import { HomePage } from '../pages/HomePage'
 import { CoursesPage } from '../pages/CoursesPage'
+import { CourseDetailsPage } from '../pages/CourseDetailsPage'
 import { AboutPage } from '../pages/AboutPage'
 import { LoginPage } from '../pages/LoginPage'
 import { RegisterPage } from '../pages/RegisterPage'
 import { ForgotPasswordPage } from '../pages/ForgotPasswordPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
-import { ProtectedRoute, PublicOnlyRoute } from '../features/auth'
 
 export default function AppRouter() {
   return (
@@ -16,6 +17,7 @@ export default function AppRouter() {
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/courses" element={<CoursesPage />} />
+        <Route path="/courses/:slug" element={<CourseDetailsPage />} />
         <Route path="/about" element={<AboutPage />} />
 
         <Route element={<PublicOnlyRoute />}>

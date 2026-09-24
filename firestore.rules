@@ -38,6 +38,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /courses/{courseId} {
+      allow read: if resource.data.status == 'published';
+      allow write: if false;
+    }
+
+    match /courseSubjects/{courseSubjectId} {
+      allow read: if resource.data.status == 'published';
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

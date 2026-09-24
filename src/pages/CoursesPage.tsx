@@ -1,35 +1,74 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Container } from '../components/ui/Container'
 import { Card } from '../components/ui/Card'
+import { Container } from '../components/ui/Container'
 import { PageHeader } from '../components/ui/PageHeader'
-
-const examples = [
-  { title: 'Inspecteur de police', description: 'Préparation structurée aux différentes épreuves du concours.' },
-  { title: 'Commissaire', description: 'Un parcours de préparation organisé par matières et contenus.' },
-  { title: 'Comptabilité', description: 'Cours et entraînements pour renforcer vos connaissances.' },
-]
+import { listPublishedCourses } from '../features/courses'
+import type { Course } from '../types/course'
 
 export function CoursesPage() {
+  const [courses, setCourses] = useState<Course[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    listPublishedCourses()
+      .then((items) => {
+        if (active) setCourses(items)
+      })
+      .catch(() => {
+        if (active) setError('Impossible de charger les concours pour le moment.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
     <Container className="page-container">
       <PageHeader
         eyebrow="Catalogue"
         title="Concours disponibles"
-        description="Découvrez les préparations proposées par CAV Madagascar."
+        description="Découvrez les préparations actuellement publiées sur CAV Madagascar."
       />
-      <div className="course-grid">
-        {examples.map((course) => (
-          <Card key={course.title} className="course-card">
-            <span className="course-badge">Préparation</span>
-            <h2>{course.title}</h2>
-            <p>{course.description}</p>
-            <Link className="text-link" to="/register">Voir la préparation →</Link>
-          </Card>
-        ))}
-      </div>
-      <p className="catalogue-note">
-        Le catalogue sera entièrement administrable depuis la plateforme dans les prochaines phases.
-      </p>
+
+      {loading && <div className="catalogue-state">Chargement des concours...</div>}
+
+      {!loading && error && <div className="form-error" role="alert">{error}</div>}
+
+      {!loading && !error && courses.length === 0 && (
+        <Card className="catalogue-empty">
+          <h2>Aucun concours disponible pour le moment</h2>
+          <p>Les prochaines préparations seront publiées prochainement.</p>
+        </Card>
+      )}
+
+      {!loading && !error && courses.length > 0 && (
+        <div className="course-grid">
+          {courses.map((course) => (
+            <Card key={course.id} className="course-card">
+              {course.thumbnailUrl && (
+                <img className="course-thumbnail" src={course.thumbnailUrl} alt="" />
+              )}
+              <span className="course-badge">Préparation</span>
+              <h2>{course.title}</h2>
+              <p>{course.description}</p>
+              <div className="course-card-footer">
+                <strong>{course.price.toLocaleString('fr-FR')} {course.currency}</strong>
+                <Link className="text-link" to={`/courses/${course.slug}`}>
+                  Découvrir →
+                </Link>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </Container>
   )
 }
