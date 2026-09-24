@@ -4,9 +4,10 @@ import { getFirebaseApp } from './config'
 let storage: FirebaseStorage | undefined
 
 /**
- * Returns the singleton Firebase Storage instance, mirroring
- * `getFirebaseFirestore()` and `getFirebaseAuth()`. First used in
- * Milestone 4 for lesson videos and learning materials.
+ * Returns the singleton Firebase Storage instance.
+ *
+ * Feature-specific storage paths and access rules are defined
+ * separately by the CAV application.
  */
 export function getFirebaseStorage(): FirebaseStorage {
   if (!storage) {

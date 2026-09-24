@@ -6,9 +6,8 @@ let firestore: Firestore | undefined
 /**
  * Returns the singleton Firestore instance.
  *
- * This is a foundation only: collection access, queries, and security-rule
- * backed reads/writes are implemented starting with Milestone 2 and the
- * milestones that introduce classes, courses, and lessons.
+ * Feature-specific collections, queries, and authorization are defined
+ * separately by the CAV application.
  */
 export function getFirebaseFirestore(): Firestore {
   if (!firestore) {
