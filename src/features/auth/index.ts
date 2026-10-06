@@ -1,5 +1,5 @@
 export { AuthProvider, useAuth } from './AuthContext'
 export { getAuthErrorMessage } from './authErrors'
-export { loginUser, logoutUser, registerUser, resetPassword } from './authService'
+export { loginUser, loginWithGoogle, logoutUser, registerUser, resetPassword, getUserProfile, updateUserProfile } from './authService'
 export { ProtectedRoute } from './ProtectedRoute'
 export { PublicOnlyRoute } from './PublicOnlyRoute'

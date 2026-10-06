@@ -25,3 +25,68 @@
   .course-detail-hero { grid-template-columns: 1fr; padding: 28px; }
   .enrollment-cta .ui-card { align-items: flex-start; flex-direction: column; }
 }
+
+/* Student catalogue enrollment states */
+.course-card-enrolled {
+  border-color: rgba(24, 74, 122, 0.18);
+}
+
+.course-card-enrolled .course-cover {
+  position: relative;
+}
+
+.enrolled-cover-badge {
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #176b4d;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(12, 45, 76, 0.12);
+}
+
+.enrolled-cover-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.catalog-access-status {
+  display: grid;
+  gap: 3px;
+  margin: 16px 0;
+  padding: 11px 13px;
+  border-left: 3px solid #2b8a67;
+  border-radius: 8px;
+  background: #f3f9f6;
+}
+
+.catalog-access-status span {
+  color: #2b8a67;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.catalog-access-status strong {
+  color: #496579;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.continue-button {
+  box-shadow: 0 8px 20px rgba(24, 74, 122, 0.16);
+}
+
+/* Curriculum hierarchy: topics group chapters, chapters are the student lessons. */
+.admin-form-help { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 44px; padding: 10px 12px; border-radius: 10px; background: #f4f8fc; color: #526987; }
+.admin-form-help strong { color: #183b66; }
+.learning-topic-group { margin-top: 12px; }
+.learning-topic-group h4 { margin: 0 0 6px; color: #173f70; font-size: 0.82rem; }
+.learning-empty-hint { margin: 6px 0 12px; color: #8a9bb0; font-size: 0.82rem; }

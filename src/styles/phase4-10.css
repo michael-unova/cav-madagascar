@@ -1,0 +1,58 @@
+.admin-select{width:100%;border:1px solid var(--color-border);border-radius:10px;padding:12px 13px;background:white;color:var(--color-text)}.admin-four-grid{grid-template-columns:repeat(3,1fr);margin-bottom:28px}.learning-layout{display:grid;grid-template-columns:260px 1fr;gap:28px}.learning-sidebar{background:white;border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px;height:max-content}.learning-sidebar h3{color:var(--color-primary);margin-top:0}.learning-item{display:block;width:100%;padding:10px 0;border:0;border-top:1px solid var(--color-border);background:transparent;color:var(--color-muted);text-align:left;cursor:pointer;font:inherit}.learning-item:hover,.learning-item.is-active{color:var(--color-primary);font-weight:700}.learning-chapters{margin-top:18px}.learning-chapters h4{margin:0 0 6px;color:var(--color-primary)}.learning-node{padding-left:10px}.learning-block{margin:18px 0}.learning-text{line-height:1.7;color:var(--color-text)}@media(max-width:800px){.admin-four-grid,.learning-layout{grid-template-columns:1fr}}
+.admin-nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px}.admin-nav a{padding:8px 12px;border:1px solid var(--color-border);border-radius:9px;background:white;color:var(--color-primary);font-weight:700;font-size:.9rem}.admin-nav a:hover{border-color:var(--color-primary)}.learning-progress-actions{display:flex;align-items:center;gap:14px;margin:18px 0;flex-wrap:wrap}.learning-progress-actions span{color:var(--color-muted);font-size:.92rem}
+
+.admin-nav-wrap { background: var(--color-background); border-bottom: 1px solid var(--color-border); }
+.admin-nav { margin: 0; padding: 14px 0; }
+.admin-nav a.is-active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+.back-button { border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; }
+.admin-stat-grid-wide { grid-template-columns: repeat(5, 1fr); }
+.admin-stat-grid small { color: var(--color-muted); }
+.analytics-section { margin-top: 36px; }
+.analytics-section h2 { color: var(--color-primary); }
+.user-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+.learning-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; margin-bottom: 30px; }
+.learning-header h1 { color: var(--color-primary); margin: 8px 0 0; }
+.course-progress-summary { width: min(320px, 100%); display: grid; gap: 6px; }
+.course-progress-summary span { color: var(--color-muted); font-size: .85rem; font-weight: 700; }
+.course-progress-summary strong { color: var(--color-primary); font-size: 1.4rem; }
+.progress-track { width: 100%; height: 9px; border-radius: 999px; background: #e8eef5; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: inherit; background: var(--color-primary); transition: width .2s ease; }
+.learning-practice-section { margin-top: 48px; }
+.practice-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.practice-card-grid .ui-card { display: grid; gap: 10px; }
+.practice-card-grid h3 { color: var(--color-primary); margin: 0; }
+.practice-counter { color: var(--color-muted); font-weight: 700; }
+.practice-question-card { margin-bottom: 18px; }
+.practice-question-header { display: flex; justify-content: space-between; gap: 12px; color: var(--color-primary); margin-bottom: 18px; }
+.practice-question-text { margin-bottom: 18px; line-height: 1.7; }
+.practice-options { display: grid; gap: 10px; }
+.practice-option { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; cursor: pointer; }
+.practice-option:has(input:checked) { border-color: var(--color-primary); background: #f4f8fc; }
+.practice-answer-input, .practice-written { width: 100%; border: 1px solid var(--color-border); border-radius: 10px; padding: 12px; }
+.practice-written { resize: vertical; }
+.practice-submit { width: 100%; margin: 12px 0 28px; }
+.practice-result { text-align: center; margin-top: 28px; }
+.practice-result h2 { color: var(--color-primary); font-size: 3rem; margin: 8px 0; }
+.question-options-editor { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: #fbfcfe; }
+.question-option-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; }
+.question-option-row input:first-child { min-width: 0; }
+.question-correct { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--color-muted); }
+.question-option-row button { border: 0; background: transparent; color: #9a3412; cursor: pointer; }
+.practice-builder { margin-top: 40px; }
+.practice-question-picker { display: grid; gap: 8px; max-height: 360px; overflow: auto; border: 1px solid var(--color-border); border-radius: 12px; padding: 12px; }
+.practice-picker-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-bottom: 1px solid var(--color-border); }
+.practice-picker-row:last-child { border-bottom: 0; }
+.dashboard-section { margin-top: 56px; }
+.dashboard-course-card { display: grid; gap: 12px; }
+.dashboard-course-card h3 { color: var(--color-primary); margin: 0; }
+.dashboard-course-top { display: flex; justify-content: space-between; align-items: center; }
+.dashboard-course-top strong { color: var(--color-primary); }
+@media(max-width:900px){.admin-stat-grid-wide{grid-template-columns:repeat(2,1fr)}.learning-header{align-items:flex-start;flex-direction:column}.practice-card-grid{grid-template-columns:1fr}}
+@media(max-width:760px){.admin-stat-grid-wide{grid-template-columns:1fr}.question-option-row{grid-template-columns:1fr}.question-correct{justify-self:start}}
+.practice-feedback { margin-top: 14px; padding: 12px; border-radius: 10px; background: #f8fafc; color: var(--color-muted); }
+.practice-feedback.is-correct { background: #ecfdf5; color: #166534; }
+.practice-feedback.is-wrong { background: #fff1f2; color: #9f1239; }
+.practice-feedback div { margin-top: 6px; color: var(--color-text); }
+.learning-personal-actions { display: grid; gap: 14px; margin: 18px 0 26px; }
+.learning-note { display: grid; gap: 8px; }
+.learning-note textarea { width: 100%; border: 1px solid var(--color-border); border-radius: 10px; padding: 12px; resize: vertical; }

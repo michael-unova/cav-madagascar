@@ -1,0 +1,261 @@
+1476:function CoursePage({
+1477-  setPage,
+1478-  course,
+1479-  userId,
+1480-  practice,
+1481-}: {
+1482-  setPage: (p: StudentPage) => void;
+1483-  course?: CourseView;
+1484-  userId?: string;
+1485-  practice: () => void;
+1486-}) {
+1487-  const [subjects, setSubjects] = useState<CourseSubject[]>([]);
+1488-  const [nodes, setNodes] = useState<ContentNode[]>([]);
+1489-  const [progress, setProgress] = useState(0);
+1490-  const [selectedNodeId, setSelectedNodeId] = useState("");
+1491-  const [blocks, setBlocks] = useState<ContentBlock[]>([]);
+1492-  const [lessonLoading, setLessonLoading] = useState(false);
+1493-  const [lessonError, setLessonError] = useState("");
+1494-  const [lessonCompleted, setLessonCompleted] = useState(false);
+1495-  const [progressSaving, setProgressSaving] = useState(false);
+1496-
+1497-  useEffect(() => {
+1498-    if (!course || !userId) return;
+1499-    setSelectedNodeId("");
+1500-    setBlocks([]);
+1501-    setLessonError("");
+1502-    setLessonCompleted(false);
+1503-    void Promise.all([
+1504-      listCourseSubjects(course.id, true),
+1505-      getCourseProgressSummary(userId, course.id),
+1506-    ])
+1507-      .then(([s, p]) => {
+1508-        setSubjects(s);
+1509-        setProgress(p.percent);
+1510-        return Promise.all(
+1511-          s.map(async (x) => {
+1512-            // The reusable Matière is the canonical source. Also inspect the
+1513-            // course association so older content cannot disappear from the
+1514-            // student view. Merge both sources by node id.
+1515-            const sources = await Promise.all([
+1516-              listSubjectContentNodes(x.subjectId, true).catch(() => [] as ContentNode[]),
+1517-              listContentNodesSafe(x.id).catch(() => [] as ContentNode[]),
+1518-            ]);
+1519-            const merged = new Map<string, ContentNode>();
+1520-            sources.flat().forEach((node) => merged.set(node.id, node));
+1521-            return Array.from(merged.values()).map((node) => ({ ...node, courseSubjectId: x.id }));
+1522-          }),
+1523-        );
+1524-      })
+1525-      .then((groups) => setNodes(groups.flat()))
+1526-      .catch((error) => {
+1527-        console.error(error);
+1528-        setLessonError("Impossible de charger le programme de cette préparation.");
+1529-      });
+1530-  }, [course, userId]);
+1531-
+1532-  async function openLesson(node: ContentNode) {
+1533-    if (!course) return;
+1534-    setSelectedNodeId(node.id);
+1535-    setBlocks([]);
+1536-    setLessonError("");
+1537-    setLessonCompleted(false);
+1538-    setLessonLoading(true);
+1539-    try {
+1540-      const [nodeBlocks, nodeProgress] = await Promise.all([
+1541-        getStudentLessonContent(course.id, node.id),
+1542-        userId ? getNodeProgress(userId, course.id, node.id) : Promise.resolve(null),
+1543-      ]);
+1544-      setBlocks(nodeBlocks);
+1545-      setLessonCompleted(Boolean(nodeProgress?.completed));
+1546-    } catch (error) {
+1547-      console.error(error);
+1548-      setLessonError(
+1549-        "Impossible de charger cette leçon. Vérifiez que la leçon et son contenu sont bien publiés, puis réessayez.",
+1550-      );
+1551-    } finally {
+1552-      setLessonLoading(false);
+1553-    }
+1554-  }
+1555-
+1556-  const selectedNode = nodes.find((node) => node.id === selectedNodeId);
+1557-  const topics = nodes.filter((node) => node.type === "topic").sort((a, b) => a.order - b.order);
+1558-  const lessons = nodes.filter((node) => node.type !== "topic" && node.parentId).sort((a, b) => a.order - b.order);
+1559-  const legacyLessons = lessons.length === 0 ? nodes.filter((node) => node.type !== "topic").sort((a, b) => a.order - b.order) : [];
+1560-  const displayedLessons = lessons.length ? lessons : legacyLessons;
+1561-  const topicForLesson = (lesson: ContentNode) => topics.find((topic) => topic.id === lesson.parentId);
+1562-  const totalLessons = displayedLessons.length;
+1563-
+1564-  if (!course)
+1565-    return (
+1566-      <div className="page">
+1567-        <div className="panel empty-state">Aucune préparation sélectionnée.</div>
+1568-      </div>
+1569-    );
+1570-
+1571-  if (selectedNode)
+1572-    return (
+1573-      <div className="page">
+1574-        <button
+1575-          className="back"
+1576-          onClick={() => {
+1577-            setSelectedNodeId("");
+1578-            setBlocks([]);
+1579-            setLessonError("");
+1580-            setLessonCompleted(false);
+1581-          }}
+1582-        >
+1583-          ← Retour aux leçons
+1584-        </button>
+1585-        <div className="page-title">
+1586-          <div>
+1587-            <div className="eyebrow">{(topicForLesson(selectedNode)?.title ?? course.title).toUpperCase()}</div>
+1588-            <h1>{selectedNode.title}</h1>
+1589-            {selectedNode.description && <p>{selectedNode.description}</p>}
+1590-          </div>
+1591-          <span className={`status ${selectedNode.status === "published" ? "published" : "draft"}`}>
+1592-            {selectedNode.status === "published" ? "Publié" : "Brouillon"}
+1593-          </span>
+1594-        </div>
+1595-        {lessonError && <div className="form-error" role="alert">{lessonError}</div>}
+1596-        {lessonLoading ? (
+1597-          <div className="panel empty-state">Chargement de la leçon...</div>
+1598-        ) : blocks.length ? (
+1599-          blocks[0].type === "text" ? (
+1600-            <LessonPagedPreview html={String(blocks[0].content.html ?? blocks[0].content.text ?? "")} questions={[]} />
+1601-          ) : (
+1602-            <div className="lesson-content">
+1603-              {blocks.map((block) => (
+1604-                <div className="panel" key={block.id} style={{ marginBottom: 16 }}>
+1605-                  {block.type === "video" && block.media?.url ? (
+1606-                    <video controls width="100%" src={block.media.url} />
+1607-                  ) : block.type === "image" && block.media?.url ? (
+1608-                    <img src={block.media.url} alt="Illustration de la leçon" style={{ maxWidth: "100%", display: "block", margin: "0 auto" }} />
+1609-                  ) : block.type === "file" && block.media?.url ? (
+1610-                    <a className="text-link" href={block.media.url} target="_blank" rel="noreferrer">Ouvrir le document</a>
+1611-                  ) : (
+1612-                    <div className="lesson-preview" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(String(block.content.html ?? block.content.text ?? "")) }} />
+1613-                  )}
+1614-                </div>
+1615-              ))}
+1616-            </div>
+1617-          )
+1618-        ) : (
+1619-          <div className="panel empty-state">
+1620-            <h3>Cette leçon ne contient pas encore de contenu publié.</h3>
+1621-            <p>Le contenu sera disponible dès que son contenu pédagogique sera publié.</p>
+1622-          </div>
+1623-        )}
+1624-        <div className="panel" style={{ marginTop: 24 }}>
+1625-          <div className="eyebrow">VOTRE PROGRESSION</div>
+1626-          <h2>{lessonCompleted ? "Leçon terminée" : "Avez-vous terminé cette leçon ?"}</h2>
+1627-          <p>{lessonCompleted ? "Votre progression a été enregistrée." : "Marquez cette leçon comme terminée pour mettre à jour votre progression."}</p>
+1628-          <button
+1629-            className={lessonCompleted ? "outline" : "primary"}
+1630-            disabled={progressSaving}
+1631-            onClick={async () => {
+1632-              if (!userId || !course || !selectedNode) return;
+1633-              const next = !lessonCompleted;
+1634-              setProgressSaving(true);
+1635-              setLessonError("");
+1636-              try {
+1637-                await saveNodeProgress({
+1638-                  userId,
+1639-                  courseId: course.id,
+1640-                  courseSubjectId: selectedNode.courseSubjectId ?? subjects[0]?.id ?? "",
+1641-                  nodeId: selectedNode.id,
+1642-                  blockId: blocks[0]?.id,
+1643-                  completed: next,
+1644-                });
+1645-                setLessonCompleted(next);
+1646-                const summary = await getCourseProgressSummary(userId, course.id);
+1647-                setProgress(summary.percent);
+1648-              } catch (error) {
+1649-                console.error(error);
+1650-                setLessonError("Impossible d’enregistrer votre progression.");
+1651-              } finally {
+1652-                setProgressSaving(false);
+1653-              }
+1654-            }}
+1655-          >
+1656-            {progressSaving ? "Enregistrement..." : lessonCompleted ? "Marquer comme non terminé" : "Marquer comme terminé"}
+1657-          </button>
+1658-        </div>
+1659-      </div>
+1660-    );
+1661-
+1662-  return (
+1663-    <div className="page">
+1664-      <button className="back" onClick={() => setPage("dashboard")}>← Tableau de bord</button>
+1665-      <div className="course-hero">
+1666-        <div>
+1667-          <span className="pill">{course.title}</span>
+1668-          <h1>Préparation complète</h1>
+1669-          <p>{course.description}</p>
+1670-          <div className="course-meta">
+1671-            <span>{totalLessons} leçon{totalLessons === 1 ? "" : "s"}</span>
+1672-            <span>{subjects.length} matière{subjects.length === 1 ? "" : "s"}</span>
+1673-            <span>{progress}% progression</span>
+1674-          </div>
+1675-        </div>
+1676-        <div className="ring" style={{ "--progress": `${progress}%` } as React.CSSProperties}><b>{progress}%</b><span>progression</span></div>
+1677-      </div>
+1678-      <div className="lesson-layout">
+1679-        <main>
+1680-          <div className="section-head">
+1681-            <div>
+1682-              <div className="eyebrow">PARCOURS</div>
+1683-              <h2>Vos leçons</h2>
+1684-              <p className="page-description">Choisissez un chapitre pour commencer votre préparation.</p>
+1685-            </div>
+1686-          </div>
+1687-          {displayedLessons.length ? (
+1688-            <div className="lesson-list">
+1689-              {topics.map((topic) => {
+1690-                const topicLessons = displayedLessons.filter((lesson) => lesson.parentId === topic.id);
+1691-                if (!topicLessons.length) return null;
+1692-                return (
+1693-                  <div key={topic.id} className="lesson-topic-group">
+1694-                    <div className="lesson-topic-heading">
+1695-                      <span className="eyebrow">THÈME</span>
+1696-                      <strong>{topic.title}</strong>
+1697-                    </div>
+1698-                    {topicLessons.map((lesson, index) => (
+1699-                      <button className="lesson-row" key={lesson.id} onClick={() => void openLesson(lesson)}>
+1700-                        <div className="lesson-number">{index + 1}</div>
+1701-                        <div>
+1702-                          <strong>{lesson.title}</strong>
+1703-                          <span>Leçon · {lesson.status === "published" ? "Publié" : "Non publié"}</span>
+1704-                        </div>
+1705-                        <span className="lesson-action">Ouvrir →</span>
+1706-                      </button>
+1707-                    ))}
+1708-                  </div>
+1709-                );
+1710-              })}
+1711-              {legacyLessons.length > 0 && topics.length === 0 && legacyLessons.map((lesson, index) => (
+1712-                <button className="lesson-row" key={lesson.id} onClick={() => void openLesson(lesson)}>
+1713-                  <div className="lesson-number">{index + 1}</div>
+1714-                  <div><strong>{lesson.title}</strong><span>Leçon · {lesson.status === "published" ? "Publié" : "Non publié"}</span></div>
+1715-                  <span className="lesson-action">Ouvrir →</span>
+1716-                </button>
+1717-              ))}
+1718-            </div>
+1719-          ) : (
+1720-            <div className="panel empty-state"><p>Aucune leçon publiée dans cette préparation.</p></div>
+1721-          )}
+1722-        </main>
+1723-        <aside className="practice-card">
+1724-          <div className="eyebrow">ENTRAÎNEMENT</div>
+1725-          <h3>Testez vos connaissances</h3>
+1726-          <p>Les entraînements publiés pour cette préparation apparaîtront ici.</p>
+1727-          <button className="primary full" disabled={!subjects.length} onClick={practice}>Commencer un entraînement <Icon name="arrow" /></button>
+1728-        </aside>
+1729-      </div>
+1730-    </div>
+1731-  );
+1732-}
+1733-function Practice({
+1734-  setPage,
+1735-  course,
+1736-}: {

@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 
 export function ProtectedRoute() {
-  const { user, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -11,6 +11,10 @@ export function ProtectedRoute() {
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  if (profile?.status === 'suspended') {
+    return <Navigate to="/account-suspended" replace />
   }
 
   return <Outlet />

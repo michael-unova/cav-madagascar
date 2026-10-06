@@ -1,0 +1,321 @@
+                />
+              ))}
+            </div>
+            <span className="form-help">Cette couleur sera utilisée pour identifier visuellement le concours.</span>
+          </div>
+        </div>
+        <div className="association-note">
+          <strong>Réutilisation des Matières.</strong> Sélectionnez une matière existante par son nom, matricule et niveau. Une même matière peut être utilisée par plusieurs concours sans dupliquer son contenu.
+        </div>
+        <div className="editor-actions">
+          <button
+            className="primary"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            {saving
+              ? "Enregistrement..."
+              : editingId
+                ? "Enregistrer les modifications"
+                : "Enregistrer le concours"}
+          </button>
+          {editingId && (
+            <button className="outline" disabled={saving} onClick={resetForm}>
+              Annuler
+            </button>
+          )}
+        </div>
+      </div>
+      <section className="panel" style={{ marginBottom: 32 }}>
+        <div className="section-head">
+          <div>
+            <div className="eyebrow">PROGRAMME</div>
+            <h2>Matières de ce concours</h2>
+            <p>Choisissez les matières existantes. Le matricule et le niveau permettent de distinguer les intitulés identiques.</p>
+          </div>
+        </div>
+        <div className="form-grid">
+          <label className="wide">Ajouter une matière
+            <select className="fake-input" value={subjectToAdd} onChange={(e) => setSubjectToAdd(e.target.value)}>
+              <option value="">Sélectionner une matière</option>
+              {availableSubjects
+                .filter((subject) => subject.status === "published" && !selectedSubjectIds.includes(subject.id))
+                .map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name} · {subject.matricule || "sans code"} · {subject.niveau || "niveau non renseigné"}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <div style={{ display: "flex", alignItems: "end" }}>
+            <button className="primary" type="button" onClick={() => void addSubject()} disabled={!subjectToAdd}>Ajouter</button>
+          </div>
+        </div>
+        <div className="selected-subject-list" style={{ marginTop: 18 }}>
+          {selectedSubjectIds.length ? selectedSubjectIds.map((subjectId, index) => {
+            const subject = availableSubjects.find((item) => item.id === subjectId);
+            if (!subject) return null;
+            const linked = courseSubjects.find((item) => item.subjectId === subjectId);
+            return (
+              <div className="selected-subject-row" key={subjectId}>
+                <div>
+                  <strong>{index + 1}. {subject.name}</strong>
+                  <span>{subject.matricule || "Sans matricule"} · {subject.niveau || "Niveau non renseigné"}</span>
+                </div>
+                {editingId && linked ? (
+                  <button className="outline small-btn" type="button" onClick={() => void removeCourseSubject(linked)}>Retirer</button>
+                ) : (
+                  <button className="outline small-btn" type="button" onClick={() => removeSelectedSubject(subjectId)}>Retirer</button>
+                )}
+              </div>
+            );
+          }) : (
+            <div className="empty-state compact">Aucune matière sélectionnée pour le moment.</div>
+          )}
+        </div>
+      </section>
+      <div className="section-head course-admin-head">
+        <div>
+          <div className="eyebrow">CONCOURS EXISTANTS</div>
+          <h2>Votre catalogue</h2>
+        </div>
+      </div>
+      {courses.length ? (
+        <div className="course-grid">
+          {courses.map((c) => (
+            <CourseCard
+              key={c.id}
+              course={c}
+              admin
+              onOpen={() => void editCourse(c)}
+              onEdit={() => void editCourse(c)}
+              onPublish={() => void togglePublish(c)}
+              onDelete={() => void remove(c)}
+              deleting={deletingId === c.id}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="panel empty-state">Aucun concours dans Firestore.</div>
+      )}
+    </div>
+  );
+}
+function SubjectWorkspace({ subjectId, onBack }: { subjectId: string; onBack: () => void }) {
+  const [tab, setTab] = useState<"content" | "assessments">("content");
+  return (
+    <div className="subject-workspace-shell">
+      <button className="back subject-workspace-back" onClick={onBack}>← Retour aux matières</button>
+      <div className="subject-workspace-tabs">
+        <button className={tab === "content" ? "active" : ""} onClick={() => setTab("content")}>Chapitres & leçons</button>
+        <button className={tab === "assessments" ? "active" : ""} onClick={() => setTab("assessments")}>Quiz & exercices</button>
+      </div>
+      {tab === "content" ? <ContentAdmin initialSubjectId={subjectId} onBack={onBack} /> : <QuestionAdmin initialSubjectId={subjectId} onBack={onBack} />}
+    </div>
+  );
+}
+
+function ContentAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: string; onBack?: () => void }) {
+  const { user } = useAuth();
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectId, setSubjectId] = useState(initialSubjectId);
+  const [associations, setAssociations] = useState<CourseSubject[]>([]);
+  const [nodes, setNodes] = useState<ContentNode[]>([]);
+  const [nodeId, setNodeId] = useState("");
+  const [blocks, setBlocks] = useState<ContentBlock[]>([]);
+  const [nodeTitle, setNodeTitle] = useState("");
+  const [nodeDescription, setNodeDescription] = useState("");
+  const [, setNodeType] = useState<ContentNodeType>("topic");
+  const [parentId, setParentId] = useState("");
+  const [blockHtml, setBlockHtml] = useState("");
+  const [editingNodeKey, setEditingNodeKey] = useState<string | null>(null);
+  const [editingBlockKey, setEditingBlockKey] = useState<string | null>(null);
+  const [preview, setPreview] = useState(false);
+  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionBank, setQuestionBank] = useState<Question[]>([]);
+  const [showQuestionBank, setShowQuestionBank] = useState(false);
+  const [questionText, setQuestionText] = useState("");
+  const [questionOptions, setQuestionOptions] = useState<QuestionOption[]>([
+    { id: "a", label: "A", text: "" }, { id: "b", label: "B", text: "" },
+    { id: "c", label: "C", text: "" }, { id: "d", label: "D", text: "" },
+  ]);
+  const [questionCorrect, setQuestionCorrect] = useState("a");
+  const [questionExplanation, setQuestionExplanation] = useState("");
+  const [showQuestionForm, setShowQuestionForm] = useState(false);
+  const [showNodeForm, setShowNodeForm] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function refreshSubjectData(id = subjectId) {
+    if (!id) { setAssociations([]); setNodes([]); setNodeId(""); return; }
+    const [items, sharedNodes] = await Promise.all([listCourseSubjectsBySubjectId(id), listSharedContentNodes(id)]);
+    setAssociations(items); setNodes(sharedNodes);
+    if (nodeId && !sharedNodes.some(item => item.id === nodeId)) { setNodeId(""); setBlocks([]); }
+  }
+  async function refreshBlocks(id = nodeId) {
+    if (!id) { setBlocks([]); return; }
+    const nextBlocks = await listContentBlocks(id, false);
+    setBlocks(nextBlocks);
+    setBlockHtml(String(nextBlocks[0]?.content.html ?? nextBlocks[0]?.content.text ?? ""));
+    setEditingBlockKey(nextBlocks[0]?.sharedKey ?? null);
+  }
+  async function refreshQuestions(id = nodeId) {
+    if (!subjectId || !id) { setQuestions([]); setQuestionBank([]); return; }
+    const all = await listAdminQuestions(subjectId);
+    setQuestions(all.filter(question => question.contentNodeId === id));
+    setQuestionBank(all.filter(question => question.status === "published" && question.contentNodeId !== id));
+  }
+  async function attachExistingQuestion(question: Question) {
+    if (!selectedNode || !question.id) return;
+    setSaving(true); setError(""); setMessage("");
+    try {
+      await updateQuestion(question.id, { contentNodeId: selectedNode.id });
+      await refreshQuestions(selectedNode.id);
+      setMessage("Question associée à cette leçon.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible d’associer la question."); }
+    finally { setSaving(false); }
+  }
+  useEffect(() => { void listAdminSubjects().then(setSubjects).catch(console.error); }, []);
+  useEffect(() => { if (initialSubjectId) setSubjectId(initialSubjectId); }, [initialSubjectId]);
+  useEffect(() => { void refreshSubjectData().catch(e => setError(e instanceof Error ? e.message : "Impossible de charger la matière.")); }, [subjectId]);
+  useEffect(() => { void refreshBlocks().catch(e => setError(e instanceof Error ? e.message : "Impossible de charger le contenu.")); }, [nodeId]);
+  useEffect(() => { void refreshQuestions().catch(e => setError(e instanceof Error ? e.message : "Impossible de charger les questions.")); }, [nodeId, subjectId]);
+
+  const selectedNode = nodes.find(item => item.id === nodeId);
+  const rootNodes = nodes.filter(item => !item.parentId).sort((a,b) => a.order - b.order);
+  const childNodes = selectedNode ? nodes.filter(item => item.parentId === selectedNode.id).sort((a,b) => a.order - b.order) : [];
+  const selectedTopic = selectedNode && !selectedNode.parentId ? selectedNode : selectedNode ? nodes.find(item => item.id === selectedNode.parentId) : undefined;
+
+  function resetNode() { setEditingNodeKey(null); setNodeTitle(""); setNodeDescription(""); setNodeType("topic"); setParentId(""); setShowNodeForm(false); }
+  function resetBlock() { setEditingBlockKey(null); setBlockHtml(""); }
+  function resetQuestion() {
+    setQuestionText(""); setQuestionOptions([{id:"a",label:"A",text:""},{id:"b",label:"B",text:""},{id:"c",label:"C",text:""},{id:"d",label:"D",text:""}]);
+    setQuestionCorrect("a"); setQuestionExplanation("");
+  }
+  function selectNode(node: ContentNode) {
+    setShowQuestionBank(false); setNodeId(node.id); setEditingNodeKey(node.sharedKey ?? null); setNodeTitle(node.title); setNodeDescription(node.description ?? ""); setNodeType(node.type); setParentId(node.parentId ?? ""); setEditingBlockKey(null); setBlockHtml(""); setPreview(false);
+    if (node.parentId) setExpandedTopics(current => ({...current, [node.parentId!]: true}));
+  }
+  function openTopic(node: ContentNode) {
+    setExpandedTopics(current => ({...current, [node.id]: !current[node.id]}));
+    selectNode(node);
+  }
+  async function saveNode() {
+    if (!user || !subjectId || !nodeTitle.trim()) return;
+    setSaving(true); setError(""); setMessage("");
+    try {
+      if (editingNodeKey) await updateSharedContentNode(editingNodeKey, { title: nodeTitle.trim(), description: nodeDescription.trim(), type: parentId ? "chapter" : "topic" }, user.uid);
+      else {
+        const parent = parentId ? nodes.find(item => item.id === parentId) : undefined;
+        const created = await createSharedContentNode({ subjectId, parentSharedKey: parent?.sharedKey, type: parentId ? "chapter" : "topic", title: nodeTitle.trim(), description: nodeDescription.trim(), order: nodes.filter(item => (parentId ? item.parentId === parentId : !item.parentId)).length, userId: user.uid });
+        setNodeId(created.nodeIds[0] ?? "");
+        if (parentId) setExpandedTopics(current => ({...current, [parentId]: true}));
+      }
+      await refreshSubjectData(subjectId); resetNode(); setMessage(editingNodeKey ? "Élément modifié." : "Élément créé.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible d’enregistrer la structure."); }
+    finally { setSaving(false); }
+  }
+  async function saveLesson() {
+    if (!user || !selectedNode?.sharedKey || !blockHtml.trim()) return;
+    setSaving(true); setError(""); setMessage("");
+    try {
+      const content = { html: sanitizeLessonHtml(blockHtml.trim()) };
+      if (editingBlockKey) await updateSharedContentBlock(editingBlockKey, { type:"text", content }, user.uid);
+      else await createSharedContentBlock({ nodeSharedKey:selectedNode.sharedKey, type:"text", order:0, content, userId:user.uid });
+      resetBlock(); await refreshBlocks(); setMessage("Leçon enregistrée en brouillon.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible d’enregistrer la leçon."); }
+    finally { setSaving(false); }
+  }
+  async function saveQuestion() {
+    if (!user || !subjectId || !selectedNode || !selectedNode.parentId || !questionText.trim()) return;
+    if (questionOptions.some(option => !option.text.trim())) { setError("Complétez les quatre propositions."); return; }
+    setSaving(true); setError(""); setMessage("");
+    try {
+      await createQuestion({ subjectId, contentNodeId:selectedNode.id, type:"multiple_choice", questionContent:{text:questionText.trim()}, options:questionOptions, correctAnswer:questionCorrect, explanation:questionExplanation.trim() || undefined, difficulty:"medium", points:1, userId:user.uid });
+      resetQuestion(); setShowQuestionForm(false); await refreshQuestions(); setMessage("Question ajoutée à cette leçon.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible de créer la question."); }
+    finally { setSaving(false); }
+  }
+  async function createLessonQuiz() {
+    if (!user || !selectedNode || questions.length === 0) return;
+    setSaving(true); setError("");
+    try {
+      await createQuestionSet({ title:`Quiz - ${selectedNode.title}`, description:`Quiz lié à la leçon « ${selectedNode.title} ».`, subjectId, questionIds:questions.map(q=>q.id), type:"quiz", settings:{showScore:true,showCorrections:true,showExplanations:true,showPoints:true,allowRetry:true,passingScore:70}, userId:user.uid });
+      setMessage("Quiz créé en brouillon avec les questions de la leçon.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible de créer le quiz."); }
+    finally { setSaving(false); }
+  }
+  async function publishLesson() {
+    if (!user || !selectedNode?.sharedKey) return;
+    try {
+      await updateSharedContentNode(selectedNode.sharedKey,{status:"published"},user.uid);
+      for (const block of blocks) if (block.sharedKey) await updateSharedContentBlock(block.sharedKey,{status:"published"},user.uid);
+      for (const question of questions) await updateQuestion(question.id,{status:"published"});
+      await refreshSubjectData(subjectId); await refreshBlocks(); await refreshQuestions(); setMessage("Leçon publiée avec son contenu et ses questions.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible de publier la leçon."); }
+  }
+  async function unpublishLesson() {
+    if (!user || !selectedNode?.sharedKey) return;
+    try {
+      await updateSharedContentNode(selectedNode.sharedKey,{status:"draft"},user.uid);
+      for (const block of blocks) if (block.sharedKey) await updateSharedContentBlock(block.sharedKey,{status:"draft"},user.uid);
+      await refreshSubjectData(subjectId); await refreshBlocks(); setMessage("Leçon dépubliée.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible de dépublier la leçon."); }
+  }
+  async function removeQuestion(question: Question) {
+    if (!window.confirm("Supprimer cette question ?")) return;
+    try { await deleteQuestion(question.id); await refreshQuestions(); setMessage("Question supprimée."); }
+    catch (e) { setError(e instanceof Error ? e.message : "Impossible de supprimer la question."); }
+  }
+  return <div className="page">
+    {onBack && <button className="back" onClick={onBack}>← Retour à la matière</button>}
+    <div className="page-title"><div><div className="eyebrow">ÉDITEUR PÉDAGOGIQUE</div><h1>{subjects.find(item=>item.id===subjectId)?.name || "Contenu de la matière"}</h1><p>Une matière, des thèmes, des leçons. Tout le contenu se crée au même endroit.</p></div></div>
+    {error && <div className="form-error">{error}</div>}{message && <div className="form-success">{message}</div>}
+    <div className="content-layout rich-layout">
+      <div className="outline-panel"><div className="panel-head"><div><h3>Programme</h3><p style={{color:"var(--color-muted)",fontSize:".9rem"}}>Thèmes et leçons</p></div></div>
+        {!initialSubjectId && <select className="fake-input" value={subjectId} onChange={e=>{setSubjectId(e.target.value);setNodeId("");}}><option value="">Sélectionner une matière</option>{subjects.map(subject=><option key={subject.id} value={subject.id}>{subject.name}</option>)}</select>}
+        {subjectId && <>
+          <div className="association-note" style={{marginTop:16}}><strong>{associations.length} concours utilisent cette matière.</strong></div>
+          <button className="outline small-btn" style={{marginTop:12,width:"100%"}} onClick={()=>{setNodeId("");setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setParentId("");setNodeType("topic");setShowNodeForm(true);}}>+ Nouveau thème</button>
+          <div className="content-tree-simple">
+            {rootNodes.map((topic,index)=>{const lessons=nodes.filter(n=>n.parentId===topic.id).sort((a,b)=>a.order-b.order);const open=expandedTopics[topic.id] ?? false;return <div key={topic.id} className="content-tree-topic">
+              <button className={`tree-item ${nodeId===topic.id?"active":""}`} onClick={()=>openTopic(topic)}><span>{index+1}</span><div><strong>{topic.title}</strong><small>{lessons.length} leçon{lessons.length!==1?"s":""}</small></div><b>{open?"⌃":"⌄"}</b></button>
+              {open && <div className="content-tree-lessons">{lessons.map((lesson,i)=><button key={lesson.id} className={`tree-item lesson-tree-item ${nodeId===lesson.id?"active":""}`} onClick={()=>selectNode(lesson)}><span>{String.fromCharCode(97+i)})</span><div><strong>{lesson.title}</strong><small>{lesson.status === "published" ? "Publié" : "Brouillon"}</small></div></button>)}<button className="tree-add-lesson" onClick={()=>{setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setParentId(topic.id);setNodeId(topic.id);setNodeType("chapter");setShowNodeForm(true);}}>+ Ajouter une leçon</button></div>}
+            </div>})}
+          </div>
+        </>}
+      </div>
+      <div className="editor panel">
+        {showNodeForm && <div className="compact-create-form"><div className="lesson-workspace-head"><div><span className="pill">{parentId ? "NOUVELLE LEÇON" : "NOUVEAU THÈME"}</span><h2>{parentId ? "Ajouter une leçon" : "Créer un thème"}</h2></div></div><div className="form-grid"><label>Titre<input className="fake-input" autoFocus value={nodeTitle} onChange={e=>setNodeTitle(e.target.value)} placeholder={parentId ? "Ex. Divisibilité" : "Ex. Théorie des nombres"} /></label><label>Description <span className="optional-label">(facultative)</span><input className="fake-input" value={nodeDescription} onChange={e=>setNodeDescription(e.target.value)} placeholder="Une courte description" /></label></div><div className="editor-actions"><button className="primary" disabled={saving || !nodeTitle.trim()} onClick={()=>void saveNode()}>Créer</button><button className="outline" onClick={resetNode}>Annuler</button></div></div>}
+        {!subjectId ? <div className="empty-state"><h3>Sélectionnez une matière</h3><p>Commencez ensuite par créer un thème.</p></div> : showNodeForm ? null : !selectedNode ? <div className="empty-state"><h3>Votre matière est prête.</h3><p>Créez un thème à gauche, puis ajoutez ses leçons.</p></div> : selectedNode.parentId ? <>
+          <div className="lesson-workspace-head"><div><span className="pill">LEÇON</span><h2>{selectedNode.title}</h2><small>{selectedTopic?.title} · {selectedNode.status === "published" ? "Publié" : "Brouillon"}</small></div><div className="lesson-workspace-actions"><button className="outline small-btn" onClick={()=>{setBlockHtml(String(blocks[0]?.content.html ?? blockHtml));setEditingBlockKey(blocks[0]?.sharedKey ?? null);setPreview(false);}}>Modifier</button><button className="outline small-btn" onClick={()=>setPreview(!preview)}>{preview?"Modifier":"Aperçu"}</button>{selectedNode.status === "published" ? <button className="outline small-btn" onClick={()=>void unpublishLesson()}>Dépublier</button> : <button className="primary small-btn" onClick={()=>void publishLesson()}>Publier</button>}</div></div>
+          {preview ? <LessonPagedPreview html={String(blocks[0]?.content.html ?? blockHtml)} /> : <>
+            <RichLessonEditor value={blockHtml || String(blocks[0]?.content.html ?? "")} onChange={setBlockHtml} storageFolder={`content-subjects/${subjectId}/${selectedNode.id}`} />
+            <div className="lesson-save-bar"><button className="primary" disabled={saving || !blockHtml.trim()} onClick={()=>void saveLesson()}>{saving?"Enregistrement...":"Enregistrer"}</button><span>Le brouillon peut être enregistré à tout moment. L’aperçu n’est pas une publication.</span></div>
+            <div className="lesson-questions-section"><div className="section-head"><div><div className="eyebrow">QUESTIONS DE LA LEÇON</div><h3>{questions.length} question{questions.length!==1?"s":""}</h3></div><div className="admin-list-actions"><button className="outline small-btn" onClick={()=>setShowQuestionForm(v=>!v)}>{showQuestionForm?"Fermer":"+ Question"}</button>{questionBank.length>0 && <button className="outline small-btn" onClick={()=>setShowQuestionBank(v=>!v)}>{showQuestionBank?"Fermer la banque":"Ajouter depuis la banque"}</button>}{questions.length>0 && <button className="primary small-btn" disabled={saving} onClick={()=>void createLessonQuiz()}>Créer le quiz</button>}</div></div>
+              {showQuestionBank && questionBank.length>0 && <div className="question-bank-inline"><div><strong>Questions déjà créées pour cette matière</strong><p>Sélectionnez une question publiée pour l'associer à cette leçon.</p></div><div className="lesson-question-bank-list">{questionBank.map(question=><div className="lesson-question-row" key={question.id}><div><strong>{String(question.questionContent.text ?? "Question")}</strong><small>Publié · {question.points} point{question.points===1?"":"s"}</small></div><button className="primary small-btn" disabled={saving} onClick={()=>void attachExistingQuestion(question)}>Ajouter</button></div>)}</div></div>}
+              {showQuestionForm && <div className="question-inline-form"><label>Question<textarea className="fake-textarea short" rows={3} value={questionText} onChange={e=>setQuestionText(e.target.value)} placeholder="Écrivez la question..." /></label><div className="question-inline-options">{questionOptions.map(option=><div key={option.id}><input className="fake-input" value={option.text} onChange={e=>setQuestionOptions(current=>current.map(item=>item.id===option.id?{...item,text:e.target.value}:item))} placeholder={`Proposition ${option.label}`} /><label className="radio-inline"><input type="radio" name="lesson-correct" checked={questionCorrect===option.id} onChange={()=>setQuestionCorrect(option.id)} /> Bonne réponse</label></div>)}</div><label>Explication <span className="optional-label">(facultative)</span><textarea className="fake-textarea short" rows={2} value={questionExplanation} onChange={e=>setQuestionExplanation(e.target.value)} /></label><div className="editor-actions"><button className="primary" disabled={saving} onClick={()=>void saveQuestion()}>Ajouter la question</button></div></div>}
+              {questions.length>0 ? <div className="lesson-question-list">{questions.map((question,index)=><div className="lesson-question-row" key={question.id}><div><strong>{index+1}. {String(question.questionContent.text ?? "Question")}</strong><small>{question.status === "published" ? "Publié" : "Brouillon"}</small></div><button className="outline small-btn" onClick={()=>void removeQuestion(question)}>Supprimer</button></div>)}</div> : <div className="empty-state">Ajoutez les questions directement à cette leçon. Elles seront publiées avec la leçon.</div>}
+            </div>
+          </>}
+        </> : <>
+          <div className="lesson-workspace-head"><div><span className="pill">THÈME</span><h2>{selectedNode.title}</h2><small>{childNodes.length} leçon{childNodes.length!==1?"s":""}</small></div><button className="primary small-btn" onClick={()=>{setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setParentId(selectedNode.id);setNodeId(selectedNode.id);setNodeType("chapter");setShowNodeForm(true);}}>+ Ajouter une leçon</button></div>
+          <div className="topic-lesson-grid">{childNodes.length?childNodes.map((lesson,index)=><button className="topic-lesson-card" key={lesson.id} onClick={()=>selectNode(lesson)}><span>{String.fromCharCode(97+index)})</span><strong>{lesson.title}</strong><small>{lesson.status === "published" ? "Publié" : "Brouillon"}</small></button>):<div className="empty-state">Ce thème ne contient encore aucune leçon.</div>}</div>
+        </>}
+        {(selectedNode && !selectedNode.parentId) && <div className="editor-actions"><button className="outline" onClick={()=>{setNodeTitle(selectedNode.title);setNodeDescription(selectedNode.description??"");setEditingNodeKey(selectedNode.sharedKey??null);setParentId("");setNodeType("topic");}}>Modifier le thème</button></div>}
+      </div>
+    </div>
+  </div>;
+}
+
+function LessonPagedPreview({ html }: { html: string }) {
+  const [page, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil(Math.max(1, html.replace(/<[^>]+>/g, "").length) / 2600));
+  useEffect(() => { setPage(1); }, [html]);
+  const pageOffset = (page - 1) * 1122;
+  return <div className="lesson-reader-preview"><div className="lesson-reader-toolbar"><strong>Aperçu étudiant</strong><span>Page {page} / {pages}</span><div><button className="outline small-btn" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>← Précédente</button><button className="primary small-btn" disabled={page>=pages} onClick={()=>setPage(p=>Math.min(pages,p+1))}>Suivante →</button></div></div><div className="lesson-reader-page"><div className="lesson-reader-page-inner" style={{transform:`translateY(-${pageOffset}px)`}} dangerouslySetInnerHTML={{__html:sanitizeLessonHtml(html)}} /><div className="lesson-reader-mask" /></div></div>
+}
+
+function LessonQuestionForm({ questions, lessonId, courseId, userId }: { questions: Question[]; lessonId: string; courseId: string; userId?: string }) {

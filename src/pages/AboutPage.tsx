@@ -12,7 +12,7 @@ export function AboutPage() {
       <div className="prose">
         <p>
           Notre objectif est de rendre la préparation plus accessible, structurée et
-          pratique grâce à des cours, des entraînements et des simulations réunis au
+          pratique grâce à des cours, des entraînements et un suivi de progression réunis au
           même endroit.
         </p>
       </div>

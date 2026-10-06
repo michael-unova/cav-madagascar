@@ -9,6 +9,7 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [error, setError] = useState('')
@@ -18,8 +19,13 @@ export function RegisterPage() {
     event.preventDefault()
     setError('')
 
-    if (!displayName.trim() || !email.trim() || !password || !confirmation) {
+    if (!displayName.trim() || !email.trim() || !phone.trim() || !password || !confirmation) {
       setError('Veuillez remplir tous les champs.')
+      return
+    }
+
+    if (!/^[+0-9][0-9 ()-]{7,20}$/.test(phone.trim())) {
+      setError('Veuillez saisir un numéro de téléphone valide.')
       return
     }
 
@@ -35,7 +41,7 @@ export function RegisterPage() {
 
     setSubmitting(true)
     try {
-      await registerUser(displayName, email, password)
+      await registerUser(displayName, email, password, phone)
       navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(getAuthErrorMessage(err))
@@ -57,6 +63,10 @@ export function RegisterPage() {
           <label>
             Nom complet
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" />
+          </label>
+          <label>
+            Numéro de téléphone
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="+261 ..." required />
           </label>
           <label>
             Adresse e-mail

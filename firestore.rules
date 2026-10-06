@@ -2,50 +2,356 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isSignedIn() {
-      return request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function role() { return signedIn() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : null; }
+    function owner(uid) { return signedIn() && request.auth.uid == uid; }
+    function activeUser() {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
     }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function manager() {
+      return activeUser() && (role() == 'content_manager' || role() == 'super_admin');
     }
+    function admin() { return activeUser() && role() == 'super_admin'; }
+    function activeOwner(uid) { return activeUser() && owner(uid); }
 
-    match /users/{userId} {
-      allow create: if isOwner(userId)
-        && request.resource.data.uid == userId
+    match /users/{uid} {
+      allow create: if owner(uid)
+        && request.resource.data.uid == uid
         && request.resource.data.role == 'student'
-        && request.resource.data.status == 'active'
-        && request.resource.data.keys().hasOnly([
-          'uid',
-          'displayName',
-          'email',
-          'role',
-          'status',
-          'createdAt',
-          'updatedAt'
-        ]);
-
-      allow read: if isOwner(userId);
-
-      allow update: if isOwner(userId)
-        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.status == 'active';
+      allow read: if owner(uid) || admin();
+      allow update: if activeUser()
+        && owner(uid)
         && request.resource.data.role == resource.data.role
         && request.resource.data.status == resource.data.status
         && request.resource.data.email == resource.data.email
+        && request.resource.data.uid == resource.data.uid
         && request.resource.data.createdAt == resource.data.createdAt;
-
-      allow delete: if false;
+      allow update: if admin();
+      allow delete: if admin();
     }
 
-    match /courses/{courseId} {
-      allow read: if resource.data.status == 'published';
-      allow write: if false;
+    match /courses/{id} {
+      allow read: if resource.data.status == 'published' || manager();
+      allow create, update: if manager();
+      allow delete: if admin();
     }
 
-    match /courseSubjects/{courseSubjectId} {
-      allow read: if resource.data.status == 'published';
-      allow write: if false;
+    match /courseGroups/{id} {
+      allow read: if resource.data.status == 'published' || manager();
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /subjects/{id} {
+      allow read: if resource.data.status == 'published' || manager();
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /courseSubjects/{id} {
+      allow read: if resource.data.status == 'published' || manager();
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /contentNodes/{id} {
+      allow read: if resource.data.status == 'published' || manager();
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /contentBlocks/{id} {
+      allow read: if manager();
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /contactMessages/{id} {
+      allow create: if request.resource.data.firstName is string
+        && request.resource.data.firstName.size() > 0
+        && request.resource.data.firstName.size() <= 100
+        && request.resource.data.lastName is string
+        && request.resource.data.lastName.size() > 0
+        && request.resource.data.lastName.size() <= 100
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 40
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() > 0
+        && request.resource.data.subject.size() <= 160
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 5000
+        && request.resource.data.status == 'unread'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.readAt == null;
+      allow read: if admin();
+      allow update: if admin();
+      allow delete: if admin();
+    }
+
+    match /payments/{id} {
+      allow create: if activeUser()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.currency == 'MGA'
+        && request.resource.data.method in ['mvola', 'orange_money', 'airtel_money']
+        && request.resource.data.reference is string
+        && request.resource.data.reference.size() > 0
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 0
+        && request.resource.data.courseId is string
+        && exists(/databases/$(database)/documents/courses/$(request.resource.data.courseId))
+        && get(/databases/$(database)/documents/courses/$(request.resource.data.courseId)).data.status == 'published'
+        && request.resource.data.amount == get(/databases/$(database)/documents/courses/$(request.resource.data.courseId)).data.price;
+      allow read: if activeOwner(resource.data.userId) || admin();
+      allow update: if admin();
+      allow delete: if admin();
+    }
+
+    match /enrollments/{id} {
+      allow read: if activeOwner(resource.data.userId) || admin();
+      allow create, update: if admin();
+      allow delete: if admin();
+    }
+
+    match /enrollmentHistory/{id} {
+      allow read: if activeOwner(resource.data.userId) || admin();
+      allow create, update, delete: if admin();
+    }
+
+    match /progress/{id} {
+      allow read: if activeOwner(resource.data.userId) || admin();
+      allow create: if activeOwner(request.resource.data.userId);
+      allow update: if activeOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.courseId == resource.data.courseId
+        && request.resource.data.nodeId == resource.data.nodeId;
+      allow delete: if activeOwner(resource.data.userId) || admin();
+    }
+
+    match /bookmarks/{id} {
+      allow read: if activeOwner(resource.data.userId);
+      allow create: if activeOwner(request.resource.data.userId);
+      allow update: if activeOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if activeOwner(resource.data.userId);
+    }
+
+    match /notes/{id} {
+      allow read: if activeOwner(resource.data.userId);
+      allow create: if activeOwner(request.resource.data.userId);
+      allow update: if activeOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if activeOwner(resource.data.userId);
+    }
+
+    function activeEnrollment(courseId) {
+      return signedIn() && exists(/databases/$(database)/documents/enrollments/$(request.auth.uid + '_' + courseId))
+        && get(/databases/$(database)/documents/enrollments/$(request.auth.uid + '_' + courseId)).data.status == 'active'
+        && (!('expiresAt' in get(/databases/$(database)/documents/enrollments/$(request.auth.uid + '_' + courseId)).data)
+          || get(/databases/$(database)/documents/enrollments/$(request.auth.uid + '_' + courseId)).data.expiresAt > request.time);
+    }
+
+    match /lessonComments/{id} {
+      allow read: if manager() || (activeUser() && activeEnrollment(resource.data.courseId));
+      allow create: if activeUser()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.authorRole is string
+        && ((request.resource.data.authorRole == 'student' && role() == 'student') || (request.resource.data.authorRole == 'manager' && manager()))
+        && request.resource.data.studentName is string
+        && request.resource.data.studentName.size() > 0
+        && request.resource.data.studentName.size() <= 160
+        && request.resource.data.courseId is string
+        && request.resource.data.courseId.size() > 0
+        && request.resource.data.courseTitle is string
+        && request.resource.data.courseTitle.size() > 0
+        && request.resource.data.subjectId is string
+        && request.resource.data.subjectId.size() > 0
+        && request.resource.data.subjectTitle is string
+        && request.resource.data.subjectTitle.size() > 0
+        && request.resource.data.lessonId is string
+        && request.resource.data.lessonId.size() > 0
+        && request.resource.data.lessonTitle is string
+        && request.resource.data.lessonTitle.size() > 0
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 3000
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.unreadForAdmin == (request.resource.data.authorRole == 'student')
+        && request.resource.data.adminReply == null
+        && request.resource.data.adminReplyBy == null
+        && request.resource.data.adminReplyAt == null
+        && (request.resource.data.parentCommentId == null
+          || (request.resource.data.parentCommentId is string
+            && exists(/databases/$(database)/documents/lessonComments/$(request.resource.data.parentCommentId))
+            && get(/databases/$(database)/documents/lessonComments/$(request.resource.data.parentCommentId)).data.courseId == request.resource.data.courseId
+            && get(/databases/$(database)/documents/lessonComments/$(request.resource.data.parentCommentId)).data.lessonId == request.resource.data.lessonId))
+        && exists(/databases/$(database)/documents/courses/$(request.resource.data.courseId))
+        && get(/databases/$(database)/documents/courses/$(request.resource.data.courseId)).data.status == 'published'
+        && exists(/databases/$(database)/documents/contentNodes/$(request.resource.data.lessonId))
+        && get(/databases/$(database)/documents/contentNodes/$(request.resource.data.lessonId)).data.status == 'published'
+        && (request.resource.data.authorRole == 'manager' || activeEnrollment(request.resource.data.courseId));
+      allow update: if activeUser()
+        && resource.data.userId == request.auth.uid
+        && resource.data.authorRole == 'student'
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.authorRole == resource.data.authorRole
+        && request.resource.data.parentCommentId == resource.data.parentCommentId
+        && request.resource.data.courseId == resource.data.courseId
+        && request.resource.data.lessonId == resource.data.lessonId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 3000
+        && request.resource.data.unreadForAdmin == true
+        && request.resource.data.adminReply == resource.data.adminReply
+        && request.resource.data.adminReplyBy == resource.data.adminReplyBy
+        && request.resource.data.adminReplyAt == resource.data.adminReplyAt
+        || (manager()
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.studentName == resource.data.studentName
+          && request.resource.data.authorRole == resource.data.authorRole
+          && request.resource.data.parentCommentId == resource.data.parentCommentId
+          && request.resource.data.courseId == resource.data.courseId
+          && request.resource.data.courseTitle == resource.data.courseTitle
+          && request.resource.data.subjectId == resource.data.subjectId
+          && request.resource.data.subjectTitle == resource.data.subjectTitle
+          && request.resource.data.topicId == resource.data.topicId
+          && request.resource.data.topicTitle == resource.data.topicTitle
+          && request.resource.data.lessonId == resource.data.lessonId
+          && request.resource.data.lessonTitle == resource.data.lessonTitle
+          && request.resource.data.content == resource.data.content
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.unreadForAdmin == false
+          && request.resource.data.adminReply == resource.data.adminReply
+          && request.resource.data.adminReplyBy == resource.data.adminReplyBy
+          && request.resource.data.adminReplyAt == resource.data.adminReplyAt);
+      allow delete: if (activeUser() && resource.data.userId == request.auth.uid) || admin();
+
+      match /loves/{uid} {
+        allow read: if manager() || (activeUser() && activeEnrollment(get(/databases/$(database)/documents/lessonComments/$(id)).data.courseId));
+        allow create: if activeUser()
+          && request.auth.uid == uid
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && activeEnrollment(get(/databases/$(database)/documents/lessonComments/$(id)).data.courseId);
+        allow delete: if activeUser()
+          && request.auth.uid == uid
+          && resource.data.userId == request.auth.uid;
+        allow update: if false;
+      }
+    }
+
+    match /libraryBooks/{id} {
+      allow read: if activeUser();
+      allow create: if manager()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 240
+        && request.resource.data.type in ['pdf', 'link']
+        && request.resource.data.status in ['draft', 'published'];
+      allow update: if manager()
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 240
+        && request.resource.data.type in ['pdf', 'link']
+        && request.resource.data.status in ['draft', 'published'];
+      allow delete: if admin();
+    }
+
+    match /psychotechnicalQuestions/{id} {
+      allow read: if manager();
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /psychotechnicalTests/{id} {
+      allow read: if manager() || (activeUser() && resource.data.status == 'published');
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /lessonAttempts/{id} {
+      allow read: if manager();
+    }
+
+    match /psychotechnicalAttempts/{id} {
+      allow read: if activeOwner(resource.data.userId) || manager();
+      allow create: if false;
+      allow update, delete: if manager() || activeOwner(resource.data.userId);
+    }
+
+    match /questions/{id} {
+      allow read: if manager() || (activeUser() && resource.data.status == 'published');
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /questionSets/{id} {
+      allow read: if manager();
+      allow create, update: if manager();
+      allow delete: if admin();
+    }
+
+    match /practiceAttempts/{id} {
+      allow read: if activeOwner(resource.data.userId) || manager();
+      allow create: if false;
+      allow update: if manager();
+      allow delete: if activeOwner(resource.data.userId) || admin();
+    }
+
+    match /activityLogs/{id} {
+      allow read: if admin();
+      allow create: if activeUser() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if admin();
+    }
+
+    match /notifications/{id} {
+      allow read: if activeOwner(resource.data.userId);
+      allow create: if manager();
+      allow update: if activeOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId && request.resource.data.read is bool && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow delete: if admin();
+    }
+
+    match /achievements/{id} {
+      allow read: if activeUser();
+      allow create, update, delete: if manager();
+    }
+
+    match /userAchievements/{id} {
+      allow read: if activeOwner(resource.data.userId);
+      allow create: if manager();
+      allow update, delete: if admin();
+    }
+
+    match /systemSettings/maintenance {
+      allow read: if true;
+      allow create, update: if admin();
+      allow delete: if admin();
+    }
+
+    // Legacy exam collections are intentionally not exposed by the application.
+    // They remain closed unless an administrator explicitly needs them later.
+    match /exams/{id} {
+      allow read, write: if false;
+    }
+
+    match /examAttempts/{id} {
+      allow read, write: if false;
+    }
+
+    match /quizzes/{id} {
+      allow read: if resource.data.status == 'published' || manager();
+      allow create, update: if manager();
+      allow delete: if admin();
     }
 
     match /{document=**} {

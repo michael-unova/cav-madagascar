@@ -2,6 +2,64 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn()
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function activeUser() {
+      return signedIn() &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function manager() {
+      return activeUser() && (role() == 'content_manager' || role() == 'super_admin');
+    }
+
+    match /courses/{courseId}/thumbnails/{allPaths=**} {
+      allow read: if true;
+      allow write: if manager();
+    }
+
+    match /content-subjects/{subjectId}/{allPaths=**} {
+      allow read: if manager();
+      allow write: if manager();
+    }
+
+    match /content-topics/{subjectId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if manager();
+    }
+
+    match /library/{bookId}/{fileName} {
+      allow read: if activeUser();
+      allow write: if manager();
+    }
+
+    match /content/{courseId}/{nodeId}/{allPaths=**} {
+      allow read: if manager() ||
+        (
+          activeUser() &&
+          firestore.get(
+            /databases/(default)/documents/enrollments/$(request.auth.uid + '_' + courseId)
+          ).data.status == 'active' &&
+          (
+            !('expiresAt' in firestore.get(/databases/(default)/documents/enrollments/$(request.auth.uid + '_' + courseId)).data) ||
+            firestore.get(/databases/(default)/documents/enrollments/$(request.auth.uid + '_' + courseId)).data.expiresAt > request.time
+          )
+        );
+      allow write: if manager();
+    }
+
+    match /users/{userId}/profile/{allPaths=**} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if signedIn() && request.auth.uid == userId;
+    }
 
     match /{allPaths=**} {
       allow read, write: if false;

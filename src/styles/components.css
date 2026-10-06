@@ -62,3 +62,4 @@
   .ui-container { width: min(var(--container), calc(100% - 28px)); }
   .header-login { display: none; }
 }
+.main-nav a.is-active { color: var(--color-primary); font-weight: 800; }

@@ -3,4 +3,5 @@ export {
   getPublishedCourseBySlug,
   listPublishedCourseSubjects,
   listPublishedCourses,
+  listPublishedCourseGroups,
 } from './courseRepository'

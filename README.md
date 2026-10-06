@@ -56,3 +56,36 @@ src/
 
 All user-facing text is in French. Code (variables, functions, components,
 file names, Firestore field names) stays in English.
+
+## CAV Madagascar product scope
+
+The current product scope is:
+
+- public concours catalogue
+- student accounts and protected learning access
+- MVola reference submission and manual admin validation
+- reusable subjects and course-specific curriculum
+- Word-to-lesson rich-text paste with student preview
+- publish/unpublish lesson content
+- learning progress, resume position, video timestamp, bookmarks and personal notes
+- question bank
+- practice/entraînement sets
+- automatic practice scoring for objective questions
+- admin analytics and user management
+
+There is intentionally **no exam/simulation engine** in the current product scope.
+
+### Practice scoring backend
+
+Practice scoring is handled by the Firebase callable function `submitPractice` so the answer key is not exposed to students through the published question-set document.
+
+After installing the dependencies in `functions/`, deploy it with:
+
+```powershell
+cd functions
+npm install
+npm run build
+cd ..
+firebase deploy --only functions
+```
+
