@@ -1,4 +1,5 @@
 export type LibraryBookType = 'pdf' | 'link'
+export type LibraryVisibility = 'public' | 'enrolled'
 
 export interface LibraryBook {
   id: string
@@ -10,6 +11,9 @@ export interface LibraryBook {
   coverUrl: string
   resourceUrl: string
   keywords: string[]
+  visibility: LibraryVisibility
+  courseIds?: string[]
+  courseId?: string
   status: 'draft' | 'published'
   createdBy: string
   createdAt?: unknown
@@ -25,5 +29,8 @@ export interface CreateLibraryBookInput {
   coverUrl: string
   resourceUrl: string
   keywords: string[]
+  visibility: LibraryVisibility
+  courseIds?: string[]
+  courseId?: string
   userId: string
 }

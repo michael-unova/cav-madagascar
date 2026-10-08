@@ -249,21 +249,38 @@ service cloud.firestore {
     }
 
     match /libraryBooks/{id} {
-      allow read: if activeUser();
+      // A public book is visible to every active account. A restricted book is
+      // visible only to students whose backend-maintained active course access
+      // overlaps at least one concours selected by the administrator.
+      allow read: if manager()
+        || (activeUser() && resource.data.status == 'published' && (
+          !('visibility' in resource.data)
+          || resource.data.visibility == 'public'
+          || (resource.data.visibility == 'enrolled'
+            && resource.data.courseIds is list
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.libraryCourseIds is list
+            && resource.data.courseIds.hasAny(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.libraryCourseIds)
+          )
+          || (resource.data.visibility == 'enrolled' && resource.data.courseId is string && activeEnrollment(resource.data.courseId))
+        ));
       allow create: if manager()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() <= 240
         && request.resource.data.type in ['pdf', 'link']
-        && request.resource.data.status in ['draft', 'published'];
+        && request.resource.data.status in ['draft', 'published']
+        && request.resource.data.visibility in ['public', 'enrolled']
+        && (request.resource.data.visibility == 'public' || (request.resource.data.courseIds is list && request.resource.data.courseIds.size() > 0));
       allow update: if manager()
         && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() <= 240
         && request.resource.data.type in ['pdf', 'link']
-        && request.resource.data.status in ['draft', 'published'];
+        && request.resource.data.status in ['draft', 'published']
+        && request.resource.data.visibility in ['public', 'enrolled']
+        && (request.resource.data.visibility == 'public' || (request.resource.data.courseIds is list && request.resource.data.courseIds.size() > 0));
       allow delete: if admin();
     }
 

@@ -3,7 +3,7 @@ import type { Firestore, DocumentData } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
-import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
+import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { defineSecret } from 'firebase-functions/params'
 
@@ -315,6 +315,34 @@ export const processScheduledBroadcasts = onSchedule({ region: 'europe-west1', s
       await item.ref.update({ status: 'failed', updatedAt: new Date(), errorMessage: error instanceof Error ? error.message : 'Erreur inconnue' })
     }
   }
+
+  // Refresh cached library access here instead of creating a second scheduler.
+  // The scheduler for this function already runs in europe-west1, a valid
+  // Cloud Scheduler location. This also removes the need for a separate
+  // africa-south1 scheduled function.
+  try {
+    const enrollments = await db.collection('enrollments').get()
+    const users = new Map<string, string[]>()
+    enrollments.docs.forEach(item => {
+      const data = item.data()
+      const userId = String(data.userId ?? '')
+      const courseId = String(data.courseId ?? '')
+      if (!userId || !courseId || !isEnrollmentActive(data)) return
+      const current = users.get(userId) ?? []
+      if (!current.includes(courseId)) current.push(courseId)
+      users.set(userId, current)
+    })
+    const existingUsers = await db.collection('users').where('role', '==', 'student').get()
+    for (let i = 0; i < existingUsers.docs.length; i += 450) {
+      const batch = db.batch()
+      existingUsers.docs.slice(i, i + 450).forEach(user => {
+        batch.set(user.ref, { libraryCourseIds: users.get(user.id) ?? [], updatedAt: new Date() }, { merge: true })
+      })
+      await batch.commit()
+    }
+  } catch (error) {
+    console.error('Library access refresh failed', error)
+  }
 })
 
 export const setUserRole = onCall({ region: 'africa-south1' }, async request => {
@@ -404,6 +432,27 @@ export const deleteUserAccount = onCall({ region: 'africa-south1' }, async reque
   return { success: true, userId: targetUserId }
 })
 
+
+
+async function syncLibraryAccessForUser(userId: string) {
+  if (!userId) return
+  const snapshot = await db.collection('enrollments').where('userId', '==', userId).get()
+  const courseIds = [...new Set(snapshot.docs
+    .filter(item => isEnrollmentActive(item.data()))
+    .map(item => String(item.data().courseId ?? ''))
+    .filter(Boolean))]
+  await db.doc(`users/${userId}`).set({ libraryCourseIds: courseIds, updatedAt: new Date() }, { merge: true })
+}
+
+export const syncLibraryAccessOnEnrollmentChange = onDocumentWritten({
+  region: 'africa-south1',
+  document: 'enrollments/{enrollmentId}',
+}, async event => {
+  const before = event.data?.before.data()
+  const after = event.data?.after.data()
+  const userIds = [...new Set([String(before?.userId ?? ''), String(after?.userId ?? '')].filter(Boolean))]
+  await Promise.all(userIds.map(syncLibraryAccessForUser))
+})
 
 export const syncVerifiedPaymentToBalancia = onDocumentUpdated({
   region: 'africa-south1',

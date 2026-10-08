@@ -37,7 +37,18 @@ service firebase.storage {
     }
 
     match /library/{bookId}/{fileName} {
-      allow read: if activeUser();
+      allow read: if manager() || (
+        activeUser() && (
+          !('visibility' in firestore.get(/databases/(default)/documents/libraryBooks/$(bookId)).data)
+          || firestore.get(/databases/(default)/documents/libraryBooks/$(bookId)).data.visibility == 'public'
+          || (
+            firestore.get(/databases/(default)/documents/libraryBooks/$(bookId)).data.visibility == 'enrolled'
+            && firestore.get(/databases/(default)/documents/libraryBooks/$(bookId)).data.courseIds is list
+            && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.libraryCourseIds is list
+            && firestore.get(/databases/(default)/documents/libraryBooks/$(bookId)).data.courseIds.hasAny(firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.libraryCourseIds)
+          )
+        )
+      );
       allow write: if manager();
     }
 

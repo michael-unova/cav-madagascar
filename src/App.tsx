@@ -5537,7 +5537,13 @@ function AppContent() {
         <MobileNav
           role={role}
           page={page}
-          setPage={navigateAdminPage}
+          setPage={(nextPage) => {
+            if (role === "student") {
+              navigateStudentPage(nextPage as StudentPage);
+            } else {
+              navigateAdminPage(nextPage as AdminPage);
+            }
+          }}
         />
         {content}
       </div>

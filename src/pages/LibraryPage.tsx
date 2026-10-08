@@ -21,7 +21,7 @@ export function LibraryPage() {
 
   useEffect(() => {
     if (!user) return
-    void listPublishedLibraryBooks().then(setBooks).catch(err => {
+    void listPublishedLibraryBooks(user.uid).then(setBooks).catch(err => {
       console.error(err)
       setError('Impossible de charger la librairie pour le moment.')
     }).finally(() => setLoading(false))
