@@ -410,6 +410,27 @@ export function RichLessonEditor({ value, onChange, storageFolder }: Props) {
     setImageRect({ left: imageBox.left - containerBox.left, top: imageBox.top - containerBox.top, width: imageBox.width, height: imageBox.height })
   }
 
+  // The toolbar is pinned with CSS `position: sticky`. The only JavaScript involved is
+  // measuring the sticky application header so the toolbar docks right below it.
+  useEffect(() => {
+    const editor = containerRef.current
+    if (!editor) return
+    const topbar = document.querySelector<HTMLElement>('.topbar')
+    const syncOffset = () => {
+      const position = topbar ? window.getComputedStyle(topbar).position : ''
+      const offset = topbar && (position === 'sticky' || position === 'fixed') ? Math.round(topbar.getBoundingClientRect().height) : 0
+      editor.style.setProperty('--lesson-toolbar-top', `${offset}px`)
+    }
+    syncOffset()
+    window.addEventListener('resize', syncOffset)
+    const observer = topbar ? new ResizeObserver(syncOffset) : null
+    if (topbar && observer) observer.observe(topbar)
+    return () => {
+      window.removeEventListener('resize', syncOffset)
+      observer?.disconnect()
+    }
+  }, [])
+
   useEffect(() => {
     const updatePages = () => {
       if (!ref.current) return
@@ -429,8 +450,14 @@ export function RichLessonEditor({ value, onChange, storageFolder }: Props) {
     }
   }, [selectedImage, value])
 
+  // Pressing a toolbar button must not move focus away from the editor or collapse the selection.
+  function keepEditorSelection(event: MouseEvent<HTMLDivElement>) {
+    if (event.target instanceof HTMLElement && event.target.closest('select')) return
+    event.preventDefault()
+  }
+
   function command(cmd: string, arg?: string) {
-    ref.current?.focus()
+    ref.current?.focus({ preventScroll: true })
     restoreSelection()
     document.execCommand(cmd, false, arg)
     emit()
@@ -739,7 +766,7 @@ export function RichLessonEditor({ value, onChange, storageFolder }: Props) {
       </div>
     )}
 
-    <div className="lesson-editor-toolbar" aria-label="Outils de mise en forme">
+    <div className="lesson-editor-toolbar" role="toolbar" aria-label="Outils de mise en forme" onMouseDown={keepEditorSelection}>
       <button type="button" onClick={() => command('undo')} aria-label="Annuler">↶</button><button type="button" onClick={() => command('redo')} aria-label="Rétablir">↷</button>
       <span className="toolbar-divider" />
       <select onChange={(e) => command('formatBlock', e.target.value)} defaultValue="p" aria-label="Style"><option value="p">Paragraphe</option><option value="h1">Titre 1</option><option value="h2">Titre 2</option><option value="h3">Titre 3</option><option value="blockquote">Citation</option></select>

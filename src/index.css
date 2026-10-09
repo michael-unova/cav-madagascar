@@ -275,7 +275,9 @@ section{margin-top:42px}.section-head,.panel-head{display:flex;justify-content:s
    Firebase behavior are changed.
    ================================================================ */
 
-html, body, #root { max-width:100%; overflow-x:hidden; }
+/* `hidden` on body/#root turns them into scroll containers and breaks position:sticky; `clip` does not. */
+html { max-width:100%; overflow-x:hidden; }
+body, #root { max-width:100%; overflow-x:clip; }
 img, svg, video, canvas { max-width:100%; }
 button, input, select, textarea { max-width:100%; }
 

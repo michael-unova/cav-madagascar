@@ -317,10 +317,6 @@ export const processScheduledBroadcasts = onSchedule({ region: 'europe-west1', s
             await item.ref.update({ status: 'failed', updatedAt: new Date(), errorMessage: error instanceof Error ? error.message : 'Erreur inconnue' });
         }
     }
-    // Refresh cached library access here instead of creating a second scheduler.
-    // The scheduler for this function already runs in europe-west1, a valid
-    // Cloud Scheduler location. This also removes the need for a separate
-    // africa-south1 scheduled function.
     try {
         const enrollments = await db.collection('enrollments').get();
         const users = new Map();
