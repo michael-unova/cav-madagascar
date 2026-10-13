@@ -4,7 +4,7 @@ import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { getFirebaseApp } from '../../lib/firebase/config'
 import { getFirebaseAuth } from './firebaseAuth'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
-import { getUserProfile } from './authService'
+import { completeGoogleRedirect, getUserProfile, waitForPendingSignIn } from './authService'
 import { useSingleDeviceSession } from './useSingleDeviceSession'
 
 type AuthContextValue = { user: FirebaseUser | null; profile: Record<string, unknown> | null; loading: boolean; refreshProfile: () => Promise<void> }
@@ -17,10 +17,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
 
+  useEffect(() => {
+    // Finish a Google sign-in that used the redirect fallback (no-op otherwise).
+    void completeGoogleRedirect().catch(err => console.error('Google redirect sign-in failed:', err))
+  }, [])
+
   useEffect(() => onAuthStateChanged(auth, async nextUser => {
     setUser(nextUser)
     if (!nextUser) { setProfile(null); setLoading(false); return }
     try {
+      // A sign-in/registration in progress is still writing the Firestore profile.
+      await waitForPendingSignIn()
       const nextProfile = await getUserProfile(nextUser.uid)
       setProfile((nextProfile as Record<string, unknown> | null) ?? null)
     } catch (err) {
@@ -42,8 +49,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useSingleDeviceSession(user, profile)
 
   const refreshProfile = async () => {
-    if (!user) { setProfile(null); return }
-    const nextProfile = await getUserProfile(user.uid)
+    const current = auth.currentUser
+    if (!current) { setProfile(null); return }
+    const nextProfile = await getUserProfile(current.uid)
     setProfile((nextProfile as Record<string, unknown> | null) ?? null)
   }
 

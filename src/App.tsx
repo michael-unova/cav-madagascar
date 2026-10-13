@@ -717,8 +717,9 @@ function AuthPage({
     clearMessages();
     setGoogleSubmitting(true);
     try {
-      await loginWithGoogle();
-      go("dashboard");
+      const signedIn = await loginWithGoogle();
+      // null = popup was blocked and the page is redirecting to Google.
+      if (signedIn) go("dashboard");
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {

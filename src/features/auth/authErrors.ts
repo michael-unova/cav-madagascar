@@ -24,6 +24,17 @@ export function getAuthErrorMessage(error: unknown): string {
       return 'La fenêtre Google a été fermée. Vous pouvez réessayer.'
     case 'auth/popup-blocked':
       return 'Votre navigateur a bloqué la fenêtre Google. Autorisez les fenêtres pop-up puis réessayez.'
+    case 'auth/cancelled-popup-request':
+      return 'Une autre fenêtre de connexion est déjà ouverte. Fermez-la puis réessayez.'
+    case 'auth/unauthorized-domain':
+      return 'Ce site n’est pas autorisé pour la connexion Google. Contactez l’administration.'
+    case 'auth/operation-not-supported-in-this-environment':
+      return 'La connexion Google n’est pas disponible dans ce navigateur. Utilisez votre e-mail et mot de passe.'
+    case 'auth/internal-error':
+      return 'Erreur interne de connexion Google. Veuillez réessayer dans un instant.'
+    case 'permission-denied':
+    case 'firestore/permission-denied':
+      return 'Votre profil n’a pas pu être créé (permissions). Contactez l’administration.'
     case 'auth/operation-not-allowed':
       return 'La connexion Google n’est pas encore activée pour CAV.'
     default:
