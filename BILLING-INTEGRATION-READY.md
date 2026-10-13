@@ -1,8 +1,8 @@
 # CAV Madagascar — billing integration handoff
 
-The billing integration is preconfigured for the BigQuery table visible in the supplied screenshots.
+**Legacy:** the table below lives in the old project `e-learning-b2434`. Switch `BILLING_EXPORT_TABLE` to a dataset in `cav-madagascar-b4beb` once a Cloud Billing export is enabled there.
 
-- Table: `e-learning-b2434.cav_billing.gcp_billing_export_v1_01561A_D9650F_3E70A9`
+- Table (legacy): `e-learning-b2434.cav_billing.gcp_billing_export_v1_01561A_D9650F_3E70A9`
 - BigQuery location: `EU`
 - Firebase callable function: `adminGetGoogleBillingSummary`
 - Function region: `africa-south1`

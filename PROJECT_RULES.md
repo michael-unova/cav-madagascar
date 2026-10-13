@@ -306,9 +306,11 @@ dist
 Firebase project:
 
 ```text
-e-learning
-Project ID: e-learning-b2434
+CAV Madagascar
+Project ID: cav-madagascar-b4beb
 ```
+
+The former project `e-learning-b2434` is legacy. Do not deploy to it and do not delete it until the checklist in `FIREBASE-MIGRATION-AUDIT.md` is complete.
 
 Firebase is used for application backend services.
 

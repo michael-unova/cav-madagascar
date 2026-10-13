@@ -4,7 +4,9 @@ The administrator-only page is **Facturation Google Cloud**. It calls `adminGetG
 
 ## Current BigQuery export configuration
 
-The Standard usage cost export has been enabled and the table was visible in BigQuery. The Functions environment is preconfigured in `functions/.env` with:
+**Legacy state (pre-migration):** the Standard usage cost export was enabled in the old project `e-learning-b2434`. The old table is kept below for reference only. Until a Cloud Billing export is enabled into a dataset in `cav-madagascar-b4beb` and `BILLING_EXPORT_TABLE` is updated, the dashboard depends on the old project. Historical cost data stays in the old dataset.
+
+Old values:
 
 - `BILLING_EXPORT_TABLE=e-learning-b2434.cav_billing.gcp_billing_export_v1_01561A_D9650F_3E70A9`
 - `BILLING_BIGQUERY_LOCATION=EU`
@@ -15,7 +17,7 @@ Dataset: `e-learning-b2434.cav_billing` (location `EU`). If Google Cloud shows a
 
 Grant the **runtime service account used by this Firebase Functions deployment**:
 
-1. `BigQuery Job User` on the query job project (`e-learning-b2434`, if this is also the Firebase Functions project).
+1. `BigQuery Job User` on the query job project (`cav-madagascar-b4beb`, the Firebase Functions project).
 2. `BigQuery Data Viewer` on the `cav_billing` dataset (least-privilege dataset access).
 
 Do not grant Owner/Editor and do not create/download a service-account key. Also ensure the BigQuery API is enabled in the query project. The runtime service account and Firebase deployment project may differ from the billing export's project; grant access accordingly.
