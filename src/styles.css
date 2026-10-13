@@ -3925,3 +3925,106 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
 @media (prefers-reduced-motion: reduce) {
   .top-notification-panel { animation: none !important; }
 }
+
+/* FINAL mobile admin layout fix: the legacy sidebar was still visible because
+   later redesign rules overrode the earlier breakpoint. Keep this block last. */
+@media screen and (max-width: 767px) {
+  .app > .sidebar,
+  .sidebar {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+  }
+
+  .app,
+  .site-shell {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: clip;
+  }
+
+  .main {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    overflow-x: clip;
+  }
+
+  .topbar {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .page,
+  .page-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    margin-left: 0 !important;
+  }
+
+  .mobile-bottom-nav {
+    display: flex !important;
+    position: fixed !important;
+    z-index: 999 !important;
+    left: max(8px, env(safe-area-inset-left)) !important;
+    right: max(8px, env(safe-area-inset-right)) !important;
+    bottom: max(7px, env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 6px !important;
+    gap: 4px !important;
+    border: 1px solid #dce7f3 !important;
+    border-radius: 18px !important;
+    background: rgba(255,255,255,.97) !important;
+    box-shadow: 0 10px 30px rgba(19,53,91,.16) !important;
+    backdrop-filter: blur(16px);
+  }
+
+  .mobile-bottom-nav::-webkit-scrollbar { display: none !important; }
+
+  .mobile-bottom-nav button {
+    display: flex !important;
+    flex: 0 0 64px !important;
+    width: 64px !important;
+    min-width: 64px !important;
+    min-height: 54px !important;
+    max-width: 64px !important;
+    box-sizing: border-box !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    padding: 5px 3px !important;
+    white-space: normal !important;
+    text-align: center !important;
+    border-radius: 12px !important;
+  }
+
+  .mobile-bottom-nav button span {
+    display: block !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    font-size: 9px !important;
+    line-height: 1.2 !important;
+  }
+
+  body { padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important; }
+}

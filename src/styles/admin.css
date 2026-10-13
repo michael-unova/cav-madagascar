@@ -69,3 +69,64 @@
 .billing-daily-column { flex:1 0 16px; min-width:16px; height:145px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:7px; }
 .billing-daily-bar { width: min(100%, 24px); min-height:3px; border-radius:5px 5px 0 0; background:linear-gradient(180deg,#55a0f5,#1768e8); }
 .billing-daily-column small { color:#71839a; font-size:10px; }
+
+/* Mobile-first administration refinements */
+.admin-nav-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(255,255,255,.96);
+  border-bottom: 1px solid #e4ebf4;
+  backdrop-filter: blur(14px);
+}
+.admin-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.admin-nav::-webkit-scrollbar { display: none; }
+.admin-nav a {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  color: #536783;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.admin-nav a.is-active {
+  color: #1768e8;
+  background: #eaf3ff;
+}
+.admin-page, .admin-shell, .page-container { min-width: 0; }
+.admin-stat-grid > *, .admin-action-grid > *, .admin-form-grid > * { min-width: 0; }
+@media (max-width: 760px) {
+  .admin-nav-wrap { top: 0; }
+  .admin-nav { padding: 8px 2px; gap: 5px; }
+  .admin-nav a { min-height: 40px; padding: 0 12px; font-size: 12px; }
+  .admin-stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+  .admin-stat-grid .ui-card { padding: 15px; }
+  .admin-stat-grid strong { font-size: clamp(1.35rem,6vw,1.8rem); overflow-wrap: anywhere; }
+  .admin-action-grid { grid-template-columns: 1fr; gap: 12px; }
+  .admin-action-grid p { min-height: 0; }
+  .admin-form-card { margin-bottom: 24px; }
+  .admin-list-section { margin-top: 24px; }
+  .admin-list-row { padding: 14px; border-radius: 14px; background: #fff; border: 1px solid #e6edf5; }
+  .admin-list-actions { display: flex; flex-wrap: wrap; width: 100%; }
+  .admin-list-actions > * { flex: 1 1 120px; width: auto; }
+  .billing-dashboard { width: 100%; }
+  .billing-service-top { flex-wrap: wrap; }
+}
+@media (max-width: 380px) {
+  .admin-stat-grid { grid-template-columns: 1fr; }
+}

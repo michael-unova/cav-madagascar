@@ -747,9 +747,9 @@ function AuthPage({
   return (
     <div className="auth-shell">
       <section className="auth-brand" aria-label="CAV Madagascar">
-        <button className="auth-brand-logo" onClick={() => go("home")} aria-label="Retour à l'accueil">
+        <div className="auth-brand-logo">
           <Logo />
-        </button>
+        </div>
         <div className="auth-brand-content">
           <span className="auth-brand-eyebrow">COURS D'APPUI VIRTUEL</span>
           <h2>Préparez votre concours avec méthode.</h2>
