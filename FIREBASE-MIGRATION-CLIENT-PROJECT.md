@@ -17,7 +17,7 @@ Firestore configured location: `africa-south1`
 2. Create the Firestore database in `africa-south1` if it does not already exist. Firestore location cannot be changed after database creation.
 3. Enable Cloud Storage and select its location according to the owner’s requirements.
 4. Link the owner’s billing account and enable the APIs needed by the app/functions.
-5. Configure required Functions secrets, including `BALANCIA_CAV_INTEGRATION_SECRET`, if the Balancia integration is to remain active.
+5. No Functions secrets are required (the Balancia integration was removed).
 6. If the billing dashboard is used, enable Cloud Billing export to BigQuery in the new project, then set `BILLING_EXPORT_TABLE` and `BILLING_BIGQUERY_LOCATION` in `functions/.env`.
 
 ## Data migration — not performed by changing configuration

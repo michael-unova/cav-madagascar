@@ -3,51 +3,11 @@ import type { Firestore, DocumentData } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https'
-import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore'
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { defineSecret } from 'firebase-functions/params'
 
 initializeApp()
 const db: Firestore = getFirestore()
-
-const balanciaCavIntegrationSecret = defineSecret('BALANCIA_CAV_INTEGRATION_SECRET')
-const BALANCIA_INGEST_URL = 'https://africa-south1-balancia-51491.cloudfunctions.net/ingestCavPayment'
-
-async function sendVerifiedPaymentToBalancia(paymentId: string, payment: DocumentData) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 8000)
-  try {
-    const payload = {
-      paymentId,
-      userId: String(payment.userId ?? ''),
-      courseId: String(payment.courseId ?? ''),
-      amount: Number(payment.amount ?? 0),
-      currency: String(payment.currency ?? 'MGA'),
-      method: String(payment.method ?? 'mvola'),
-      reference: String(payment.reference ?? ''),
-      verifiedBy: String(payment.verifiedBy ?? ''),
-      verifiedAt: payment.verifiedAt?.toDate?.()?.toISOString?.() ?? new Date().toISOString(),
-    }
-
-    const response = await fetch(BALANCIA_INGEST_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${balanciaCavIntegrationSecret.value()}`,
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
-
-    if (!response.ok) {
-      throw new Error(`Balancia returned HTTP ${response.status}`)
-    }
-
-    return await response.json() as { success?: boolean; duplicate?: boolean }
-  } finally {
-    clearTimeout(timeout)
-  }
-}
 
 function normalizeText(value: unknown) {
   return String(value ?? '').trim().toLocaleLowerCase('fr-FR').replace(/\s+/g, ' ')
@@ -452,25 +412,6 @@ export const syncLibraryAccessOnEnrollmentChange = onDocumentWritten({
   const after = event.data?.after.data()
   const userIds = [...new Set([String(before?.userId ?? ''), String(after?.userId ?? '')].filter(Boolean))]
   await Promise.all(userIds.map(syncLibraryAccessForUser))
-})
-
-export const syncVerifiedPaymentToBalancia = onDocumentUpdated({
-  region: 'africa-south1',
-  document: 'payments/{paymentId}',
-  retry: true,
-  secrets: [balanciaCavIntegrationSecret],
-}, async event => {
-  const before = event.data?.before.data()
-  const after = event.data?.after.data()
-  if (!after || after.status !== 'verified' || before?.status === 'verified') return
-
-  const paymentId = event.params.paymentId
-  await sendVerifiedPaymentToBalancia(paymentId, after)
-
-  await event.data?.after.ref.update({
-    balanciaSyncStatus: 'synced',
-    balanciaSyncedAt: new Date(),
-  })
 })
 
 export const reviewPayment = onCall({ region: 'africa-south1' }, async request => {
