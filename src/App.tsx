@@ -449,7 +449,7 @@ function PublicFooter() {
         </a>
         <div className="cav-footer-address">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a7 7 0 0 0-7 7c0 5.1 7 12 7 12s7-6.9 7-12a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
-          <span>80 rue Pasteur Rabeony, Antananarivo</span>
+          <span className="cav-footer-address-lines">IVB 33 Ter Ambatomitsangana<br />En Face Look's 3e etage.</span>
         </div>
       </div>
     </footer>
@@ -1236,7 +1236,7 @@ function ContactPage({ go }: { go: (p: string) => void }) {
           </div>
           <aside className="contact-info-card">
             <div className="eyebrow">CAV MADAGASCAR</div><h2>Nos coordonnées</h2><p>Vous pouvez également nous joindre directement par téléphone, e-mail ou nous rendre visite à Antananarivo.</p>
-            <div className="contact-detail"><div className="contact-detail-icon">⌂</div><div><small>ADRESSE</small><strong>80 rue Pasteur Rabeony</strong><span>Antananarivo</span></div></div>
+            <div className="contact-detail"><div className="contact-detail-icon">⌂</div><div><small>ADRESSE</small><strong>IVB 33 Ter Ambatomitsangana</strong><span>En Face Look's 3e etage.</span></div></div>
             <div className="contact-detail"><div className="contact-detail-icon">@</div><div><small>EMAIL</small><a href="mailto:Service@cav.mg">Service@cav.mg</a></div></div>
             <div className="contact-detail"><div className="contact-detail-icon">☎</div><div><small>TÉLÉPHONE</small><a href="tel:+261347020222">+261 34 70 202 22</a><a href="tel:+261345320222">+261 34 53 202 22</a></div></div>
             <div className="contact-note"><strong>Une question sur un concours ?</strong><span>Consultez d'abord notre catalogue pour découvrir les préparations disponibles.</span><button className="link-button" onClick={() => go("catalog")}>Voir les concours →</button></div>

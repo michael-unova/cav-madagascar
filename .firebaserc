@@ -1,5 +1,12 @@
-{
-  "projects": {
-    "default": "e-learning-b2434"
-  }
+﻿{
+    "projects":  {
+                     "default":  "cav-madagascar-b4beb",
+                     "cav-owner":  "cav-madagascar-b4beb"
+                 },
+    "targets":  {
+
+                },
+    "etags":  {
+
+              }
 }
