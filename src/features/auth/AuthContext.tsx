@@ -5,6 +5,7 @@ import { getFirebaseApp } from '../../lib/firebase/config'
 import { getFirebaseAuth } from './firebaseAuth'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import { getUserProfile } from './authService'
+import { useSingleDeviceSession } from './useSingleDeviceSession'
 
 type AuthContextValue = { user: FirebaseUser | null; profile: Record<string, unknown> | null; loading: boolean; refreshProfile: () => Promise<void> }
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -37,6 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const interval = window.setInterval(() => { void updateDoc(doc(firestore, 'users', user.uid), { lastSeenAt: serverTimestamp() }).catch(console.error) }, 5 * 60 * 1000)
     return () => window.clearInterval(interval)
   }, [user])
+
+  useSingleDeviceSession(user, profile)
 
   const refreshProfile = async () => {
     if (!user) { setProfile(null); return }

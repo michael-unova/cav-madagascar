@@ -6,6 +6,7 @@ import { HomePage } from '../pages/HomePage'
 import { CoursesPage } from '../pages/CoursesPage'
 import { CourseDetailsPage } from '../pages/CourseDetailsPage'
 import { AboutPage } from '../pages/AboutPage'
+import { ContactPage } from '../pages/ContactPage'
 import { LoginPage } from '../pages/LoginPage'
 import { RegisterPage } from '../pages/RegisterPage'
 import { ForgotPasswordPage } from '../pages/ForgotPasswordPage'
@@ -40,6 +41,7 @@ export default function AppRouter() {
       <Route path="/courses/:slug/enroll" element={<EnrollmentPage />} />
       <Route path="/library" element={<LibraryPage />} />
       <Route path="/about" element={<AboutPage />} />
+      <Route path="/contact" element={<ContactPage />} />
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />

@@ -20,7 +20,7 @@ service cloud.firestore {
         && request.resource.data.uid == uid
         && request.resource.data.role == 'student'
         && request.resource.data.status == 'active';
-      allow read: if owner(uid) || admin();
+      allow read: if owner(uid) || manager();
       allow update: if activeUser()
         && owner(uid)
         && request.resource.data.role == resource.data.role
@@ -35,37 +35,37 @@ service cloud.firestore {
     match /courses/{id} {
       allow read: if resource.data.status == 'published' || manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /courseGroups/{id} {
       allow read: if resource.data.status == 'published' || manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /subjects/{id} {
       allow read: if resource.data.status == 'published' || manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /courseSubjects/{id} {
       allow read: if resource.data.status == 'published' || manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /contentNodes/{id} {
       allow read: if resource.data.status == 'published' || manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /contentBlocks/{id} {
       allow read: if manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /contactMessages/{id} {
@@ -89,9 +89,9 @@ service cloud.firestore {
         && request.resource.data.status == 'unread'
         && request.resource.data.createdAt == request.time
         && request.resource.data.readAt == null;
-      allow read: if admin();
-      allow update: if admin();
-      allow delete: if admin();
+      allow read: if manager();
+      allow update: if manager();
+      allow delete: if manager();
     }
 
     match /payments/{id} {
@@ -108,30 +108,29 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/courses/$(request.resource.data.courseId))
         && get(/databases/$(database)/documents/courses/$(request.resource.data.courseId)).data.status == 'published'
         && request.resource.data.amount == get(/databases/$(database)/documents/courses/$(request.resource.data.courseId)).data.price;
-      allow read: if activeOwner(resource.data.userId) || admin();
-      allow update: if admin();
-      allow delete: if admin();
+      allow read: if activeOwner(resource.data.userId) || manager();
+      allow update: if manager();
+      allow delete: if manager();
     }
 
     match /enrollments/{id} {
-      allow read: if activeOwner(resource.data.userId) || admin();
-      allow create, update: if admin();
-      allow delete: if admin();
+      allow read: if activeOwner(resource.data.userId) || manager();
+      allow create, update, delete: if manager();
     }
 
     match /enrollmentHistory/{id} {
-      allow read: if activeOwner(resource.data.userId) || admin();
-      allow create, update, delete: if admin();
+      allow read: if activeOwner(resource.data.userId) || manager();
+      allow create, update, delete: if manager();
     }
 
     match /progress/{id} {
-      allow read: if activeOwner(resource.data.userId) || admin();
+      allow read: if activeOwner(resource.data.userId) || manager();
       allow create: if activeOwner(request.resource.data.userId);
       allow update: if activeOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId
         && request.resource.data.courseId == resource.data.courseId
         && request.resource.data.nodeId == resource.data.nodeId;
-      allow delete: if activeOwner(resource.data.userId) || admin();
+      allow delete: if activeOwner(resource.data.userId) || manager();
     }
 
     match /bookmarks/{id} {
@@ -253,15 +252,17 @@ service cloud.firestore {
       // visible only to students whose backend-maintained active course access
       // overlaps at least one concours selected by the administrator.
       allow read: if manager()
-        || (activeUser() && resource.data.status == 'published' && (
+        || (signedIn() && resource.data.status == 'published' && (
+          // Published public resources should remain readable by signed-in students
+          // even if an older user profile is missing its status field.
           !('visibility' in resource.data)
           || resource.data.visibility == 'public'
-          || (resource.data.visibility == 'enrolled'
+          || (activeUser() && resource.data.visibility == 'enrolled'
             && resource.data.courseIds is list
             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.libraryCourseIds is list
             && resource.data.courseIds.hasAny(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.libraryCourseIds)
           )
-          || (resource.data.visibility == 'enrolled' && resource.data.courseId is string && activeEnrollment(resource.data.courseId))
+          || (activeUser() && resource.data.visibility == 'enrolled' && resource.data.courseId is string && activeEnrollment(resource.data.courseId))
         ));
       allow create: if manager()
         && request.resource.data.createdBy == request.auth.uid
@@ -281,19 +282,19 @@ service cloud.firestore {
         && request.resource.data.status in ['draft', 'published']
         && request.resource.data.visibility in ['public', 'enrolled']
         && (request.resource.data.visibility == 'public' || (request.resource.data.courseIds is list && request.resource.data.courseIds.size() > 0));
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /psychotechnicalQuestions/{id} {
       allow read: if manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /psychotechnicalTests/{id} {
       allow read: if manager() || (activeUser() && resource.data.status == 'published');
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /lessonAttempts/{id} {
@@ -309,24 +310,24 @@ service cloud.firestore {
     match /questions/{id} {
       allow read: if manager() || (activeUser() && resource.data.status == 'published');
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /questionSets/{id} {
       allow read: if manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /practiceAttempts/{id} {
       allow read: if activeOwner(resource.data.userId) || manager();
       allow create: if false;
       allow update: if manager();
-      allow delete: if activeOwner(resource.data.userId) || admin();
+      allow delete: if activeOwner(resource.data.userId) || manager();
     }
 
     match /activityLogs/{id} {
-      allow read: if admin();
+      allow read: if manager();
       allow create: if activeUser() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if admin();
     }
@@ -346,13 +347,29 @@ service cloud.firestore {
     match /userAchievements/{id} {
       allow read: if activeOwner(resource.data.userId);
       allow create: if manager();
-      allow update, delete: if admin();
+      allow update, delete: if manager();
+    }
+
+    // Written only by Cloud Functions (admin SDK). Super admins can review events.
+    match /securityEvents/{id} {
+      allow read: if admin();
+      allow write: if false;
+    }
+
+    // One active device per student. Written only by the claimDeviceSession function.
+    match /userSessions/{uid} {
+      allow read: if owner(uid);
+      allow write: if false;
+    }
+
+    match /lessonAccessCounters/{id} {
+      allow read, write: if false;
     }
 
     match /systemSettings/maintenance {
       allow read: if true;
-      allow create, update: if admin();
-      allow delete: if admin();
+      allow create, update: if manager();
+      allow delete: if manager();
     }
 
     // Legacy exam collections are intentionally not exposed by the application.
@@ -368,7 +385,7 @@ service cloud.firestore {
     match /quizzes/{id} {
       allow read: if resource.data.status == 'published' || manager();
       allow create, update: if manager();
-      allow delete: if admin();
+      allow delete: if manager();
     }
 
     match /{document=**} {

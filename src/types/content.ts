@@ -1,5 +1,6 @@
 export type ContentNodeType = 'topic' | 'chapter' | 'section' | 'subsection'
 export type ContentStatus = 'draft' | 'published' | 'archived'
+export type ContentNumberingStyle = 'alpha' | 'numeric' | 'hierarchical' | 'roman'
 export type ContentBlockType = 'text' | 'video' | 'image' | 'file' | 'quiz' | 'exercise' | 'question'
 
 export interface ContentNode {
@@ -13,6 +14,8 @@ export interface ContentNode {
   imageUrl?: string
   imagePosition?: 'center' | 'top' | 'bottom' | 'left' | 'right'
   order: number
+  /** Numbering format shared by sibling nodes at the same curriculum level. */
+  numberingStyle?: ContentNumberingStyle
   status: ContentStatus
   createdBy: string
   updatedBy: string

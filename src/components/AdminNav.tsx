@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { Container } from './ui/Container'
+import { useAuth } from '../features/auth'
 
 const items = [
   ['/admin', 'Tableau de bord'],
@@ -15,5 +16,7 @@ const items = [
 ] as const
 
 export function AdminNav() {
-  return <div className="admin-nav-wrap"><Container><nav className="admin-nav" aria-label="Administration">{items.map(([to, label]) => <NavLink key={to} to={to} end={to === '/admin'} className={({ isActive }) => isActive ? 'is-active' : ''}>{label}</NavLink>)}</nav></Container></div>
+  const { profile } = useAuth()
+  const visibleItems = profile?.role === 'super_admin' ? items : items.filter(([to]) => to !== '/admin/analytics')
+  return <div className="admin-nav-wrap"><Container><nav className="admin-nav" aria-label="Administration">{visibleItems.map(([to, label]) => <NavLink key={to} to={to} end={to === '/admin'} className={({ isActive }) => isActive ? 'is-active' : ''}>{label}</NavLink>)}</nav></Container></div>
 }

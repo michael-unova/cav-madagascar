@@ -24,8 +24,8 @@ export function AdminMessagesPage() {
 
   useEffect(() => { void refresh() }, [])
 
-  if (profile?.role !== 'super_admin') {
-    return <Container className="page-container"><Card><p className="eyebrow">Messages</p><h1>Accès réservé</h1><p>La gestion des messages de contact est réservée au super administrateur.</p></Card></Container>
+  if (profile?.role !== 'super_admin' && profile?.role !== 'content_manager') {
+    return <Container className="page-container"><Card><p className="eyebrow">Messages</p><h1>Accès réservé</h1><p>La gestion des messages de contact est réservée aux administrateurs autorisés.</p></Card></Container>
   }
 
   async function openMessage(item: ContactMessage) {

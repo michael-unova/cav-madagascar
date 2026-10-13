@@ -1,69 +1,62 @@
 import { useEffect, type ReactNode } from 'react'
 import { useAuth } from '../features/auth'
 
+// Only the lesson content itself is protected. The rest of the UI behaves normally.
+const PROTECTED_SELECTOR = '.lesson-content-reader, .lesson-reader-page, .lesson-content, .lesson-preview, .lesson-document'
+const BODY_CLASS = 'student-content-protected'
+
 function isEditableTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
-  if (!element) return false
-  const tag = element.tagName?.toLowerCase()
+  if (!element?.tagName) return false
+  const tag = element.tagName.toLowerCase()
   return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable
+}
+
+function isInsideProtectedContent(target: EventTarget | null) {
+  const element = target instanceof Element ? target : null
+  return Boolean(element?.closest(PROTECTED_SELECTOR))
+}
+
+function selectionTouchesProtectedContent() {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false
+  const range = selection.getRangeAt(0)
+  return Array.from(document.querySelectorAll(PROTECTED_SELECTOR)).some(element => range.intersectsNode(element))
 }
 
 export function ContentProtection({ children }: { children: ReactNode }) {
   const { profile } = useAuth()
   const isStudent = profile?.role === 'student' && profile?.status === 'active'
-  const displayName = String(profile?.displayName ?? 'Étudiant').trim() || 'Étudiant'
 
   useEffect(() => {
     if (!isStudent) return
 
-    const onContextMenu = (event: MouseEvent) => {
-      if (!isEditableTarget(event.target)) event.preventDefault()
-    }
-    const onCopy = (event: ClipboardEvent) => {
-      if (!isEditableTarget(event.target)) event.preventDefault()
-    }
-    const onCut = (event: ClipboardEvent) => {
-      if (!isEditableTarget(event.target)) event.preventDefault()
-    }
-    const onDragStart = (event: DragEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target?.tagName?.toLowerCase() === 'img' || !isEditableTarget(event.target)) event.preventDefault()
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
+    document.body.classList.add(BODY_CLASS)
+
+    const blockCopy = (event: ClipboardEvent) => {
       if (isEditableTarget(event.target)) return
-      const key = event.key.toLowerCase()
-      const ctrlOrMeta = event.ctrlKey || event.metaKey
-      const blocked =
-        key === 'f12' ||
-        (ctrlOrMeta && ['c', 'x', 'a', 'u', 's', 'p'].includes(key)) ||
-        (ctrlOrMeta && event.shiftKey && ['i', 'j', 'c'].includes(key))
-      if (blocked) {
-        event.preventDefault()
-        event.stopPropagation()
-      }
+      if (isInsideProtectedContent(event.target) || selectionTouchesProtectedContent()) event.preventDefault()
+    }
+    const blockContextMenu = (event: MouseEvent) => {
+      if (!isEditableTarget(event.target) && isInsideProtectedContent(event.target)) event.preventDefault()
+    }
+    const blockDrag = (event: DragEvent) => {
+      if (!isEditableTarget(event.target) && isInsideProtectedContent(event.target)) event.preventDefault()
     }
 
-    document.addEventListener('contextmenu', onContextMenu, true)
-    document.addEventListener('copy', onCopy, true)
-    document.addEventListener('cut', onCut, true)
-    document.addEventListener('dragstart', onDragStart, true)
-    document.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('copy', blockCopy, true)
+    document.addEventListener('cut', blockCopy, true)
+    document.addEventListener('contextmenu', blockContextMenu, true)
+    document.addEventListener('dragstart', blockDrag, true)
 
     return () => {
-      document.removeEventListener('contextmenu', onContextMenu, true)
-      document.removeEventListener('copy', onCopy, true)
-      document.removeEventListener('cut', onCut, true)
-      document.removeEventListener('dragstart', onDragStart, true)
-      document.removeEventListener('keydown', onKeyDown, true)
+      document.body.classList.remove(BODY_CLASS)
+      document.removeEventListener('copy', blockCopy, true)
+      document.removeEventListener('cut', blockCopy, true)
+      document.removeEventListener('contextmenu', blockContextMenu, true)
+      document.removeEventListener('dragstart', blockDrag, true)
     }
   }, [isStudent])
 
-  if (!isStudent) return <>{children}</>
-
-  return <div className="protected-student-shell">
-    <div className="student-content-watermark" aria-hidden="true">
-      <span>CAV Madagascar</span><b>{displayName}</b>
-    </div>
-    {children}
-  </div>
+  return <>{children}</>
 }

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, ChangeEvent, MouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
-import mammoth from 'mammoth/mammoth.browser'
 import { getFirebaseStorage } from '../lib/firebase/storage'
 
 type Props = {
@@ -599,6 +598,9 @@ export function RichLessonEditor({ value, onChange, storageFolder }: Props) {
     setPasteStatus('Importation du document Word…')
     try {
       const arrayBuffer = await file.arrayBuffer()
+      // Mammoth is a relatively large DOCX parser; load it only when an editor
+      // actually imports a Word document, not during ordinary page startup.
+      const { default: mammoth } = await import('mammoth/mammoth.browser')
       const result = await mammoth.convertToHtml({ arrayBuffer }, {
         convertImage: mammoth.images.imgElement((async (image: any) => {
           // Read as base64 first. This is the most reliable browser path for DOCX

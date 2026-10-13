@@ -5,7 +5,7 @@ import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { getFirebaseFunctions } from '../../lib/firebase/functions'
 import type { CourseSubject } from '../../types/course'
-import type { ContentNode, ContentBlock, ContentNodeType, ContentBlockType, ContentStatus } from '../../types/content'
+import type { ContentNode, ContentBlock, ContentNodeType, ContentBlockType, ContentStatus, ContentNumberingStyle } from '../../types/content'
 
 const db = getFirebaseFirestore()
 
@@ -30,6 +30,7 @@ function mapNode(id: string, data: Record<string, unknown>): ContentNode {
     imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : undefined,
     imagePosition: typeof data.imagePosition === 'string' ? data.imagePosition as ContentNode['imagePosition'] : undefined,
     order: Number(data.order ?? 0),
+    numberingStyle: ['alpha','numeric','hierarchical','roman'].includes(String(data.numberingStyle)) ? data.numberingStyle as ContentNumberingStyle : undefined,
     status: (data.status ?? 'draft') as ContentStatus,
     createdBy: String(data.createdBy ?? ''),
     updatedBy: String(data.updatedBy ?? ''),
@@ -100,25 +101,18 @@ export async function listCourseSubjectContentNodes(
   subjectId: string,
   publishedOnly = false,
 ): Promise<ContentNode[]> {
-  // Load the course-linked structure without filtering topics by publication.
-  // A topic is a structural container: a published lesson may still belong to
-  // a topic that was created before topics received their own publication state.
-  const allCourseNodes = await listContentNodes(courseSubjectId, false)
-  const courseNodes = publishedOnly
-    ? (() => {
-        const publishedLessons = allCourseNodes.filter(node => node.type !== 'topic' && node.status === 'published')
-        const publishedLessonParentIds = new Set(publishedLessons.map(node => node.parentId).filter(Boolean) as string[])
-        return allCourseNodes.filter(node =>
-          node.status === 'published' || (node.type === 'topic' && publishedLessonParentIds.has(node.id))
-        )
-      })()
-    : allCourseNodes
+  // Students must query only published nodes: Firestore correctly rejects an
+  // unfiltered query that could include drafts. Published lessons retain their
+  // parentId, so lesson counts remain correct even when a draft topic container
+  // itself is not readable to students.
+  const allCourseNodes = await listContentNodes(courseSubjectId, publishedOnly)
+  const courseNodes = allCourseNodes
 
   if (countLessonNodes(courseNodes) > 0) {
     // Topic illustrations live on the canonical reusable Matière nodes.
     // Enrich legacy/course-linked topic nodes with that metadata so students
     // see the same illustration regardless of which content path supplied the lessons.
-    const canonicalNodes = await listSubjectContentNodes(subjectId, false)
+    const canonicalNodes = await listSubjectContentNodes(subjectId, publishedOnly)
     const bySharedKey = new Map(canonicalNodes.filter(node => node.sharedKey).map(node => [node.sharedKey!, node]))
     const canonicalTopics = canonicalNodes.filter(node => node.type === 'topic')
     return courseNodes.map(node => {
@@ -155,7 +149,7 @@ export async function createContentNode(input: { courseSubjectId:string; parentI
 }
 
 /** Creates one canonical node for the Matière. It is not copied per concours. */
-export async function createSharedContentNode(input: { subjectId: string; parentSharedKey?: string; type: ContentNodeType; title: string; description?: string; imageUrl?: string; imagePosition?: ContentNode['imagePosition']; order: number; userId: string }) {
+export async function createSharedContentNode(input: { subjectId: string; parentSharedKey?: string; type: ContentNodeType; title: string; description?: string; imageUrl?: string; imagePosition?: ContentNode['imagePosition']; order: number; numberingStyle?: ContentNumberingStyle; userId: string }) {
   let parentId: string | undefined
   if (input.parentSharedKey) {
     const parentSnap = await getDocs(query(collection(db, 'contentNodes'), where('sharedKey', '==', input.parentSharedKey)))
@@ -171,6 +165,7 @@ export async function createSharedContentNode(input: { subjectId: string; parent
     ...(input.imageUrl?.trim() ? { imageUrl: input.imageUrl.trim() } : {}),
     ...(input.imagePosition ? { imagePosition: input.imagePosition } : {}),
     order: input.order,
+    ...(input.numberingStyle ? { numberingStyle: input.numberingStyle } : {}),
     status: 'draft',
     sharedKey: key,
     createdBy: input.userId,
@@ -185,7 +180,7 @@ export async function updateContentNode(id:string,input:Partial<Pick<ContentNode
   await updateDoc(doc(db,'contentNodes',id),{...input,updatedBy:userId,updatedAt:serverTimestamp()})
 }
 
-export async function updateSharedContentNode(key: string, input: Partial<Pick<ContentNode,'title'|'description'|'imageUrl'|'imagePosition'|'order'|'status'|'type'>>, userId: string) {
+export async function updateSharedContentNode(key: string, input: Partial<Pick<ContentNode,'title'|'description'|'imageUrl'|'imagePosition'|'order'|'status'|'type'|'numberingStyle'>>, userId: string) {
   const snap = await getDocs(query(collection(db, 'contentNodes'), where('sharedKey', '==', key)))
   const batch = writeBatch(db)
   snap.docs.forEach(item => batch.update(item.ref, { ...input, updatedBy: userId, updatedAt: serverTimestamp() }))

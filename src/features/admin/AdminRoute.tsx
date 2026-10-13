@@ -12,6 +12,8 @@ export function AdminRoute() {
 
   const role = profile?.role
   if (role !== 'content_manager' && role !== 'super_admin') return <Navigate to="/admin/unauthorized" replace />
+  // Analytics exposes platform-wide financial and operational metrics to super admins only.
+  if (location.pathname === '/admin/analytics' && role !== 'super_admin') return <Navigate to="/admin/unauthorized" replace />
 
   return <><AdminNav /><Outlet /></>
 }

@@ -63,3 +63,21 @@
   .header-login { display: none; }
 }
 .main-nav a.is-active { color: var(--color-primary); font-weight: 800; }
+
+/* Public navigation and contact page */
+@media (min-width: 801px) {
+  .main-nav { gap: 22px; font-size: 1rem; }
+  .main-nav a { white-space: nowrap; }
+}
+.contact-page-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.contact-page-option { display: flex; align-items: center; gap: 16px; color: inherit; text-decoration: none; }
+.contact-page-option > span:nth-child(2) { display: grid; gap: 6px; }
+.contact-page-option strong { color: var(--color-primary); font-size: 1.05rem; }
+.contact-page-option > span:nth-child(2) > span { color: var(--color-muted); line-height: 1.55; }
+.contact-page-icon { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 12px; background: #eaf2ff; color: #1877f2; font-size: 1.8rem; font-weight: 800; }
+.contact-page-pin { color: var(--color-primary); font-size: 1.7rem; }
+.contact-page-arrow { margin-left: auto; color: var(--color-primary); font-size: 1.25rem; }
+.contact-page-option[href]:hover { border-color: var(--color-primary); transform: translateY(-2px); transition: .15s ease; }
+@media (max-width: 800px) {
+  .contact-page-options { grid-template-columns: 1fr; }
+}

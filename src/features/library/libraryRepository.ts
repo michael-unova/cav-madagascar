@@ -42,31 +42,42 @@ export async function listPublishedLibraryBooks(userId: string): Promise<Library
   ))
   publicSnapshot.docs.forEach(docSnap => books.set(docSnap.id, mapBook(docSnap)))
 
-  const enrollmentSnapshot = await getDocs(query(
-    collection(db, 'enrollments'),
-    where('userId', '==', userId),
-  ))
-  const activeCourseIds = Array.from(new Set(enrollmentSnapshot.docs
-    .filter(docSnap => {
-      const data = docSnap.data()
-      if (data.status !== 'active') return false
-      const expiresAt = data.expiresAt
-      return !expiresAt || typeof expiresAt.toDate !== 'function' || expiresAt.toDate() > new Date()
-    })
-    .map(docSnap => String(docSnap.data().courseId ?? ''))
-    .filter(Boolean)))
-
-  // Query one selected concours at a time. This keeps each Firestore query
-  // aligned with the access rule and still lets one book be visible for many
-  // concours without duplicating the resource.
-  await Promise.all(activeCourseIds.map(async courseId => {
-    const snapshot = await getDocs(query(
-      collection(db, COLLECTION),
-      where('status', '==', 'published'),
-      where('visibility', '==', 'enrolled'),
-      where('courseIds', 'array-contains', courseId),
+  let activeCourseIds: string[] = []
+  try {
+    const enrollmentSnapshot = await getDocs(query(
+      collection(db, 'enrollments'),
+      where('userId', '==', userId),
     ))
-    snapshot.docs.forEach(docSnap => books.set(docSnap.id, mapBook(docSnap)))
+    activeCourseIds = Array.from(new Set(enrollmentSnapshot.docs
+      .filter(docSnap => {
+        const data = docSnap.data()
+        if (data.status !== 'active') return false
+        const expiresAt = data.expiresAt
+        return !expiresAt || typeof expiresAt.toDate !== 'function' || expiresAt.toDate() > new Date()
+      })
+      .map(docSnap => String(docSnap.data().courseId ?? ''))
+      .filter(Boolean)))
+  } catch (error) {
+    // Do not hide public books if enrollment metadata is unavailable or the
+    // current account cannot read its enrollment documents.
+    console.warn('Impossible de charger les inscriptions pour la librairie', error)
+  }
+
+  // Query restricted books one concours at a time. A permission error for one
+  // restricted query must not make the whole library disappear: public books
+  // already loaded above remain available.
+  await Promise.all(activeCourseIds.map(async courseId => {
+    try {
+      const snapshot = await getDocs(query(
+        collection(db, COLLECTION),
+        where('status', '==', 'published'),
+        where('visibility', '==', 'enrolled'),
+        where('courseIds', 'array-contains', courseId),
+      ))
+      snapshot.docs.forEach(docSnap => books.set(docSnap.id, mapBook(docSnap)))
+    } catch (error) {
+      console.warn(`Impossible de charger les ressources réservées au concours ${courseId}`, error)
+    }
   }))
 
   return Array.from(books.values()).sort((a, b) => a.title.localeCompare(b.title, 'fr'))

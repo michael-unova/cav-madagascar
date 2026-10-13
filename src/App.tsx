@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FormEvent, ReactNode } from "react";
 import { useAuth } from "./features/auth";
 import { updateUserProfile } from "./features/auth";
@@ -47,6 +48,7 @@ import {
   countPublishedCourseLessons,
   createSharedContentBlock,
   createSharedContentNode,
+  deleteSharedContentNode,
   updateSharedContentBlock,
   updateSharedContentNode,
 } from "./features/curriculum";
@@ -72,29 +74,34 @@ import {
 } from "./features/questions";
 import { getCourseProgressSummary, getNodeProgress, listMyProgress, saveNodeProgress } from "./features/progress";
 import { createContactMessage } from "./features/contact";
-import { AdminMessagesPage } from "./pages/AdminMessagesPage";
-import { AdminBroadcastsPage } from "./pages/AdminBroadcastsPage";
-import { AdminLessonQuestionsPage } from "./pages/AdminLessonQuestionsPage";
-import { AdminPsychotechnicalPage } from "./pages/AdminPsychotechnicalPage";
-import { AdminAnalyticsPage } from "./pages/AdminAnalyticsPage";
-import { LibraryPage } from "./pages/LibraryPage";
-import { AdminLibraryPage } from "./pages/AdminLibraryPage";
-import { AuthActionPage } from "./pages/AuthActionPage";
+// Keep secondary screens out of the initial bundle. They are downloaded only
+// when the user opens the corresponding page.
+const AdminMessagesPage = lazy(() => import("./pages/AdminMessagesPage").then((module) => ({ default: module.AdminMessagesPage })));
+const AdminBroadcastsPage = lazy(() => import("./pages/AdminBroadcastsPage").then((module) => ({ default: module.AdminBroadcastsPage })));
+const AdminLessonQuestionsPage = lazy(() => import("./pages/AdminLessonQuestionsPage").then((module) => ({ default: module.AdminLessonQuestionsPage })));
+const AdminPsychotechnicalPage = lazy(() => import("./pages/AdminPsychotechnicalPage").then((module) => ({ default: module.AdminPsychotechnicalPage })));
+const AdminAnalyticsPage = lazy(() => import("./pages/AdminAnalyticsPage").then((module) => ({ default: module.AdminAnalyticsPage })));
+const AdminBillingPage = lazy(() => import("./pages/AdminBillingPage").then((module) => ({ default: module.AdminBillingPage })));
+const LibraryPage = lazy(() => import("./pages/LibraryPage").then((module) => ({ default: module.LibraryPage })));
+const AdminLibraryPage = lazy(() => import("./pages/AdminLibraryPage").then((module) => ({ default: module.AdminLibraryPage })));
+const AuthActionPage = lazy(() => import("./pages/AuthActionPage").then((module) => ({ default: module.AuthActionPage })));
 import { markNotificationRead, subscribeMyNotifications, subscribeUnreadLessonCommentCount } from "./features/lessonComments";
 import type { Enrollment, Payment } from "./types/enrollment";
 import type { Course, CourseCardColor, CourseGroup, CourseSubject } from "./types/course";
 import { courseIllustration } from "./components/CourseIllustration";
+import { ContentProtection } from "./components/ContentProtection";
+import { SessionReplacedNotice } from "./components/SessionReplacedNotice";
 import type {
   ContentBlock,
   ContentNode,
   ContentNodeType,
+  ContentNumberingStyle,
 } from "./types/content";
 import type { Subject } from "./types/subject";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { getFirebaseStorage } from "./lib/firebase/storage";
-import { collection, doc, onSnapshot, query, setDoc, where, type Timestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, setDoc, Timestamp, where } from "firebase/firestore";
 import { getFirebaseFirestore } from "./lib/firebase/firestore";
-import { exportStudentsToExcel, exportStudentsToWord, exportStudentsToPdf } from "./lib/export/userExports";
 import type { LessonComment } from "./types/lessonComment";
 import type { LessonNotification } from "./features/lessonComments/lessonCommentRepository";
 import { createLessonComment, deleteLessonComment, subscribeLessonComments, subscribeLessonCommentLoves, toggleLessonCommentLove, updateLessonComment, replyToLessonComment } from "./features/lessonComments";
@@ -132,7 +139,8 @@ type AdminPage =
   | "lessonPreview"
   | "psychotechnical"
   | "library"
-  | "profile";
+  | "profile"
+  | "billing";
 
 type CavHistoryState = {
   __cavHistory: true;
@@ -270,6 +278,9 @@ function GoogleLogo() {
 
 function Icon({ name }: { name: string }) {
   const paths: Record<string, ReactNode> = {
+    message: <><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/><path d="M8 11h8M8 15h5"/></>,
+    heart: <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8z"/>,
+    headphones: <><path d="M3 14v-3a9 9 0 0 1 18 0v3"/><rect x="2" y="13" width="4" height="7" rx="2"/><rect x="18" y="13" width="4" height="7" rx="2"/><path d="M18 20a6 6 0 0 1-6 2h-1"/></>,
     grid: (
       <>
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -317,6 +328,71 @@ function Icon({ name }: { name: string }) {
         <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 1.7-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V22h-2.4v-.2a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-1.7-1.7.06-.06A1.7 1.7 0 0 0 8.46 17a1.7 1.7 0 0 0-1.56-1.03H6.7v-2.4h.2A1.7 1.7 0 0 0 8.46 12a1.7 1.7 0 0 0-.34-1.88l-.06-.06 1.7-1.7.06.06A1.7 1.7 0 0 0 11.97 7.3V7h2.4v.2a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 1.7 1.7-.06.06A1.7 1.7 0 0 0 19.4 12a1.7 1.7 0 0 0 1.56 1.03h.2v2.4h-.2A1.7 1.7 0 0 0 19.4 15z" />
       </>
     ),
+    dashboard: (
+      <>
+        <rect x="3" y="3" width="8" height="6" rx="1" />
+        <rect x="14" y="3" width="7" height="10" rx="1" />
+        <rect x="3" y="12" width="8" height="9" rx="1" />
+        <rect x="14" y="16" width="7" height="5" rx="1" />
+      </>
+    ),
+    graduation: (
+      <>
+        <path d="m2 9 10-5 10 5-10 5L2 9Z" />
+        <path d="M6 11v5c3.5 2.5 8.5 2.5 12 0v-5M22 9v6" />
+      </>
+    ),
+    bookOpen: (
+      <>
+        <path d="M12 6.5C9.5 4.5 6 4 3 5v14c3-.8 6.5-.3 9 1.5 2.5-1.8 6-2.3 9-1.5V5c-3-1-6.5-.5-9 1.5Z" />
+        <path d="M12 7v13.5" />
+      </>
+    ),
+    clipboardCheck: (
+      <>
+        <rect x="5" y="4" width="14" height="17" rx="2" />
+        <path d="M9 4.5V3h6v1.5M8 12l2.5 2.5L16 9" />
+      </>
+    ),
+    contact: (
+      <>
+        <circle cx="9" cy="8" r="3.5" />
+        <path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20M17 5.5a3.5 3.5 0 0 1 0 6.8M18 15h1a3 3 0 0 1 3 3v2" />
+      </>
+    ),
+    question: (
+      <>
+        <path d="M21 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-5 2 1.5-4A7.5 7.5 0 1 1 21 11.5Z" />
+        <path d="M9.5 9a2.5 2.5 0 1 1 4.1 1.9c-1 .8-1.6 1.2-1.6 2.6M12 16.5h.01" />
+      </>
+    ),
+    megaphone: (
+      <>
+        <path d="m3 11 14-6v14L3 13v-2Z" />
+        <path d="M7 14l2 6h4l-2.5-4.5M20 9l2-2M20 15l2 2" />
+      </>
+    ),
+    library: (
+      <>
+        <path d="M3 6 7 3l4 3v15H3V6ZM13 5l4-2 4 2v16h-8V5Z" />
+        <path d="M5.5 9h3M5.5 13h3M15.5 8h3M15.5 12h3" />
+      </>
+    ),
+    brain: (
+      <>
+        <path d="M12 5.5a4 4 0 0 0-7-2.5 4.5 4.5 0 0 0-1 7.5 4 4 0 0 0 2 6.5A4 4 0 0 0 12 20V5.5Z" />
+        <path d="M12 5.5a4 4 0 0 1 7-2.5 4.5 4.5 0 0 1 1 7.5 4 4 0 0 1-2 6.5A4 4 0 0 1 12 20M7 7l2 2m-3 4 3-1m8-5-2 2m3 4-3-1" />
+      </>
+    ),
+    cloud: <path d="M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11-1.5A4.8 4.8 0 0 0 7 18Z" />,
+    sliders: (
+      <>
+        <path d="M4 6h16M4 12h16M4 18h16" />
+        <circle cx="9" cy="6" r="2" fill="currentColor" stroke="none" />
+        <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" />
+        <circle cx="7" cy="18" r="2" fill="currentColor" stroke="none" />
+      </>
+    ),
     arrow: <path d="M5 12h14M13 6l6 6-6 6" />,
     play: <path d="m9 6 10 6-10 6z" />,
     plus: (
@@ -358,19 +434,62 @@ function Logo() {
   );
 }
 
-function PublicNavbar({ go, active }: { go: (p: string) => void; active?: "home" | "catalog" | "how" | "about" }) {
+
+function PublicFooter() {
   return (
-    <header className="public-nav">
+    <footer className="public-footer cav-public-footer">
+      <div className="cav-footer-brand">
+        <Logo />
+        <span>© 2026 CAV Madagascar. Préparation aux concours.</span>
+      </div>
+      <div className="cav-footer-contact">
+        <a className="cav-footer-facebook" href="https://web.facebook.com/profile.php?id=100065575115845" target="_blank" rel="noreferrer" aria-label="Suivre CAV Madagascar sur Facebook">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13.4 21v-8.2h2.8l.4-3.2h-3.2V7.5c0-.9.3-1.6 1.6-1.6h1.7V3.1c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3v2.3H7.2v3.2H10V21h3.4z"/></svg>
+          <span>Nous suivre sur Facebook</span><span className="cav-footer-external" aria-hidden="true">↗</span>
+        </a>
+        <div className="cav-footer-address">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a7 7 0 0 0-7 7c0 5.1 7 12 7 12s7-6.9 7-12a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+          <span>80 rue Pasteur Rabeony, Antananarivo</span>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function PublicNavbar({ go, active }: { go: (p: string) => void; active?: "home" | "catalog" | "how" | "about" | "contact" }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigate = (page: string) => {
+    setMobileMenuOpen(false);
+    go(page);
+  };
+
+  return (
+    <header className={`public-nav public-logged-out-nav${mobileMenuOpen ? " mobile-menu-open" : ""}`}>
       <Logo />
-      <nav aria-label="Navigation principale">
-        <button className={active === "home" ? "active" : ""} onClick={() => go("home")}>Accueil</button>
-        <button className={active === "catalog" ? "active" : ""} onClick={() => go("catalog")}>Concours</button>
-        <button className={active === "how" ? "active" : ""} onClick={() => go("how")}>Comment ça marche</button>
-        <button className={active === "about" ? "active" : ""} onClick={() => go("about")}>À propos</button>
+      <button
+        className="public-mobile-menu-toggle"
+        type="button"
+        aria-label={mobileMenuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+        aria-expanded={mobileMenuOpen}
+        aria-controls="public-mobile-navigation"
+        onClick={() => setMobileMenuOpen((open) => !open)}
+      >
+        <span /><span /><span />
+      </button>
+      <nav id="public-mobile-navigation" aria-label="Navigation principale">
+        <button className={active === "home" ? "active" : ""} onClick={() => navigate("home")}>Accueil</button>
+        <button className={active === "catalog" ? "active" : ""} onClick={() => navigate("catalog")}>Concours</button>
+        <button className={active === "how" ? "active" : ""} onClick={() => navigate("how")}>Comment ça marche</button>
+        <button className={active === "about" ? "active" : ""} onClick={() => navigate("about")}>À propos</button>
+        <button className={active === "contact" ? "active" : ""} onClick={() => navigate("contact")}>Contact</button>
+        <div className="public-mobile-menu-actions">
+          <button className="link-button" onClick={() => navigate("login")}>Se connecter</button>
+          <button className="primary" onClick={() => navigate("register")}>Créer un compte</button>
+        </div>
       </nav>
       <div className="public-actions">
-        <button className="link-button" onClick={() => go("login")}>Se connecter</button>
-        <button className="primary" onClick={() => go("register")}>Créer un compte</button>
+        <button className="link-button" onClick={() => navigate("login")}>Se connecter</button>
+        <button className="primary" onClick={() => navigate("register")}>Créer un compte</button>
       </div>
     </header>
   );
@@ -389,7 +508,7 @@ function PublicHome({
     <div className="public-shell">
       <PublicNavbar go={go} active="home" />
       <main>
-        <section className="landing-hero">
+        <section className="landing-hero cav-responsive-landing-hero">
           <div className="landing-copy">
             <span className="pill blue-pill">PRÉPARATION AUX CONCOURS</span>
             <h1>
@@ -414,41 +533,16 @@ function PublicHome({
               <span>✓ Progression suivie</span>
             </div>
           </div>
-          <div className="hero-visual">
-            <div className="visual-card main-card">
-              <div className="eyebrow">VOTRE PRÉPARATION</div>
-              <h3>
-                {loading
-                  ? "Chargement…"
-                  : courses.length
-                    ? "Vos préparations disponibles"
-                    : "Vos préparations"}
-              </h3>
-              <div className="visual-progress">
-                <span style={{ width: courses.length ? "100%" : "0%" }} />
-              </div>
-              <div className="visual-row">
-                <span>Catalogue</span>
-                <b>{courses.length ? "Disponible" : "À découvrir"}</b>
-              </div>
-              <div className="visual-lesson">
-                <div className="lesson-icon">
-                  <Icon name="book" />
-                </div>
-                <div>
-                  <small>CATALOGUE</small>
-                  <strong>
-                    {courses.length
-                      ? "Découvrez les préparations disponibles"
-                      : "Aucune préparation publiée"}
-                  </strong>
-                </div>
-                <span>→</span>
-              </div>
-            </div>
-            <div className="floating-card">
-              <b>{courses.length}</b>
-              <span>préparations disponibles</span>
+          <div className="hero-visual cav-responsive-hero-visual">
+            <img
+              className="cav-responsive-student-photo"
+              src="/assets/cav-home-student.jpg"
+              alt="Une étudiante malgache concentrée sur ses révisions"
+              fetchPriority="high"
+            />
+            <div className="cav-responsive-preparation-pill" aria-live="polite">
+              <span className="cav-responsive-pill-icon" aria-hidden="true"><Icon name="book" /></span>
+              <span>{loading ? "Préparations disponibles" : `${courses.length} préparation${courses.length > 1 ? "s" : ""} disponible${courses.length > 1 ? "s" : ""}`}</span>
             </div>
           </div>
         </section>
@@ -555,15 +649,7 @@ function PublicHome({
           </button>
         </section>
       </main>
-      <footer className="public-footer">
-        <Logo />
-        <span>© 2026 CAV Madagascar. Préparation aux concours.</span>
-        <div>
-          <button onClick={() => go("contact")}>Contact</button>
-          <button>Conditions</button>
-          <button>Confidentialité</button>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }
@@ -747,6 +833,13 @@ function AuthPage({
 
               <div className="auth-divider"><span>ou</span></div>
 
+              <form
+                className="auth-credentials-form"
+                onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                  event.preventDefault();
+                  if (!submitting && !googleSubmitting) void submit();
+                }}
+              >
               {mode === "register" && (
                 <div className="auth-two">
                   <label>
@@ -819,16 +912,17 @@ function AuthPage({
 
               {mode === "login" && (
                 <div className="forgot auth-forgot">
-                  <button onClick={() => { clearMessages(); setShowForgot(true); }}>Mot de passe oublié ?</button>
+                  <button type="button" onClick={() => { clearMessages(); setShowForgot(true); }}>Mot de passe oublié ?</button>
                 </div>
               )}
 
-              <button className="primary full auth-submit" disabled={submitting || googleSubmitting} onClick={() => void submit()}>
+              <button type="submit" className="primary full auth-submit" disabled={submitting || googleSubmitting}>
                 {submitting
                   ? mode === "login" ? "Connexion..." : "Création..."
                   : mode === "login" ? "Se connecter" : "Créer mon compte"}
                 <Icon name="arrow" />
               </button>
+              </form>
 
               <div className="auth-switch">
                 {mode === "login" ? (
@@ -939,7 +1033,6 @@ function PublicPreview({
             </p>
           </div>
           <div className="price-box">
-            <span>{course.accessDurationDays} jours d’accès</span>
             <strong>{formatPrice(course.price)} Ar</strong>
             <button
               className="primary"
@@ -995,10 +1088,6 @@ function PublicPreview({
             <div className="metric">
               <span>Suivi de progression</span>
               <b>✓</b>
-            </div>
-            <div className="metric">
-              <span>Durée d’accès</span>
-              <b>{course.accessDurationDays} j</b>
             </div>
             <button
               className="primary full"
@@ -1064,7 +1153,7 @@ function AboutPage({ go }: { go: (p: string) => void }) {
           <button className="primary" onClick={() => go("contact")}>Parlons avec CAV <Icon name="arrow" /></button>
         </section>
       </main>
-      <footer className="public-footer"><Logo /><span>© 2026 CAV Madagascar. Préparation aux concours.</span><div><button onClick={() => go("contact")}>Contact</button><button>Conditions</button><button>Confidentialité</button></div></footer>
+      <PublicFooter />
     </div>
   );
 }
@@ -1107,11 +1196,28 @@ function ContactPage({ go }: { go: (p: string) => void }) {
 
   return (
     <div className="public-shell">
-      <PublicNavbar go={go} />
+      <PublicNavbar go={go} active="contact" />
       <main className="contact-page">
-        <section className="contact-hero">
-          <div><div className="eyebrow">CONTACTEZ-NOUS</div><h1>Une question ? Parlons-en.</h1><p>Besoin d'informations sur une formation, une inscription ou simplement envie d'échanger avec CAV Madagascar ? Notre équipe est à votre écoute.</p></div>
-          <div className="contact-hero-mark"><span>01</span><strong>CAV</strong><small>À votre écoute</small></div>
+        <section className="contact-hero contact-hero-v1">
+          <div className="contact-hero-copy">
+            <div className="eyebrow">CONTACTEZ-NOUS</div>
+            <h1>Une question ? Parlons-en.</h1>
+            <p>Besoin d'informations sur une formation, une inscription ou simplement envie d'échanger avec CAV Madagascar ? Notre équipe est à votre écoute.</p>
+            <div className="contact-benefits" aria-label="Notre engagement">
+              <div className="contact-benefit"><span className="contact-benefit-icon" aria-hidden="true"><Icon name="message" /></span><span><strong>Réponse rapide</strong><small>Nous vous répondons dans les plus brefs délais.</small></span></div>
+              <div className="contact-benefit"><span className="contact-benefit-icon" aria-hidden="true"><Icon name="users" /></span><span><strong>Une équipe dédiée</strong><small>À l'écoute des étudiants partout à Madagascar.</small></span></div>
+              <div className="contact-benefit"><span className="contact-benefit-icon" aria-hidden="true"><Icon name="heart" /></span><span><strong>Toujours à vos côtés</strong><small>Pour vous accompagner dans votre préparation.</small></span></div>
+            </div>
+          </div>
+          <div className="contact-brand-panel" aria-label="CAV Madagascar, à votre écoute">
+            <div className="contact-brand-orbit contact-brand-orbit-one" aria-hidden="true"></div>
+            <div className="contact-brand-orbit contact-brand-orbit-two" aria-hidden="true"></div>
+            <div className="contact-brand-dots" aria-hidden="true"></div>
+            <div className="contact-brand-mark"><span>CAV</span><small>COURS D’APPUI VIRTUEL<br />MADAGASCAR</small></div>
+            <div className="contact-brand-divider" aria-hidden="true"></div>
+            <strong>À votre écoute</strong>
+            <span className="contact-brand-caption">Votre réussite, notre priorité.</span>
+          </div>
         </section>
         <section className="contact-grid">
           <div className="contact-form-card">
@@ -1120,7 +1226,7 @@ function ContactPage({ go }: { go: (p: string) => void }) {
             {error && <div className="form-error" role="alert">{error}</div>}
             {!submitted && <form onSubmit={submit} noValidate>
               <div className="contact-two"><label>Prénom *<input value={firstName} onChange={e=>setFirstName(e.target.value)} placeholder="Votre prénom" /></label><label>Nom *<input value={lastName} onChange={e=>setLastName(e.target.value)} placeholder="Votre nom" /></label></div>
-              <label>Adresse e-mail *<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="vous@exemple.com" /></label>
+              <label>Adresse e-mail *<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Votre adresse e-mail" /></label>
               <label>Téléphone <span className="optional-label">(obligatoire)</span><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+261 ..." /></label>
               <label>Objet *<select value={subject} onChange={e=>setSubject(e.target.value)}><option value="">Sélectionnez un sujet</option><option>Informations sur une formation</option><option>Question sur un concours</option><option>Inscription et paiement</option><option>Problème technique</option><option>Autre</option></select></label>
               <label>Votre message *<textarea value={message} onChange={e=>setMessage(e.target.value)} rows={6} placeholder="Écrivez votre message ici..."></textarea></label>
@@ -1137,7 +1243,7 @@ function ContactPage({ go }: { go: (p: string) => void }) {
           </aside>
         </section>
       </main>
-      <footer className="public-footer"><Logo /><span>© 2026 CAV Madagascar. Préparation aux concours.</span><div><button onClick={() => go("contact")}>Contact</button><button>Conditions</button><button>Confidentialité</button></div></footer>
+      <PublicFooter />
     </div>
   );
 }
@@ -1220,7 +1326,7 @@ function Sidebar({
     const db = getFirebaseFirestore();
     const unsubs: Array<() => void> = [];
 
-    if (role === "admin") {
+    if (role === "admin" || role === "teacher") {
       const unreadMessagesQuery = query(collection(db, "contactMessages"), where("status", "==", "unread"));
       unsubs.push(onSnapshot(unreadMessagesQuery, (snapshot) => {
         setNotificationCounts((current) => ({ ...current, messages: snapshot.size }));
@@ -1231,7 +1337,7 @@ function Sidebar({
       setNotificationCounts((current) => ({ ...current, studentQuestions: count }));
     }, (error) => console.error("Lesson questions notification listener failed:", error)));
 
-    if (role === "admin") {
+    if (role === "admin" || role === "teacher") {
       const pendingPaymentsQuery = query(collection(db, "payments"), where("status", "==", "pending"));
       unsubs.push(onSnapshot(pendingPaymentsQuery, (snapshot) => {
         setNotificationCounts((current) => ({ ...current, enrollments: snapshot.size }));
@@ -1242,21 +1348,19 @@ function Sidebar({
       const initialSeenAt = Number.isFinite(storedSeenAt) && storedSeenAt > 0 ? storedSeenAt : Date.now();
       if (!storedSeenAt) localStorage.setItem(usersSeenKey, String(initialSeenAt));
 
-      const usersQuery = query(collection(db, "users"));
+      // Only listen for users created since the last visit to user management.
+      // This avoids downloading every user document just to compute a badge count.
+      const usersQuery = query(
+        collection(db, "users"),
+        where("createdAt", ">", Timestamp.fromMillis(initialSeenAt)),
+      );
       unsubs.push(onSnapshot(usersQuery, (snapshot) => {
         if (page === "users") {
-          const now = Date.now();
-          localStorage.setItem(usersSeenKey, String(now));
+          localStorage.setItem(usersSeenKey, String(Date.now()));
           setNotificationCounts((current) => ({ ...current, users: 0 }));
           return;
         }
-        const seenAt = Number(localStorage.getItem(usersSeenKey) || String(initialSeenAt));
-        const count = snapshot.docs.reduce((total, userDoc) => {
-          const createdAt = userDoc.data().createdAt as Timestamp | undefined;
-          const createdMillis = createdAt && typeof createdAt.toMillis === "function" ? createdAt.toMillis() : 0;
-          return total + (createdMillis > seenAt ? 1 : 0);
-        }, 0);
-        setNotificationCounts((current) => ({ ...current, users: count }));
+        setNotificationCounts((current) => ({ ...current, users: snapshot.size }));
       }, (error) => console.error("User notification listener failed:", error)));
     }
 
@@ -1269,44 +1373,33 @@ function Sidebar({
   };
 
   const student = [
-    ["dashboard", "Tableau de bord", "grid"],
-    ["concours", "Mes concours", "book"],
-    ["catalog", "Catalogue", "file"],
+    ["dashboard", "Tableau de bord", "dashboard"],
+    ["concours", "Mes concours", "graduation"],
+    ["catalog", "Catalogue", "library"],
     ["results", "Résultats", "chart"],
-    ["library", "Librairie", "book"],
+    ["library", "Librairie", "bookOpen"],
   ];
   const admin = [
-    ["overview", "Vue d’ensemble", "grid"],
-    ["courses", "Concours", "book"],
-    ["subjects", "Matières", "book"],
-    ["enrollments", "Inscriptions", "users"],
-    ["users", "Utilisateurs", "users"],
-    ["studentQuestions", "Questions étudiants", "mail"],
-    ["broadcasts", "Annonces", "mail"],
-    ["library", "Librairie", "book"],
-    ["psychotechnical", "Tests psychotechniques", "check"],
+    ["overview", "Vue d’ensemble", "dashboard"],
+    ["courses", "Concours", "graduation"],
+    ["subjects", "Matières", "bookOpen"],
+    ["enrollments", "Inscriptions", "clipboardCheck"],
+    ["users", "Utilisateurs", "contact"],
+    ["studentQuestions", "Questions étudiants", "question"],
+    ["broadcasts", "Annonces", "megaphone"],
+    ["library", "Librairie", "library"],
+    ["psychotechnical", "Tests psychotechniques", "brain"],
     ["stats", "Statistiques", "chart"],
-    ...(role === "admin" ? [["messages", "Messages", "mail"]] : []),
+    ["messages", "Messages", "mail"], ["billing", "Facturation Google Cloud", "cloud"], ["profile", "Paramètres", "sliders"],
   ];
-  const teacher = [
-    ["content", "Mes contenus", "file"],
-    ["questions", "Questions & exercices", "check"],
-    ["studentQuestions", "Questions étudiants", "mail"],
-    ["courses", "Mes concours", "book"],
-  ];
-  const items =
-    role === "student" ? student : role === "teacher" ? teacher : admin;
+  const items = role === "student" ? student : role === "teacher" ? admin.filter(([id]) => id !== "stats") : admin;
   const badgeFor = (id: string) => id === "messages" ? notificationCounts.messages : id === "enrollments" ? notificationCounts.enrollments : id === "users" ? notificationCounts.users : id === "studentQuestions" ? notificationCounts.studentQuestions : 0;
 
   return (
     <aside className="sidebar">
       <Logo />
       <div className="side-role">
-        {role === "student"
-          ? "ESPACE ÉTUDIANT"
-          : role === "teacher"
-            ? "ESPACE ENSEIGNANT"
-            : "ADMINISTRATION"}
+        {role === "student" ? "ESPACE ÉTUDIANT" : role === "teacher" ? "GESTIONNAIRE DE CONTENU" : "ADMINISTRATION"}
       </div>
       <nav>
         {items.map(([id, label, icon]) => {
@@ -1314,7 +1407,7 @@ function Sidebar({
           return (
             <button
               key={id}
-              className={page === id ? "nav-item active" : "nav-item"}
+              className={`nav-item nav-icon-${icon} ${page === id ? "active" : ""}`.trim()}
               onClick={() => {
                 if (id === "users") markUsersSeen();
                 setPage(id);
@@ -1327,12 +1420,7 @@ function Sidebar({
           );
         })}
       </nav>
-      <div className="side-bottom">
-        <button className={page === "profile" ? "nav-item active" : "nav-item"} onClick={() => setPage("profile")}>
-          <Icon name="settings" />
-          <span>Paramètres</span>
-        </button>
-      </div>
+
     </aside>
   );
 }
@@ -1346,30 +1434,28 @@ function MobileNav({
   setPage: (p: any) => void;
 }) {
   const student = [
-    ["dashboard", "Accueil", "grid"],
-    ["concours", "Mes concours", "book"],
-    ["catalog", "Catalogue", "file"],
+    ["dashboard", "Accueil", "dashboard"],
+    ["concours", "Mes concours", "graduation"],
+    ["catalog", "Catalogue", "library"],
     ["results", "Résultats", "chart"],
-    ["library", "Librairie", "book"],
+    ["library", "Librairie", "bookOpen"],
   ];
   const admin = [
-    ["overview", "Accueil", "grid"],
-    ["courses", "Concours", "book"],
-    ["subjects", "Matières", "book"],
-    ["users", "Utilisateurs", "users"],
-    ["studentQuestions", "Questions étudiants", "mail"],
-    ["broadcasts", "Annonces", "mail"],
-    ["library", "Librairie", "book"],
-    ...(role === "admin" ? [["messages", "Messages", "mail"]] : [["content", "Contenus", "file"]]),
+    ["overview", "Vue d’ensemble", "dashboard"],
+    ["courses", "Concours", "graduation"],
+    ["subjects", "Matières", "bookOpen"],
+    ["enrollments", "Inscriptions", "clipboardCheck"],
+    ["users", "Utilisateurs", "contact"],
+    ["studentQuestions", "Questions étudiants", "question"],
+    ["broadcasts", "Annonces", "megaphone"],
+    ["library", "Librairie", "library"],
+    ["psychotechnical", "Tests psychotechniques", "brain"],
+    ["stats", "Statistiques", "chart"],
+    ["messages", "Messages", "mail"],
+    ["billing", "Facturation Google Cloud", "cloud"],
+    ["profile", "Paramètres", "sliders"],
   ];
-  const teacher = [
-    ["content", "Contenus", "file"],
-    ["questions", "Questions", "check"],
-    ["studentQuestions", "Questions étudiants", "mail"],
-    ["courses", "Concours", "book"],
-    ["profile", "Profil", "settings"],
-  ];
-  const items = role === "student" ? student : role === "teacher" ? teacher : admin;
+  const items = role === "student" ? student : role === "teacher" ? admin.filter(([id]) => id !== "stats") : admin;
   return (
     <nav className="mobile-bottom-nav" aria-label="Navigation mobile">
       {items.map(([id, label, icon]) => (
@@ -1445,6 +1531,10 @@ function Topbar({
     if (item.type === "broadcast") { setBroadcastDetail(item); return; }
     onNotificationOpen?.(item);
   }
+  const useMobileNotificationModal = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+  const notificationOverlay = open ? (
+    <div className="top-notification-backdrop" role="presentation" onClick={() => setOpen(false)}><section className="top-notification-panel" role="dialog" aria-modal="true" aria-labelledby="student-notifications-title" onClick={event => event.stopPropagation()}><div className="top-notification-head"><div><strong id="student-notifications-title">Notifications</strong><small>{notifications.length ? `${notifications.length} non lue${notifications.length > 1 ? "s" : ""}` : "Vous êtes à jour"}</small></div><button type="button" className="top-notification-close" aria-label="Fermer les notifications" onClick={() => setOpen(false)}>×</button></div>{notifications.length === 0 ? <div className="top-notification-empty"><span aria-hidden="true">✓</span><strong>Aucune nouvelle notification</strong><p>Nous vous informerons ici des nouveautés concernant vos cours.</p></div> : <>{notifications.length > 1 && <div className="top-notification-actions"><button type="button" onClick={async () => { const current = [...notifications]; try { await Promise.all(current.map(item => markNotificationRead(item.id))); setNotifications(items => items.filter(item => !current.some(readItem => readItem.id === item.id))); } catch (error) { console.error("Failed to mark all notifications as read:", error); }}}>Tout marquer comme lu</button></div>}<div className="top-notification-list">{notifications.map(item => <button type="button" key={item.id} className="top-notification-item" onClick={() => void openNotification(item)}><span className="top-notification-unread-dot" aria-hidden="true"/><span className="top-notification-copy"><strong>{item.type === "broadcast" ? `CAV Madagascar · ${item.title ?? "Annonce"}` : item.message}</strong>{item.type === "broadcast" && <small>{item.message}</small>}<small>{item.createdAt ? item.createdAt.toDate().toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "À l’instant"}</small></span></button>)}</div></>}</section></div>
+  ) : null;
   return (
     <div className={`topbar ${role === "student" ? "student-topbar" : ""}`}>
       <div className="mobile-logo"><Logo /></div>
@@ -1469,7 +1559,7 @@ function Topbar({
       ) : <div className="top-role"><span>{label.toUpperCase()}</span></div>}
       <div className="top-actions">
         <span className="status-dot" /> Connecté
-        {role === "student" && <div className="top-notification-wrap"><button type="button" className="top-notification-button" aria-label="Notifications" onClick={() => setOpen(value => !value)}>🔔{notifications.length > 0 && <span>{notifications.length > 99 ? "99+" : notifications.length}</span>}</button>{open && <div className="top-notification-panel"><div className="top-notification-head"><strong>Notifications</strong><span>{notifications.length}</span></div>{notifications.length === 0 ? <p>Aucune nouvelle notification.</p> : notifications.map(item => <button type="button" key={item.id} className="top-notification-item" onClick={() => void openNotification(item)}><strong>{item.type === "broadcast" ? `CAV Madagascar · ${item.title ?? "Annonce"}` : item.message}</strong><small>{item.type === "broadcast" ? item.message : ""}</small><small>{item.createdAt ? item.createdAt.toDate().toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "À l’instant"}</small></button>)}</div>} {broadcastDetail && <div className="broadcast-detail-backdrop" role="presentation" onClick={() => setBroadcastDetail(null)}><div className="broadcast-detail-modal" role="dialog" aria-modal="true" aria-labelledby="broadcast-detail-title" onClick={event => event.stopPropagation()}><div className="broadcast-detail-brand"><div className="broadcast-preview-icon">CAV</div><div><strong>CAV Madagascar</strong><small>Annonce officielle</small></div><button type="button" className="link-button" onClick={() => setBroadcastDetail(null)}>Fermer</button></div><p className="eyebrow">{broadcastDetail.category ?? "ANNONCE"}</p><h2 id="broadcast-detail-title">{broadcastDetail.title ?? "Annonce CAV"}</h2><div className="broadcast-detail-message">{broadcastDetail.message}</div><button className="primary full" type="button" onClick={() => setBroadcastDetail(null)}>Compris</button></div></div>}</div>}
+        {role === "student" && <div className="top-notification-wrap"><button type="button" className="top-notification-button" aria-label="Notifications" aria-expanded={open} onClick={() => setOpen(value => !value)}>🔔{notifications.length > 0 && <span>{notifications.length > 99 ? "99+" : notifications.length}</span>}</button>{open && (useMobileNotificationModal ? createPortal(notificationOverlay, document.body) : notificationOverlay)} {broadcastDetail && <div className="broadcast-detail-backdrop" role="presentation" onClick={() => setBroadcastDetail(null)}><div className="broadcast-detail-modal" role="dialog" aria-modal="true" aria-labelledby="broadcast-detail-title" onClick={event => event.stopPropagation()}><div className="broadcast-detail-brand"><div className="broadcast-preview-icon">CAV</div><div><strong>CAV Madagascar</strong><small>Annonce officielle</small></div><button type="button" className="link-button" onClick={() => setBroadcastDetail(null)}>Fermer</button></div><p className="eyebrow">{broadcastDetail.category ?? "ANNONCE"}</p><h2 id="broadcast-detail-title">{broadcastDetail.title ?? "Annonce CAV"}</h2><div className="broadcast-detail-message">{broadcastDetail.message}</div><button className="primary full" type="button" onClick={() => setBroadcastDetail(null)}>Compris</button></div></div>}</div>}
         {photoURL ? <img src={photoURL} alt="" className="avatar-image" /> : <div className="avatar">{initials}</div>}
         <strong>{displayName}</strong>
         <button className="link-button top-logout" onClick={onLogout} type="button" aria-label="Se déconnecter">Se déconnecter</button>
@@ -1539,7 +1629,6 @@ function CourseCard({
           {!enrolled && (
             <div className="modern-price-row">
               <strong>{formatPrice(course.price)} Ar</strong>
-              <span>{course.accessDurationDays} jours d'accès</span>
             </div>
           )}
           <div className="modern-course-benefits">
@@ -1603,7 +1692,7 @@ function StudentDashboard({
 }) {
   return (
     <div className="page">
-      <div className="hero">
+      <div className="hero hero-welcome">
         <div>
           <div className="eyebrow">ESPACE ÉTUDIANT</div>
           <h1>
@@ -1758,6 +1847,45 @@ function CoursePage({
   const [commentLoveState, setCommentLoveState] = useState<Record<string, { count: number; loved: boolean }>>({});
   const [commentSaving, setCommentSaving] = useState(false);
   const { profile: studentProfile } = useAuth();
+
+  // Local curriculum views participate in browser history too. This makes
+  // browser Back/Forward and native mobile swipe gestures behave like the
+  // in-app navigation without changing the URL or interfering with app-level history.
+  const pushCourseViewHistory = (subjectId: string, nodeId: string = "") => {
+    const currentState = window.history.state && typeof window.history.state === "object"
+      ? window.history.state as Record<string, unknown>
+      : {};
+    window.history.pushState(
+      { ...currentState, __cavCourseView: true, subjectId, nodeId, courseId: course?.id ?? null },
+      "",
+      window.location.href,
+    );
+  };
+
+  const leaveCourseView = (fallback: () => void) => {
+    const state = window.history.state as { __cavCourseView?: boolean; courseId?: string | null } | null;
+    if (state?.__cavCourseView && (!state.courseId || state.courseId === course?.id)) {
+      window.history.back();
+      return;
+    }
+    fallback();
+  };
+
+  useEffect(() => {
+    const onCourseViewPopState = (event: PopStateEvent) => {
+      const state = event.state as { __cavCourseView?: boolean; subjectId?: string; nodeId?: string; courseId?: string | null } | null;
+      if (state?.__cavCourseView && (!state.courseId || state.courseId === course?.id)) {
+        setSelectedSubjectId(state.subjectId ?? "");
+        setSelectedNodeId(state.nodeId ?? "");
+      } else {
+        // Returning to the app-level history entry means leaving this local view.
+        setSelectedSubjectId("");
+        setSelectedNodeId("");
+      }
+    };
+    window.addEventListener("popstate", onCourseViewPopState);
+    return () => window.removeEventListener("popstate", onCourseViewPopState);
+  }, [course?.id]);
 
   useEffect(() => {
     if (!initialLessonId || !course || !nodes.length || selectedNodeId === initialLessonId) return;
@@ -2055,6 +2183,7 @@ function CoursePage({
 
   async function openLesson(node: ContentNode) {
     if (!course) return;
+    if (selectedNodeId !== node.id) pushCourseViewHistory(selectedSubjectId, node.id);
     setSelectedNodeId(node.id);
     setBlocks([]);
     setLessonQuestions([]);
@@ -2093,6 +2222,36 @@ function CoursePage({
   const topicForLesson = (lesson: ContentNode) => topics.find((topic) => topic.id === lesson.parentId);
   const totalLessons = lessons.length;
   const selectedSubject = subjects.find((subject) => subject.id === selectedSubjectId);
+  // Keep chapter navigation in the same order students see in the subject outline:
+  // topics first (by topic order), then each topic's lessons (by lesson order),
+  // followed by lessons that are not attached to a topic.
+  const navigationLessons = (() => {
+    if (!selectedNode) return [] as ContentNode[];
+    const subjectNodes = nodes.filter((node) => node.courseSubjectId === selectedNode.courseSubjectId);
+    const subjectTopics = subjectNodes.filter((node) => node.type === "topic").sort((a, b) => a.order - b.order);
+    const subjectLessons = subjectNodes.filter((node) => node.type !== "topic");
+    const ordered: ContentNode[] = subjectTopics.flatMap((topic) =>
+      subjectLessons.filter((lesson) => lesson.parentId === topic.id).sort((a, b) => a.order - b.order),
+    );
+    ordered.push(...subjectLessons
+      .filter((lesson) => !lesson.parentId || !subjectTopics.some((topic) => topic.id === lesson.parentId))
+      .sort((a, b) => a.order - b.order));
+    return ordered;
+  })();
+  const currentLessonIndex = navigationLessons.findIndex((lesson) => lesson.id === selectedNodeId);
+  const navigateLesson = (lesson: ContentNode) => {
+    setCommentText("");
+    setReplyText("");
+    setReplyingToId(null);
+    setEditingCommentId(null);
+    setEditingCommentText("");
+    setCommentsOpen(false);
+    setOpenCommentMenuId(null);
+    setEmojiPickerTarget(null);
+    setLessonComments([]);
+    void openLesson(lesson);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   if (!course)
     return (
@@ -2169,6 +2328,27 @@ function CoursePage({
             <h3>Cette leçon ne contient pas encore de contenu publié.</h3>
             <p>Le contenu sera disponible dès que son contenu pédagogique sera publié.</p>
           </div>
+        )}
+        {!lessonLoading && navigationLessons.length > 1 && currentLessonIndex >= 0 && (
+          <nav className="lesson-chapter-navigation" aria-label="Navigation entre les chapitres">
+            <button
+              type="button"
+              className="lesson-chapter-arrow lesson-chapter-previous"
+              disabled={currentLessonIndex === 0}
+              onClick={() => navigateLesson(navigationLessons[currentLessonIndex - 1])}
+              aria-label="Aller au chapitre précédent"
+              title={currentLessonIndex === 0 ? "Vous êtes au premier chapitre" : `Précédent : ${navigationLessons[currentLessonIndex - 1].title}`}
+            ><span aria-hidden="true">←</span><span className="lesson-chapter-arrow-label">Précédent</span></button>
+            <span className="lesson-chapter-position">Chapitre {currentLessonIndex + 1} sur {navigationLessons.length}</span>
+            <button
+              type="button"
+              className="lesson-chapter-arrow lesson-chapter-next"
+              disabled={currentLessonIndex === navigationLessons.length - 1}
+              onClick={() => navigateLesson(navigationLessons[currentLessonIndex + 1])}
+              aria-label="Aller au chapitre suivant"
+              title={currentLessonIndex === navigationLessons.length - 1 ? "Vous êtes au dernier chapitre" : `Suivant : ${navigationLessons[currentLessonIndex + 1].title}`}
+            ><span className="lesson-chapter-arrow-label">Suivant</span><span aria-hidden="true">→</span></button>
+          </nav>
         )}
         {!lessonLoading && <>
         {lessonQuestions.length > 0 && (
@@ -2284,7 +2464,7 @@ function CoursePage({
           </div>
           {selectedSubject ? (
             <div className="student-subject-detail">
-              <button className="back" onClick={() => setSelectedSubjectId("")}>← Retour aux matières</button>
+              <button className="back" onClick={() => leaveCourseView(() => { setSelectedNodeId(""); setSelectedSubjectId(""); })}>← Retour aux matières</button>
               <div className="student-subject-detail-head">
                 <div>
                   <div className="eyebrow">MATIÈRE</div>
@@ -2350,7 +2530,7 @@ function CoursePage({
               {subjects.map((subject) => {
                 const subjectLessons = nodes.filter((node) => node.courseSubjectId === subject.id && node.type !== "topic");
                 return (
-                  <button className="student-subject-list-card" key={subject.id} onClick={() => setSelectedSubjectId(subject.id)}>
+                  <button className="student-subject-list-card" key={subject.id} onClick={() => { pushCourseViewHistory(subject.id); setSelectedNodeId(""); setSelectedSubjectId(subject.id); }}>
                     <div>
                       <div className="eyebrow">MATIÈRE</div>
                       <h3>{subject.title}</h3>
@@ -2754,7 +2934,7 @@ function EnrollmentFlow({
           <div className="pending-icon">✓</div>
           <div className="eyebrow">ACCÈS ACTIVÉ</div>
           <h1>Vous êtes déjà inscrit.</h1>
-          <p>Votre accès à <strong>{course.title}</strong> est actif pour <strong>{existing?.expiresAt ? `${Math.max(0, Math.ceil((existing.expiresAt.getTime() - Date.now()) / 86400000))} jour(s) restant(s)` : `${course.accessDurationDays} jour(s)`}</strong>.</p>
+          <p>Votre accès à <strong>{course.title}</strong> est actif{existing?.expiresAt ? <> pour <strong>{Math.max(0, Math.ceil((existing.expiresAt.getTime() - Date.now()) / 86400000))} jour(s) restant(s)</strong></> : ''}.</p>
           {existing?.expiresAt && <div className="catalog-access-status"><span>Expiration</span><strong>{existing.expiresAt.toLocaleDateString("fr-FR", { dateStyle: "long" })}</strong></div>}
           <button className="primary" onClick={() => setPage("course")}>
             Accéder à ma préparation <Icon name="arrow" />
@@ -2801,7 +2981,6 @@ function EnrollmentFlow({
           <div className="price-box">
             <span>Accès à la préparation</span>
             <strong>{formatPrice(course.price)} Ar</strong>
-            <small>{course.accessDurationDays} jours d’accès après validation</small>
           </div>
         </div>
         <div className="enroll-grid">
@@ -2847,7 +3026,7 @@ function EnrollmentFlow({
           <div className="eyebrow">ÉTAPE 2 · PAIEMENT</div>
           <h1>Effectuez votre paiement</h1>
           <p>
-            Payez le montant de <strong>{formatPrice(course.price)} Ar</strong> avec l'un des moyens disponibles. Votre accès sera valable <strong>{course.accessDurationDays} jours</strong> après validation. Puis saisissez la référence de transaction.
+            Payez le montant de <strong>{formatPrice(course.price)} Ar</strong> avec l'un des moyens disponibles, puis saisissez la référence de transaction.
           </p>
           <div className="payment-methods">
             {(
@@ -2920,7 +3099,7 @@ function EnrollmentFlow({
         <div className="eyebrow">DEMANDE ENREGISTRÉE</div>
         <h1>Votre inscription est en attente.</h1>
         <p>
-          Votre référence <strong>{reference}</strong> a bien été envoyée. L'administration va vérifier le paiement. Après validation, vous aurez <strong>{course.accessDurationDays} jours</strong> d’accès à cette préparation.
+          Votre référence <strong>{reference}</strong> a bien été envoyée. L'administration va vérifier le paiement avant d’activer votre accès à cette préparation.
         </p>
         <div className="status-timeline">
           <div className="active">
@@ -3011,11 +3190,8 @@ function AdminOverview({
           </div>
           {courses.length ? (
             courses.map((c) => (
-              <div className="admin-course" key={c.id}>
-                <div className={`tiny-cover ${c.color}`}>
-                  <Icon name="book" />
-                </div>
-                <div>
+              <div className="admin-course admin-course-compact" key={c.id}>
+                <div className="admin-course-copy">
                   <strong>{c.title}</strong>
                   <span>{c.subjects.length} {c.subjects.length === 1 ? "matière" : "matières"}</span>
                 </div>
@@ -3057,8 +3233,18 @@ function AdminOverview({
               </div>
             ))
           ) : (
-            <div className="empty-state">Aucun paiement en attente.</div>
+            <div className="admin-payments-empty">
+              <div className="admin-empty-icon"><Icon name="check" /></div>
+              <strong>Aucune inscription à traiter</strong>
+              <p>Tous les paiements soumis ont été vérifiés. Les nouvelles demandes apparaîtront ici.</p>
+              <span className="admin-clear-status"><i /> Tout est à jour</span>
+            </div>
           )}
+          <div className="admin-quick-actions">
+            <div className="admin-quick-actions-title">Accès rapides</div>
+            <button onClick={() => setPage("enrollments")}><span className="admin-quick-icon blue"><Icon name="file" /></span><span><strong>Gérer les inscriptions</strong><small>Consulter les demandes et paiements</small></span><b>→</b></button>
+            <button onClick={() => setPage("users")}><span className="admin-quick-icon violet"><Icon name="users" /></span><span><strong>Voir les utilisateurs</strong><small>Suivre les comptes étudiants</small></span><b>→</b></button>
+          </div>
         </section>
       </div>
     </div>
@@ -3818,9 +4004,49 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
   const [questionExplanation, setQuestionExplanation] = useState("");
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [showNodeForm, setShowNodeForm] = useState(false);
+  const [openNodeMenuId, setOpenNodeMenuId] = useState<string | null>(null);
+  const [pendingNodeDeletion, setPendingNodeDeletion] = useState<ContentNode | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+
+  function formatNodeNumber(index: number, style: ContentNumberingStyle = "alpha", parentIndex?: number) {
+    const n = index + 1;
+    if (style === "alpha") return `${n <= 26 ? String.fromCharCode(96 + n) : n})`;
+    if (style === "roman") {
+      const vals: [number,string][] = [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],[50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]];
+      let rest=n, roman=""; for (const [value,symbol] of vals) while(rest>=value){roman+=symbol;rest-=value;} return `${roman}.`;
+    }
+    if (style === "hierarchical") return `${(parentIndex ?? 0) + 1}.${n}`;
+    return `${n}.`;
+  }
+
+  async function changeSiblingNumbering(siblings: ContentNode[], style: ContentNumberingStyle) {
+    if (!user || !siblings.length) return;
+    setSaving(true); setError(""); setMessage("");
+    try {
+      await Promise.all(siblings.filter(item => item.sharedKey).map(item => updateSharedContentNode(item.sharedKey!, { numberingStyle: style }, user.uid)));
+      await refreshSubjectData(subjectId);
+      setMessage("Style de numérotation enregistré.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible d’enregistrer la numérotation."); }
+    finally { setSaving(false); }
+  }
+
+  async function reorderSiblings(siblings: ContentNode[], draggedId: string, targetId: string) {
+    if (!user || draggedId === targetId) return;
+    const ordered = [...siblings].sort((a,b)=>a.order-b.order);
+    const from = ordered.findIndex(item=>item.id===draggedId), to = ordered.findIndex(item=>item.id===targetId);
+    if (from < 0 || to < 0) return;
+    const [moved] = ordered.splice(from,1); ordered.splice(to,0,moved);
+    setNodes(current => current.map(item => { const idx=ordered.findIndex(entry=>entry.id===item.id); return idx<0?item:{...item,order:idx}; }));
+    setSaving(true); setError(""); setMessage("");
+    try {
+      await Promise.all(ordered.map((item,index)=>item.sharedKey ? updateSharedContentNode(item.sharedKey,{order:index},user.uid) : Promise.resolve()));
+      await refreshSubjectData(subjectId); setMessage("Ordre du programme mis à jour.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible de réorganiser le programme."); await refreshSubjectData(subjectId); }
+    finally { setSaving(false); setDraggedNodeId(null); }
+  }
 
   async function refreshSubjectData(id = subjectId) {
     if (!id) { setAssociations([]); setNodes([]); setNodeId(""); return; }
@@ -3888,6 +4114,43 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
     setShowNodeForm(false);
   }
 
+  function editNodeDetails(node: ContentNode) {
+    setOpenNodeMenuId(null);
+    setNodeId(node.id);
+    setNodeTitle(node.title);
+    setNodeDescription(node.description ?? "");
+    setNodeImageUrl(node.imageUrl ?? "");
+    setNodeImageFile(null);
+    setNodeImagePreview(node.imageUrl ?? "");
+    setNodeImagePosition(node.imagePosition ?? "center");
+    setEditingNodeKey(node.sharedKey ?? null);
+    setParentId(node.parentId ?? "");
+    setNodeType(node.type);
+    setShowNodeForm(true);
+    if (node.parentId) setExpandedTopics(current => ({ ...current, [node.parentId!]: true }));
+  }
+
+  async function removeNodePermanently(node: ContentNode) {
+    const isTopic = !node.parentId;
+    const children = isTopic ? nodes.filter(item => item.parentId === node.id) : [];
+    setSaving(true); setError(""); setMessage(""); setOpenNodeMenuId(null);
+    try {
+      for (const child of children) {
+        if (child.sharedKey) await deleteSharedContentNode(child.sharedKey);
+      }
+      if (node.sharedKey) await deleteSharedContentNode(node.sharedKey);
+      await refreshSubjectData(subjectId);
+      if (children.some(child => child.id === nodeId) || node.id === nodeId) {
+        setNodeId(""); setShowNodeForm(false); resetBlock();
+      }
+      setMessage(isTopic ? "Thème et leçons supprimés définitivement." : "Leçon supprimée définitivement.");
+      setPendingNodeDeletion(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Impossible de supprimer cet élément.");
+      setPendingNodeDeletion(null);
+    } finally { setSaving(false); }
+  }
+
   function handleNodeImageChange(file: File | null) {
     setError("");
     if (!file) {
@@ -3938,6 +4201,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
     setQuestionCorrect("a"); setQuestionExplanation("");
   }
   function selectNode(node: ContentNode) {
+    setOpenNodeMenuId(null);
     setShowQuestionBank(false); setNodeId(node.id); setEditingNodeKey(node.sharedKey ?? null); setNodeTitle(node.title); setNodeDescription(node.description ?? ""); setNodeImageUrl(node.imageUrl ?? ""); setNodeImageFile(null); setNodeImagePreview(node.imageUrl ?? ""); setNodeImagePosition(node.imagePosition ?? "center"); setNodeType(node.type); setParentId(node.parentId ?? ""); setEditingBlockKey(null); setBlockHtml(""); setPreview(false);
     if (node.parentId) setExpandedTopics(current => ({...current, [node.parentId!]: true}));
   }
@@ -3955,7 +4219,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
         await updateSharedContentNode(editingNodeKey, { title: nodeTitle.trim(), description: nodeDescription.trim(), type, ...(parentId ? {} : { imagePosition: nodeImagePosition, status: "published" }) }, user.uid);
       } else {
         const parent = parentId ? nodes.find(item => item.id === parentId) : undefined;
-        const created = await createSharedContentNode({ subjectId, parentSharedKey: parent?.sharedKey, type, title: nodeTitle.trim(), description: nodeDescription.trim(), order: nodes.filter(item => (parentId ? item.parentId === parentId : !item.parentId)).length, userId: user.uid, imagePosition: parentId ? undefined : nodeImagePosition });
+        const created = await createSharedContentNode({ subjectId, parentSharedKey: parent?.sharedKey, type, title: nodeTitle.trim(), description: nodeDescription.trim(), order: nodes.filter(item => (parentId ? item.parentId === parentId : !item.parentId)).length, numberingStyle: nodes.find(item => (parentId ? item.parentId === parentId : !item.parentId))?.numberingStyle ?? (parentId ? "alpha" : "numeric"), userId: user.uid, imagePosition: parentId ? undefined : nodeImagePosition });
         if (!parentId) await updateSharedContentNode(created.sharedKey, { status: "published" }, user.uid);
         key = created.sharedKey;
         setNodeId(created.nodeIds[0] ?? "");
@@ -4031,10 +4295,11 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
         {subjectId && <>
           <div className="association-note" style={{marginTop:16}}><strong>{associations.length} concours utilisent cette matière.</strong></div>
           <button className="outline small-btn" style={{marginTop:12,width:"100%"}} onClick={()=>{setNodeId("");setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setNodeImageUrl("");setNodeImageFile(null);setNodeImagePreview("");setNodeImagePosition("center");setParentId("");setNodeType("topic");setShowNodeForm(true);}}>+ Nouveau thème</button>
+          <div className="curriculum-numbering-control"><label htmlFor="topic-numbering-style">Numérotation des thèmes</label><select id="topic-numbering-style" className="fake-input" value={rootNodes[0]?.numberingStyle ?? "numeric"} onChange={e=>void changeSiblingNumbering(rootNodes,e.target.value as ContentNumberingStyle)}><option value="numeric">1, 2, 3…</option><option value="alpha">a), b), c)…</option><option value="roman">I, II, III…</option><option value="hierarchical">1.1, 1.2…</option></select></div>
           <div className="content-tree-simple">
-            {rootNodes.map((topic,index)=>{const lessons=nodes.filter(n=>n.parentId===topic.id).sort((a,b)=>a.order-b.order);const open=expandedTopics[topic.id] ?? false;return <div key={topic.id} className="content-tree-topic">
-              <button className={`tree-item ${nodeId===topic.id?"active":""}`} onClick={()=>openTopic(topic)}><span>{index+1}</span><div><strong>{topic.title}</strong><small>{lessons.length} leçon{lessons.length!==1?"s":""}</small></div><b>{open?"⌃":"⌄"}</b></button>
-              {open && <div className="content-tree-lessons">{lessons.map((lesson,i)=><button key={lesson.id} className={`tree-item lesson-tree-item ${nodeId===lesson.id?"active":""}`} onClick={()=>selectNode(lesson)}><span>{String.fromCharCode(97+i)})</span><div><strong>{lesson.title}</strong><small>{lesson.status === "published" ? "Publié" : "Brouillon"}</small></div></button>)}<button className="tree-add-lesson" onClick={()=>{setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setNodeImageUrl("");setNodeImageFile(null);setNodeImagePreview("");setNodeImagePosition("center");setParentId(topic.id);setNodeId(topic.id);setNodeType("chapter");setShowNodeForm(true);}}>+ Ajouter une leçon</button></div>}
+            {rootNodes.map((topic,index)=>{const lessons=nodes.filter(n=>n.parentId===topic.id).sort((a,b)=>a.order-b.order);const open=expandedTopics[topic.id] ?? false;return <div key={topic.id} className="content-tree-topic" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(draggedNodeId)void reorderSiblings(rootNodes,draggedNodeId,topic.id);}}>
+              <div draggable onDragStart={()=>setDraggedNodeId(topic.id)} onDragEnd={()=>setDraggedNodeId(null)} className={`tree-item tree-item-with-menu curriculum-draggable ${nodeId===topic.id?"active":""}`}><button className="tree-item-main" onClick={()=>openTopic(topic)}><span>{formatNodeNumber(index,rootNodes[0]?.numberingStyle ?? "numeric")}</span><div><strong>{topic.title}</strong><small>{lessons.length} leçon{lessons.length!==1?"s":""}</small></div></button><button type="button" className="node-menu-trigger" aria-label={`Options du thème ${topic.title}`} aria-expanded={openNodeMenuId===topic.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===topic.id?null:topic.id);}}>•••</button>{openNodeMenuId===topic.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(topic)}>Modifier</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(topic);}}>Supprimer définitivement</button></div>}</div>
+              {open && <div className="content-tree-lessons"><div className="curriculum-numbering-control lesson-numbering-control"><label>Numérotation des leçons</label><select className="fake-input" value={lessons[0]?.numberingStyle ?? "alpha"} onChange={e=>void changeSiblingNumbering(lessons,e.target.value as ContentNumberingStyle)}><option value="alpha">a), b), c)…</option><option value="numeric">1, 2, 3…</option><option value="roman">I, II, III…</option><option value="hierarchical">{index+1}.1, {index+1}.2…</option></select></div>{lessons.map((lesson,i)=><div key={lesson.id} draggable onDragStart={()=>setDraggedNodeId(lesson.id)} onDragEnd={()=>setDraggedNodeId(null)} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(draggedNodeId)void reorderSiblings(lessons,draggedNodeId,lesson.id);}} className={`tree-item tree-item-with-menu lesson-tree-item curriculum-draggable ${nodeId===lesson.id?"active":""}`}><button className="tree-item-main" onClick={()=>selectNode(lesson)}><span>{formatNodeNumber(i,lessons[0]?.numberingStyle ?? "alpha",index)}</span><div><strong>{lesson.title}</strong><small>{lesson.status === "published" ? "Publié" : "Brouillon"}</small></div></button><button type="button" className="node-menu-trigger" aria-label={`Options de la leçon ${lesson.title}`} aria-expanded={openNodeMenuId===lesson.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===lesson.id?null:lesson.id);}}>•••</button>{openNodeMenuId===lesson.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(lesson)}>Modifier</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(lesson);}}>Supprimer définitivement</button></div>}</div>)}<button className="tree-add-lesson" onClick={()=>{setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setNodeImageUrl("");setNodeImageFile(null);setNodeImagePreview("");setNodeImagePosition("center");setParentId(topic.id);setNodeId(topic.id);setNodeType("chapter");setShowNodeForm(true);}}>+ Ajouter une leçon</button></div>}
             </div>})}
           </div>
         </>}
@@ -4054,11 +4319,20 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
           </>}
         </> : <>
           <div className="lesson-workspace-head"><div><span className="pill">THÈME</span><h2>{selectedNode.title}</h2><small>{childNodes.length} leçon{childNodes.length!==1?"s":""}</small></div><button className="primary small-btn" onClick={()=>{setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setParentId(selectedNode.id);setNodeId(selectedNode.id);setNodeType("chapter");setShowNodeForm(true);}}>+ Ajouter une leçon</button></div>
-          <div className="topic-lesson-grid">{childNodes.length?childNodes.map((lesson,index)=><button className="topic-lesson-card" key={lesson.id} onClick={()=>selectNode(lesson)}><span>{String.fromCharCode(97+index)})</span><strong>{lesson.title}</strong><small>{lesson.status === "published" ? "Publié" : "Brouillon"}</small></button>):<div className="empty-state">Ce thème ne contient encore aucune leçon.</div>}</div>
+          <div className="topic-lesson-grid">{childNodes.length?childNodes.map((lesson,index)=><button className="topic-lesson-card" key={lesson.id} onClick={()=>selectNode(lesson)}><span>{formatNodeNumber(index,childNodes[0]?.numberingStyle ?? "alpha",rootNodes.findIndex(item=>item.id===selectedNode.id))}</span><strong>{lesson.title}</strong><small>{lesson.status === "published" ? "Publié" : "Brouillon"}</small></button>):<div className="empty-state">Ce thème ne contient encore aucune leçon.</div>}</div>
         </>}
         {(selectedNode && !selectedNode.parentId) && <div className="editor-actions"><button className="outline" onClick={()=>{setNodeTitle(selectedNode.title);setNodeDescription(selectedNode.description??"");setNodeImageUrl(selectedNode.imageUrl??"");setNodeImageFile(null);setNodeImagePreview(selectedNode.imageUrl??"");setNodeImagePosition(selectedNode.imagePosition??"center");setEditingNodeKey(selectedNode.sharedKey??null);setParentId("");setNodeType("topic");setShowNodeForm(true);}}>Modifier le thème</button></div>}
       </div>
     </div>
+    {pendingNodeDeletion && <div className="cav-confirm-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget && !saving)setPendingNodeDeletion(null);}}>
+      <section className="cav-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cav-delete-title" aria-describedby="cav-delete-description">
+        <div className="cav-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5m0 3h.01M10.3 3.9 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3l-7.5-13.1a2 2 0 0 0-3.4 0Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+        <span className="cav-confirm-eyebrow">CONFIRMATION REQUISE</span>
+        <h2 id="cav-delete-title">Supprimer {pendingNodeDeletion.parentId ? "cette leçon" : "ce thème"} ?</h2>
+        <p id="cav-delete-description">{pendingNodeDeletion.parentId ? <>La leçon <strong>« {pendingNodeDeletion.title} »</strong> sera supprimée définitivement.</> : <>Le thème <strong>« {pendingNodeDeletion.title} »</strong> ainsi que toutes ses leçons seront supprimés définitivement.</>} Cette action est irréversible.</p>
+        <div className="cav-confirm-actions"><button type="button" className="cav-confirm-cancel" disabled={saving} onClick={()=>setPendingNodeDeletion(null)}>Annuler</button><button type="button" className="cav-confirm-delete" disabled={saving} onClick={()=>{if(pendingNodeDeletion)void removeNodePermanently(pendingNodeDeletion);}}><span aria-hidden="true">{saving ? "…" : "⌫"}</span>{saving ? "Suppression…" : "Supprimer définitivement"}</button></div>
+      </section>
+    </div>}
   </div>;
 }
 
@@ -4399,7 +4673,7 @@ function ProfilePage({ role, displayName, userEmail }: { role: Role; displayName
   }, [role]);
 
   async function saveMaintenance() {
-    if (role !== "admin") return;
+    if (role !== "admin" && role !== "teacher") return;
     setMaintenanceSaving(true); setError(""); setMessage("");
     try {
       await setDoc(doc(getFirebaseFirestore(), "systemSettings", "maintenance"), {
@@ -4474,7 +4748,7 @@ function ProfilePage({ role, displayName, userEmail }: { role: Role; displayName
       </div>
       <div className="editor-actions"><button className="primary" disabled={saving} onClick={() => void save()}>{saving ? "Enregistrement..." : "Enregistrer"}</button></div>
     </div>
-    {role === "admin" && (
+    {(role === "admin" || role === "teacher") && (
       <section className="panel maintenance-admin-card">
         <div className="maintenance-admin-head">
           <div><div className="eyebrow">SERVICE</div><h2>Maintenance de CAV</h2><p>Affichez un message clair aux étudiants et aux visiteurs lorsque CAV est temporairement en maintenance.</p></div>
@@ -4499,7 +4773,9 @@ type AdminStudentRow = {
   status: "active" | "suspended";
   createdAt?: Date;
   courseNames: string[];
+  courseIds: string[];
   courseHistoryNames: string[];
+  role: "student" | "content_manager";
 };
 
 function AdminUsers() {
@@ -4509,9 +4785,15 @@ function AdminUsers() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [courseFilter, setCourseFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
+  const [availableCourses, setAvailableCourses] = useState<Array<{ id: string; title: string }>>([]);
   const [exporting, setExporting] = useState<"excel" | "word" | "pdf" | null>(null);
   const [selectedHistoryStudent, setSelectedHistoryStudent] = useState<AdminStudentRow | null>(null);
   const [selectedActiveStudent, setSelectedActiveStudent] = useState<AdminStudentRow | null>(null);
+  const [selectedRoleStudent, setSelectedRoleStudent] = useState<AdminStudentRow | null>(null);
+  const [roleDraft, setRoleDraft] = useState<"student" | "content_manager">("student");
+  const [savingRole, setSavingRole] = useState(false);
 
   useEffect(() => {
     let usersSnapshot: Array<{ id: string; data: Record<string, unknown> }> = [];
@@ -4526,6 +4808,8 @@ function AdminUsers() {
     const rebuild = () => {
       if (!usersReady || !enrollmentsReady || !historyReady || !coursesReady) return;
       const courseMap = new Map(coursesSnapshot.map(course => [course.id, course.title]));
+      setAvailableCourses(coursesSnapshot.slice().sort((a, b) => a.title.localeCompare(b.title, "fr", { sensitivity: "base" })));
+      const courseIdsByUser = new Map<string, string[]>();
       const namesByUser = new Map<string, string[]>();
       const historyNamesByUser = new Map<string, string[]>();
       for (const enrollment of enrollmentsSnapshot) {
@@ -4538,6 +4822,9 @@ function AdminUsers() {
         const courseId = String(enrollment.courseId ?? "");
         const title = courseMap.get(courseId);
         if (!userId || !title) continue;
+        const currentIds = courseIdsByUser.get(userId) ?? [];
+        if (!currentIds.includes(courseId)) currentIds.push(courseId);
+        courseIdsByUser.set(userId, currentIds);
         const current = namesByUser.get(userId) ?? [];
         if (!current.includes(title)) current.push(title);
         namesByUser.set(userId, current);
@@ -4553,17 +4840,19 @@ function AdminUsers() {
       }
 
       const rows = usersSnapshot
-        .filter(item => item.data.role === "student")
+        .filter(item => item.data.role === "student" || item.data.role === "content_manager")
         .map(item => ({
           uid: item.id,
           displayName: String(item.data.displayName ?? "Utilisateur"),
           email: String(item.data.email ?? ""),
           phone: String(item.data.phone ?? ""),
           status: item.data.status === "suspended" ? "suspended" as const : "active" as const,
+          role: item.data.role === "content_manager" ? "content_manager" as const : "student" as const,
           createdAt: item.data.createdAt && typeof item.data.createdAt === "object" && "toDate" in item.data.createdAt
             ? (item.data.createdAt as { toDate: () => Date }).toDate()
             : undefined,
           courseNames: (namesByUser.get(item.id) ?? []).sort((a, b) => a.localeCompare(b, "fr")),
+          courseIds: courseIdsByUser.get(item.id) ?? [],
           courseHistoryNames: (historyNamesByUser.get(item.id) ?? []).sort((a, b) => a.localeCompare(b, "fr")),
         }))
         .sort((a, b) => a.displayName.localeCompare(b.displayName, "fr", { sensitivity: "base" }));
@@ -4622,16 +4911,26 @@ function AdminUsers() {
 
   const filtered = users.filter(item => {
     const needle = search.trim().toLocaleLowerCase("fr-FR");
-    if (!needle) return true;
-    return [item.displayName, item.email, item.phone, ...item.courseNames, ...item.courseHistoryNames].some(value => value.toLocaleLowerCase("fr-FR").includes(needle));
+    const matchesSearch = !needle || [item.displayName, item.email, item.phone, ...item.courseNames, ...item.courseHistoryNames].some(value => value.toLocaleLowerCase("fr-FR").includes(needle));
+    const matchesCourse = courseFilter === "all" || item.courseIds.includes(courseFilter);
+    const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+    return matchesSearch && matchesCourse && matchesStatus;
   });
+
+  function resetFilters() {
+    setSearch("");
+    setCourseFilter("all");
+    setStatusFilter("all");
+  }
 
   async function runExport(kind: "excel" | "word" | "pdf") {
     setExporting(kind); setError("");
     try {
-      if (kind === "excel") await exportStudentsToExcel(filtered);
-      if (kind === "word") await exportStudentsToWord(filtered);
-      if (kind === "pdf") await exportStudentsToPdf(filtered);
+      // Export formats are used only on demand; load their implementation when requested.
+      const exports = await import("./lib/export/userExports");
+      if (kind === "excel") await exports.exportStudentsToExcel(filtered);
+      if (kind === "word") await exports.exportStudentsToWord(filtered);
+      if (kind === "pdf") await exports.exportStudentsToPdf(filtered);
     } catch (e) {
       console.error(e);
       setError("Impossible de générer l’export. Veuillez réessayer.");
@@ -4640,6 +4939,33 @@ function AdminUsers() {
 
   const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]?.toUpperCase()).join("") || "U";
   const openHistory = (item: AdminStudentRow) => setSelectedHistoryStudent(item);
+  const openRoleEditor = (item: AdminStudentRow) => {
+    setSelectedRoleStudent(item);
+    setRoleDraft(item.role);
+    setError("");
+  };
+
+  async function saveUserRole() {
+    if (!selectedRoleStudent || roleDraft === selectedRoleStudent.role) {
+      setSelectedRoleStudent(null);
+      return;
+    }
+    setSavingRole(true);
+    setError("");
+    try {
+      const { httpsCallable } = await import("firebase/functions");
+      const { getFirebaseFunctions } = await import("./lib/firebase/functions");
+      const setUserRole = httpsCallable<{ userId: string; role: "student" | "content_manager" }, { success: boolean; role: "student" | "content_manager" }>(getFirebaseFunctions(), "setUserRole");
+      await setUserRole({ userId: selectedRoleStudent.uid, role: roleDraft });
+      setUsers(current => current.map(user => user.uid === selectedRoleStudent.uid ? { ...user, role: roleDraft } : user));
+      setSelectedRoleStudent(null);
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Impossible de modifier le rôle de ce compte.");
+    } finally {
+      setSavingRole(false);
+    }
+  }
   const openActiveCourses = (item: AdminStudentRow) => setSelectedActiveStudent(item);
 
   return <div className="page">
@@ -4655,12 +4981,31 @@ function AdminUsers() {
       </div>
     </div>
     {error && <div className="form-error">{error}</div>}
-    <div className="users-toolbar"><input className="fake-input users-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un étudiant, email, téléphone..." /><span>{filtered.length} étudiant{filtered.length > 1 ? "s" : ""}</span></div>
+    <div className="users-filter-panel">
+      <div className="users-filter-row">
+        <label className="users-filter-search">Rechercher
+          <input className="fake-input users-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Nom, email, téléphone..." />
+        </label>
+        <label>Concours
+          <select className="fake-input users-filter-control" value={courseFilter} onChange={e => setCourseFilter(e.target.value)}>
+            <option value="all">Tous les concours</option>
+            {availableCourses.map(course => <option value={course.id} key={course.id}>{course.title}</option>)}
+          </select>
+        </label>
+        <label>Statut
+          <select className="fake-input users-filter-control" value={statusFilter} onChange={e => setStatusFilter(e.target.value as "all" | "active" | "suspended")}>
+            <option value="all">Tous</option><option value="active">Actif</option><option value="suspended">Suspendu</option>
+          </select>
+        </label>
+        <button type="button" className="outline small-btn users-reset-filters" onClick={resetFilters}>Réinitialiser</button>
+      </div>
+      <div className="users-filter-summary"><span>{filtered.length} étudiant{filtered.length > 1 ? "s" : ""} affiché{filtered.length > 1 ? "s" : ""} sur {users.length}</span>{courseFilter !== "all" && <span className="users-active-filter">Concours : {availableCourses.find(course => course.id === courseFilter)?.title ?? "Sélectionné"}</span>}</div>
+    </div>
     <div className="panel users-table-panel">
       {loading ? <div className="empty-state">Chargement...</div> : filtered.length === 0 ? <div className="empty-state">Aucun étudiant trouvé.</div> : <div className="users-table">
         <div className="users-table-head"><span>Étudiant</span><span>Email</span><span>Téléphone</span><span>Concours actifs</span><span>Historique</span><span>Membre depuis</span><span>Statut</span><span>Actions</span></div>
         {filtered.map(item => <div className="users-table-row" key={item.uid}>
-          <div className="user-identity"><div className="avatar">{initials(item.displayName)}</div><strong>{item.displayName}</strong></div>
+          <button type="button" className="user-identity user-identity-button" onClick={() => openRoleEditor(item)} aria-label={`Modifier le rôle de ${item.displayName}`}><div className="avatar">{initials(item.displayName)}</div><strong>{item.displayName}</strong></button>
           <div className="user-cell muted-cell">{item.email || "-"}</div>
           <div className="user-cell">{item.phone || <span className="missing-value">Non renseigné</span>}</div>
           <div className="user-courses-cell">
@@ -4679,6 +5024,23 @@ function AdminUsers() {
         </div>)}
       </div>}
     </div>
+    {selectedRoleStudent && <div className="student-history-backdrop" role="presentation" onClick={() => !savingRole && setSelectedRoleStudent(null)}>
+      <div className="student-history-modal user-role-modal" role="dialog" aria-modal="true" aria-labelledby="user-role-title" onClick={event => event.stopPropagation()}>
+        <div className="student-history-head">
+          <div><div className="eyebrow">GESTION DU COMPTE</div><h2 id="user-role-title">{selectedRoleStudent.displayName}</h2><p>{selectedRoleStudent.email || "Adresse e-mail non renseignée"}</p></div>
+          <button type="button" className="link-button" disabled={savingRole} onClick={() => setSelectedRoleStudent(null)}>Fermer</button>
+        </div>
+        <div className="user-role-form">
+          <label htmlFor="user-role-select">Rôle du compte</label>
+          <select id="user-role-select" className="fake-input users-filter-control" value={roleDraft} onChange={event => setRoleDraft(event.target.value as "student" | "content_manager")} disabled={savingRole}>
+            <option value="student">Étudiant</option>
+            <option value="content_manager">Gestionnaire de contenu</option>
+          </select>
+          <p className="user-role-help">Le gestionnaire de contenu peut gérer les contenus pédagogiques, mais ne peut pas administrer les comptes ni modifier les rôles.</p>
+        </div>
+        <div className="student-history-actions"><button type="button" className="outline small-btn" disabled={savingRole} onClick={() => setSelectedRoleStudent(null)}>Annuler</button><button type="button" className="primary" disabled={savingRole} onClick={() => void saveUserRole()}>{savingRole ? "Enregistrement..." : "Enregistrer"}</button></div>
+      </div>
+    </div>}
     {selectedActiveStudent && <div className="student-history-backdrop" role="presentation" onClick={() => setSelectedActiveStudent(null)}>
       <div className="student-history-modal" role="dialog" aria-modal="true" aria-labelledby="student-active-title" onClick={event => event.stopPropagation()}>
         <div className="student-history-head">
@@ -4707,7 +5069,7 @@ function AdminUsers() {
 }
 
 
-function AdminEnrollmentPayments() {
+function AdminEnrollmentPayments({ role }: { role: "super_admin" | "content_manager" }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [users, setUsers] = useState<Array<{ uid: string; displayName: string }>>([]);
   const [coursesMap, setCoursesMap] = useState<Record<string, string>>({});
@@ -4794,12 +5156,12 @@ function AdminEnrollmentPayments() {
 
       {error && <div className="form-error">{error}</div>}
 
-      <div className="payment-summary-grid">
-        <div className="payment-total-card">
+      <div className={`payment-summary-grid ${role === "content_manager" ? "payment-summary-grid-manager" : ""}`}>
+        {role === "super_admin" && <div className="payment-total-card">
           <div><span>Total encaissé</span><small>Paiements acceptés uniquement</small></div>
           <strong>{formatPrice(acceptedTotal)} <em>Ar</em></strong>
           <div className="payment-total-foot"><span>✓ {acceptedCount} paiement(s) accepté(s)</span><span>{rejectedCount} refusé(s)</span></div>
-        </div>
+        </div>}
         <div className="payment-mini-card"><span>À vérifier</span><strong>{pending.length}</strong><small>Paiements en attente</small></div>
         <div className="payment-mini-card"><span>Historique</span><strong>{history.length}</strong><small>Paiements traités</small></div>
       </div>
@@ -5154,12 +5516,12 @@ function AppContent() {
       .catch(console.error);
   }, [user]);
 
-  const showNavigationLoader = () => {
+  const showNavigationLoader = useCallback(() => {
     setNavigationLoading(true);
     window.setTimeout(() => setNavigationLoading(false), 600);
-  };
+  }, []);
 
-  const currentHistorySnapshot = (): Omit<CavHistoryState, "__cavHistory" | "index"> => ({
+  const currentHistorySnapshot = useCallback((): Omit<CavHistoryState, "__cavHistory" | "index"> => ({
     role,
     publicPage,
     studentPage,
@@ -5171,23 +5533,28 @@ function AppContent() {
     selectedAdminNodeId,
     adminPreviewCourseId,
     adminPreviewCommentId,
-  });
+  }), [
+    role, publicPage, studentPage, adminPage, selectedCourseId,
+    notificationLessonId, notificationCommentId, selectedAdminSubjectId,
+    selectedAdminNodeId, adminPreviewCourseId, adminPreviewCommentId,
+  ]);
 
-  const pushHistoryState = (patch: Partial<Omit<CavHistoryState, "__cavHistory" | "index" | "role">> & { role?: Role } = {}) => {
+  const pushHistoryState = useCallback((patch: Partial<Omit<CavHistoryState, "__cavHistory" | "index" | "role">> & { role?: Role } = {}) => {
     const next = { ...currentHistorySnapshot(), ...patch, role: patch.role ?? role };
-    const index = historyIndexRef.current + 1;
+    const currentState = window.history.state as Partial<CavHistoryState> | null;
+    const index = Number(currentState?.index ?? 0) + 1;
     const state: CavHistoryState = { __cavHistory: true, index, ...next };
-    historyIndexRef.current = index;
     window.history.pushState(state, "", window.location.href);
-  };
+  }, [currentHistorySnapshot, role]);
 
-  const replaceHistoryState = (patch: Partial<Omit<CavHistoryState, "__cavHistory" | "index" | "role">> & { role?: Role } = {}) => {
+  const replaceHistoryState = useCallback((patch: Partial<Omit<CavHistoryState, "__cavHistory" | "index" | "role">> & { role?: Role } = {}) => {
     const next = { ...currentHistorySnapshot(), ...patch, role: patch.role ?? role };
-    const state: CavHistoryState = { __cavHistory: true, index: historyIndexRef.current, ...next };
+    const currentState = window.history.state as Partial<CavHistoryState> | null;
+    const state: CavHistoryState = { __cavHistory: true, index: Number(currentState?.index ?? 0), ...next };
     window.history.replaceState(state, "", window.location.href);
-  };
+  }, [currentHistorySnapshot, role]);
 
-  const navigateStudentPage = (nextPage: StudentPage, patch: Partial<{ selectedCourseId: string | null; notificationLessonId: string | null; notificationCommentId: string | null }> = {}) => {
+  const navigateStudentPage = useCallback((nextPage: StudentPage, patch: Partial<{ selectedCourseId: string | null; notificationLessonId: string | null; notificationCommentId: string | null }> = {}) => {
     if (nextPage === studentPage && patch.selectedCourseId === undefined && patch.notificationLessonId === undefined && patch.notificationCommentId === undefined) return;
     showNavigationLoader();
     if (patch.selectedCourseId !== undefined) setSelectedCourseId(patch.selectedCourseId);
@@ -5195,9 +5562,11 @@ function AppContent() {
     if (patch.notificationCommentId !== undefined) setNotificationCommentId(patch.notificationCommentId);
     setStudentPage(nextPage);
     pushHistoryState({ studentPage: nextPage, ...patch });
-  };
+  }, [studentPage, showNavigationLoader, pushHistoryState]);
 
   const navigateAdminPage = (nextPage: AdminPage, patch: Partial<{ selectedAdminSubjectId: string | null; selectedAdminNodeId: string | null; adminPreviewCourseId: string | null; adminPreviewCommentId: string | null }> = {}) => {
+    // Analytics contains platform-wide financial and operational metrics; reserve it for super admins.
+    if (nextPage === "stats" && role !== "admin") return;
     if (nextPage === adminPage && Object.keys(patch).length === 0) return;
     showNavigationLoader();
     if (patch.selectedAdminSubjectId !== undefined) setSelectedAdminSubjectId(patch.selectedAdminSubjectId);
@@ -5394,7 +5763,7 @@ function AppContent() {
         if (studentPage === "dashboard")
           return (
             <StudentDashboard
-              setPage={navigateStudentPage}
+              setPage={(page) => navigateStudentPage(page)}
               openCourse={(courseId) => {
                 navigateStudentPage("course", { selectedCourseId: courseId, notificationLessonId: null, notificationCommentId: null });
               }}
@@ -5487,7 +5856,7 @@ function AppContent() {
     ) : adminPage === "questions" ? (
       <QuestionAdmin initialSubjectId={selectedAdminSubjectId ?? ""} />
     ) : adminPage === "enrollments" ? (
-      <AdminEnrollmentPayments />
+      <AdminEnrollmentPayments role={profile?.role === "content_manager" ? "content_manager" : "super_admin"} />
     ) : adminPage === "users" ? (
       <AdminUsers />
     ) : adminPage === "messages" ? (
@@ -5502,8 +5871,12 @@ function AppContent() {
       <AdminLibraryPage onBack={() => goBack(() => navigateAdminPage("overview"))} />
     ) : adminPage === "psychotechnical" ? (
       <AdminPsychotechnicalPage onBack={() => goBack(() => navigateAdminPage("overview"))} />
-    ) : adminPage === "stats" ? (
+    ) : adminPage === "stats" && role === "admin" ? (
       <AdminAnalyticsPage onBack={() => goBack(() => navigateAdminPage("overview"))} />
+    ) : adminPage === "stats" ? (
+      <AdminOverview setPage={navigateAdminPage} courses={courses} />
+    ) : adminPage === "billing" ? (
+      <AdminBillingPage />
     ) : adminPage === "profile" ? (
       <ProfilePage role={role} displayName={displayName} userEmail={user?.email ?? ""} />
     ) : (
@@ -5545,7 +5918,11 @@ function AppContent() {
             }
           }}
         />
-        {content}
+        <ContentProtection>
+          <Suspense fallback={<LightweightLoader label="Chargement de la page…" />}>
+            {content}
+          </Suspense>
+        </ContentProtection>
       </div>
       {navigationLoading ? <LightweightLoader label="Chargement…" /> : null}
     </div>
@@ -5554,6 +5931,8 @@ function AppContent() {
 
 
 export default function App() {
-  if (window.location.pathname === "/auth/action") return <AuthActionPage />;
-  return <AppContent />;
+  if (window.location.pathname === "/auth/action") {
+    return <Suspense fallback={<LightweightLoader label="Chargement…" />}><AuthActionPage /></Suspense>;
+  }
+  return <><AppContent /><SessionReplacedNotice /></>;
 }

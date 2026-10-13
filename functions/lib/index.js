@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -66,8 +66,8 @@ async function requireAdmin(uid) {
     if (!snapshot.exists)
         throw new HttpsError('permission-denied', 'Profil administrateur introuvable.');
     const profile = snapshot.data() ?? {};
-    if (profile.status !== 'active' || profile.role !== 'super_admin') {
-        throw new HttpsError('permission-denied', 'Droits super administrateur requis.');
+    if (profile.status !== 'active' || !['super_admin', 'content_manager'].includes(String(profile.role ?? ''))) {
+        throw new HttpsError('permission-denied', 'Droits administrateur requis.');
     }
     return profile;
 }
@@ -317,6 +317,10 @@ export const processScheduledBroadcasts = onSchedule({ region: 'europe-west1', s
             await item.ref.update({ status: 'failed', updatedAt: new Date(), errorMessage: error instanceof Error ? error.message : 'Erreur inconnue' });
         }
     }
+    // Refresh cached library access here instead of creating a second scheduler.
+    // The scheduler for this function already runs in europe-west1, a valid
+    // Cloud Scheduler location. This also removes the need for a separate
+    // africa-south1 scheduled function.
     try {
         const enrollments = await db.collection('enrollments').get();
         const users = new Map();
@@ -458,7 +462,8 @@ export const reviewPayment = onCall({ region: 'africa-south1' }, async (request)
     const uid = request.auth?.uid;
     if (!uid)
         throw new HttpsError('unauthenticated', 'Connexion requise.');
-    await requireAdmin(uid);
+    // Content managers can process enrollments/payments; only super admins can manage roles/accounts.
+    await requireBroadcastManager(uid);
     const paymentId = typeof request.data?.paymentId === 'string' ? request.data.paymentId : '';
     const approved = request.data?.approved === true;
     const rejectionReason = typeof request.data?.rejectionReason === 'string' ? request.data.rejectionReason.trim() : '';
@@ -544,10 +549,101 @@ export const reviewPayment = onCall({ region: 'africa-south1' }, async (request)
     });
     return { success: true, paymentId, enrollmentId: approved ? enrollmentId : null, status: approved ? 'verified' : 'rejected', expiresAt: expiresAtIso, accessDurationDays };
 });
+// One active device per student account. `claimDeviceSession` is called by the app
+// right after sign-in: it stores the new session id and puts it in the user's token
+// as the `sid` claim. A token issued for any older device no longer matches, so the
+// student functions below refuse it.
+async function assertSingleSession(request) {
+    const uid = request.auth?.uid;
+    if (!uid)
+        return;
+    const snapshot = await db.doc(`userSessions/${uid}`).get();
+    if (!snapshot.exists)
+        return;
+    const current = String(snapshot.data()?.sessionId ?? '');
+    const tokenSid = String(request.auth?.token?.sid ?? '');
+    if (current && tokenSid !== current) {
+        throw new HttpsError('failed-precondition', 'Votre compte est connecté sur un autre appareil. Veuillez vous reconnecter.');
+    }
+}
+export const claimDeviceSession = onCall({ region: 'africa-south1' }, async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid)
+        throw new HttpsError('unauthenticated', 'Connexion requise.');
+    const sessionId = typeof request.data?.sessionId === 'string' ? request.data.sessionId : '';
+    if (!/^[A-Za-z0-9._-]{16,100}$/.test(sessionId))
+        throw new HttpsError('invalid-argument', 'Session invalide.');
+    const profileSnapshot = await db.doc(`users/${uid}`).get();
+    const profile = profileSnapshot.data() ?? {};
+    if (profile.status !== 'active')
+        throw new HttpsError('permission-denied', 'Votre compte n’est pas actif.');
+    const sessionRef = db.doc(`userSessions/${uid}`);
+    // Only student accounts are limited to one device; administrators are not.
+    if (profile.role !== 'student') {
+        await sessionRef.delete();
+        return { enforced: false };
+    }
+    const auth = getAuth();
+    const record = await auth.getUser(uid);
+    await auth.setCustomUserClaims(uid, { ...(record.customClaims ?? {}), sid: sessionId });
+    await sessionRef.set({
+        sessionId,
+        claimedAt: new Date(),
+        userAgent: String(request.rawRequest?.headers?.['user-agent'] ?? '').slice(0, 300),
+    });
+    return { enforced: true };
+});
+// Anti-scraping: a student reading lessons opens a handful per minute. A script that
+// copies a whole course opens hundreds. Limits are generous for real students and
+// every breach is recorded in `securityEvents` for super admins to review.
+const LESSON_LIMIT_PER_MINUTE = 20;
+const LESSON_LIMIT_PER_DAY = 200;
+async function enforceLessonAccessLimits(uid, courseId, nodeId) {
+    const now = Date.now();
+    // Day boundary follows Madagascar time (UTC+3).
+    const dayKey = new Date(now + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const ref = db.doc(`lessonAccessCounters/${uid}`);
+    const outcome = await db.runTransaction(async (tx) => {
+        const data = (await tx.get(ref)).data() ?? {};
+        const dayCount = (data.dayKey === dayKey ? Number(data.dayCount ?? 0) : 0) + 1;
+        const windowStart = Number(data.windowStart ?? 0);
+        const inWindow = now - windowStart < 60_000;
+        const windowCount = (inWindow ? Number(data.windowCount ?? 0) : 0) + 1;
+        const reason = windowCount > LESSON_LIMIT_PER_MINUTE ? 'minute' : dayCount > LESSON_LIMIT_PER_DAY ? 'day' : null;
+        const firstBreach = reason === 'minute' ? windowCount === LESSON_LIMIT_PER_MINUTE + 1 : reason === 'day' ? dayCount === LESSON_LIMIT_PER_DAY + 1 : false;
+        tx.set(ref, {
+            dayKey,
+            dayCount,
+            windowStart: inWindow ? windowStart : now,
+            windowCount,
+            lastCourseId: courseId,
+            lastNodeId: nodeId,
+            lastAccessAt: new Date(now),
+            ...(reason ? { flaggedAt: new Date(now), flagCount: FieldValue.increment(firstBreach ? 1 : 0) } : {}),
+        }, { merge: true });
+        return { reason, firstBreach, dayCount, windowCount };
+    });
+    if (outcome.firstBreach) {
+        await db.collection('securityEvents').add({
+            type: 'lesson_access_rate_limit',
+            reason: outcome.reason,
+            userId: uid,
+            courseId,
+            nodeId,
+            dayCount: outcome.dayCount,
+            windowCount: outcome.windowCount,
+            createdAt: new Date(now),
+        });
+    }
+    if (outcome.reason) {
+        throw new HttpsError('resource-exhausted', 'Trop de leçons ouvertes en peu de temps. Veuillez patienter quelques instants.');
+    }
+}
 export const getStudentLessonContent = onCall({ region: 'africa-south1' }, async (request) => {
     const uid = request.auth?.uid;
     if (!uid)
         throw new HttpsError('unauthenticated', 'Connexion requise.');
+    await assertSingleSession(request);
     const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : '';
     const nodeId = typeof request.data?.nodeId === 'string' ? request.data.nodeId : '';
     if (!courseId || !nodeId)
@@ -567,6 +663,7 @@ export const getStudentLessonContent = onCall({ region: 'africa-south1' }, async
     if (!enrollmentSnapshot.docs.some(item => isEnrollmentActive(item.data()))) {
         throw new HttpsError('permission-denied', 'Votre accès à ce concours n’est pas actif.');
     }
+    await enforceLessonAccessLimits(uid, courseId, nodeId);
     const nodeSnapshot = await db.doc(`contentNodes/${nodeId}`).get();
     if (!nodeSnapshot.exists || nodeSnapshot.data()?.status !== 'published') {
         throw new HttpsError('not-found', 'Leçon introuvable.');
@@ -617,6 +714,7 @@ export const getStudentPracticeSets = onCall({ region: 'africa-south1' }, async 
     const uid = request.auth?.uid;
     if (!uid)
         throw new HttpsError('unauthenticated', 'Connexion requise.');
+    await assertSingleSession(request);
     const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : '';
     if (!courseId)
         throw new HttpsError('invalid-argument', 'Préparation invalide.');
@@ -664,6 +762,7 @@ export const submitPsychotechnicalTest = onCall({ region: 'africa-south1' }, asy
     const uid = request.auth?.uid;
     if (!uid)
         throw new HttpsError('unauthenticated', 'Connexion requise.');
+    await assertSingleSession(request);
     const profile = await db.doc(`users/${uid}`).get();
     if (!profile.exists || profile.data()?.status !== 'active')
         throw new HttpsError('permission-denied', 'Votre compte n’est pas actif.');
@@ -683,9 +782,15 @@ export const submitPsychotechnicalTest = onCall({ region: 'africa-south1' }, asy
     const assignedCourses = Array.isArray(test.courseIds) ? test.courseIds.map(String) : [];
     if (!assignedCourses.includes(courseId))
         throw new HttpsError('permission-denied', 'Ce test n’est pas associé à ce concours.');
-    const questionIds = Array.isArray(test.questionIds) ? test.questionIds.map(String) : [];
-    if (!questionIds.length)
+    const allQuestionIds = Array.isArray(test.questionIds) ? test.questionIds.map(String) : [];
+    if (!allQuestionIds.length)
         throw new HttpsError('failed-precondition', 'Ce test ne contient aucune question.');
+    const requestedQuestionIds = Array.isArray(request.data?.questionIds)
+        ? request.data.questionIds.map((id) => String(id))
+        : allQuestionIds;
+    const questionIds = [...new Set(requestedQuestionIds)].filter((id) => allQuestionIds.includes(id));
+    if (!questionIds.length)
+        throw new HttpsError('invalid-argument', 'Aucune question valide à corriger.');
     const answerMap = new Map();
     for (const item of rawAnswers)
         if (item && typeof item === 'object' && typeof item.questionId === 'string')
@@ -694,7 +799,17 @@ export const submitPsychotechnicalTest = onCall({ region: 'africa-south1' }, asy
     let earnedPoints = 0, totalPoints = 0;
     const domainTotals = {};
     const results = {};
-    const eq = (a, b, type) => type === 'numeric' ? Number(a) === Number(b) : type === 'true_false' ? Boolean(a) === Boolean(b) : String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+    const eq = (a, b, type) => {
+        if (a === null || a === undefined || String(a).trim() === '')
+            return false;
+        if (type === 'numeric') {
+            const actual = Number(a), expected = Number(b);
+            return Number.isFinite(actual) && Number.isFinite(expected) && actual === expected;
+        }
+        if (type === 'true_false')
+            return typeof b === 'boolean' ? a === b : String(a).toLowerCase() === String(b).toLowerCase();
+        return String(a).trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+    };
     snapshots.forEach((snap, i) => { if (!snap.exists)
         return; const q = snap.data() ?? {}; const id = questionIds[i]; const points = Math.max(1, Number(q.points ?? 1)); const domain = String(q.domain ?? 'logic'); domainTotals[domain] ??= { earned: 0, total: 0 }; domainTotals[domain].total += points; totalPoints += points; const correct = eq(answerMap.get(id), q.correctAnswer, String(q.type ?? '')); results[id] = correct; if (correct) {
         earnedPoints += points;
@@ -709,6 +824,7 @@ export const submitPractice = onCall({ region: 'africa-south1' }, async (request
     const uid = request.auth?.uid;
     if (!uid)
         throw new HttpsError('unauthenticated', 'Connexion requise.');
+    await assertSingleSession(request);
     const profileSnapshot = await db.doc(`users/${uid}`).get();
     if (!profileSnapshot.exists || profileSnapshot.data()?.status !== 'active') {
         throw new HttpsError('permission-denied', 'Votre compte n’est pas actif.');
@@ -798,6 +914,7 @@ export const submitLessonQuestions = onCall({ region: 'africa-south1' }, async (
     const uid = request.auth?.uid;
     if (!uid)
         throw new HttpsError('unauthenticated', 'Connexion requise.');
+    await assertSingleSession(request);
     const profileSnapshot = await db.doc(`users/${uid}`).get();
     if (!profileSnapshot.exists || profileSnapshot.data()?.status !== 'active') {
         throw new HttpsError('permission-denied', 'Votre compte n’est pas actif.');
@@ -893,4 +1010,91 @@ export const notifyLessonCommentParticipants = onDocumentCreated({ region: 'afri
         read: false,
         createdAt: new Date(),
     });
+});
+// Google Cloud billing data is queried server-side only. The export table must be
+// configured by the project owner; no billing credentials are exposed to the client.
+export const adminGetGoogleBillingSummary = onCall({ region: 'africa-south1', timeoutSeconds: 60 }, async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid)
+        throw new HttpsError('unauthenticated', 'Connexion requise.');
+    await requireBroadcastManager(uid);
+    const table = String(process.env.BILLING_EXPORT_TABLE ?? '').trim();
+    const month = new Date().toISOString().slice(0, 7);
+    if (!table)
+        return { configured: false, month, message: 'Export de facturation BigQuery non configuré.' };
+    if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_]+$/.test(table)) {
+        throw new HttpsError('failed-precondition', 'BILLING_EXPORT_TABLE doit être au format projet.dataset.table.');
+    }
+    try {
+        const tokenResponse = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', { headers: { 'Metadata-Flavor': 'Google' } });
+        if (!tokenResponse.ok)
+            throw new Error('Could not obtain runtime service account token');
+        const tokenData = await tokenResponse.json();
+        const accessToken = tokenData.access_token;
+        const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+        if (!projectId)
+            throw new Error('Google Cloud project ID is not available');
+        const location = process.env.BILLING_BIGQUERY_LOCATION || 'US';
+        const runQuery = async (query, params) => {
+            const response = await fetch(`https://bigquery.googleapis.com/bigquery/v2/projects/${projectId}/queries`, {
+                method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, useLegacySql: false, location, parameterMode: 'NAMED', queryParameters: Object.entries(params ?? {}).map(([name, value]) => ({ name, parameterType: { type: 'STRING' }, parameterValue: { value } })) }),
+            });
+            if (!response.ok)
+                throw new Error(`BigQuery API returned HTTP ${response.status}`);
+            let result = await response.json();
+            while (!result.jobComplete && result.jobReference?.jobId) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const poll = await fetch(`https://bigquery.googleapis.com/bigquery/v2/projects/${projectId}/queries/${result.jobReference.jobId}?location=${encodeURIComponent(result.jobReference.location || location)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+                if (!poll.ok)
+                    throw new Error(`BigQuery query polling returned HTTP ${poll.status}`);
+                result = await poll.json();
+            }
+            const fields = result.schema?.fields?.map(field => field.name) ?? [];
+            return (result.rows ?? []).map(row => Object.fromEntries(fields.map((field, index) => [field, row.f[index]?.v ?? null])));
+        };
+        const sql = `
+      SELECT FORMAT_DATE('%Y-%m', DATE(usage_start_time)) AS month,
+        COALESCE(currency, 'USD') AS currency,
+        SUM(cost + IFNULL((SELECT SUM(credit.amount) FROM UNNEST(credits) AS credit), 0)) AS amount
+      FROM \`${table}\`
+      WHERE DATE(usage_start_time) >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH)
+        AND DATE(usage_start_time) < DATE_ADD(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH)
+      GROUP BY month, currency
+    `;
+        const rows = await runQuery(sql);
+        const currency = String(rows[0]?.currency ?? 'USD');
+        const currentMonth = rows.filter(r => r.month === month).reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
+        const previousMonthDate = new Date();
+        previousMonthDate.setUTCMonth(previousMonthDate.getUTCMonth() - 1);
+        const previousMonthKey = previousMonthDate.toISOString().slice(0, 7);
+        const previousMonth = rows.filter(r => r.month === previousMonthKey).reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
+        const serviceSql = `
+      SELECT service.description AS service, COALESCE(currency, 'USD') AS currency,
+        SUM(cost + IFNULL((SELECT SUM(credit.amount) FROM UNNEST(credits) AS credit), 0)) AS amount
+      FROM \`${table}\`
+      WHERE FORMAT_DATE('%Y-%m', DATE(usage_start_time)) = @month
+      GROUP BY service, currency ORDER BY amount DESC LIMIT 10
+    `;
+        const serviceRows = await runQuery(serviceSql, { month });
+        const dailySql = `
+      SELECT FORMAT_DATE('%Y-%m-%d', DATE(usage_start_time)) AS day,
+        COALESCE(currency, 'USD') AS currency,
+        SUM(cost + IFNULL((SELECT SUM(credit.amount) FROM UNNEST(credits) AS credit), 0)) AS amount
+      FROM \`${table}\`
+      WHERE FORMAT_DATE('%Y-%m', DATE(usage_start_time)) = @month
+      GROUP BY day, currency ORDER BY day
+    `;
+        const dailyRows = await runQuery(dailySql, { month });
+        return {
+            configured: true, month, currency, currentMonth, previousMonth,
+            services: serviceRows.map(r => ({ service: String(r.service ?? 'Autre service'), amount: Number(r.amount ?? 0), currency: String(r.currency ?? currency) })),
+            daily: dailyRows.map(r => ({ date: String(r.day ?? ''), amount: Number(r.amount ?? 0) })),
+            lastUpdated: new Date().toISOString(),
+        };
+    }
+    catch (error) {
+        console.error('Google billing query failed', error);
+        throw new HttpsError('failed-precondition', 'Les données de facturation ne sont pas accessibles. Vérifiez l’export BigQuery et les autorisations du compte de service.');
+    }
 });

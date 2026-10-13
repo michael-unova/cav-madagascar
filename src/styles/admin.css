@@ -36,3 +36,36 @@
 .course-color-swatch.cyan { background: linear-gradient(135deg,#0e7490,#06b6d4); }
 .course-color-swatch.slate { background: linear-gradient(135deg,#334155,#64748b); }
 .course-color-swatch.rose { background: linear-gradient(135deg,#be123c,#fb7185); }
+
+/* Google Cloud billing dashboard */
+.billing-dashboard { max-width: 1440px; }
+.billing-title-row { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.billing-period { color:var(--muted, #718096); margin: 4px 0 18px; font-size:14px; }
+.billing-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:20px 0 28px; }
+.billing-card,.billing-panel,.billing-setup,.billing-alert { background:#fff; border:1px solid #e1eaf5; border-radius:18px; padding:24px; box-shadow:0 8px 28px rgba(21,52,91,.05); }
+.billing-card { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.billing-card span { color:#647995; font-size:14px; }
+.billing-card strong { color:#102746; font-size:clamp(24px,3vw,34px); line-height:1.2; overflow-wrap:anywhere; }
+.billing-card small { color:#6e829c; }
+.billing-card.primary { background:linear-gradient(135deg,#edf5ff,#fff); border-color:#cfe1fb; }
+.billing-panel { margin-bottom:20px; }
+.billing-panel h2,.billing-setup h2 { margin:0 0 7px; color:#102746; font-size:21px; }
+.billing-panel-heading p,.billing-setup p { color:#687d98; margin:0 0 20px; line-height:1.65; }
+.billing-service-list { display:grid; gap:20px; }
+.billing-service-top { display:flex; justify-content:space-between; gap:18px; margin-bottom:9px; color:#183454; font-size:14px; }
+.billing-track { height:9px; background:#edf2f8; border-radius:99px; overflow:hidden; }
+.billing-track span { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,#1768e8,#55a0f5); }
+.billing-setup { max-width:900px; margin-top:24px; }
+.billing-setup-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:14px; background:#eaf3ff; color:#2169d5; font-size:25px; margin-bottom:16px; }
+.billing-setup ol { padding-left:22px; display:grid; gap:12px; line-height:1.65; color:#304965; }
+.billing-setup code { background:#f1f5fa; border-radius:5px; padding:2px 5px; overflow-wrap:anywhere; }
+.billing-security-note { background:#f3f8ff; border-left:3px solid #2777e7; padding:12px 14px; border-radius:5px; }
+.billing-alert { border-color:#f4d4a4; background:#fffaf1; color:#734b12; margin:18px 0; }
+.billing-alert p { overflow-wrap:anywhere; }
+.billing-footnote { font-size:12px; line-height:1.6; color:#71839a; }
+@media(max-width:850px) { .billing-cards { grid-template-columns:1fr; } .billing-title-row { align-items:flex-start; flex-direction:column; } .billing-card { padding:20px; } .billing-panel,.billing-setup { padding:18px; } }
+
+.billing-daily-chart { display:flex; align-items:flex-end; gap:5px; min-height:170px; padding:18px 4px 0; border-bottom:1px solid #dbe5f0; overflow-x:auto; }
+.billing-daily-column { flex:1 0 16px; min-width:16px; height:145px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:7px; }
+.billing-daily-bar { width: min(100%, 24px); min-height:3px; border-radius:5px 5px 0 0; background:linear-gradient(180deg,#55a0f5,#1768e8); }
+.billing-daily-column small { color:#71839a; font-size:10px; }
