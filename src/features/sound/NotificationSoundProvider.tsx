@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { SoundControl } from './SoundControl'
+import { NotificationSoundContext, type NotificationSoundValue } from './soundContext'
 import { isAudioSupported, playNotificationTone, unlockAudio, type SoundKind } from './soundEngine'
 import { readSoundPreference, writeSoundPreference } from './soundPreference'
 import { useNotificationSoundListeners, type SoundAudience } from './useNotificationSoundListeners'
@@ -11,11 +11,11 @@ const TOAST_MS = 3200
 
 /**
  * Mounted once, inside AuthProvider. Owns the sound preference, the Firestore
- * listeners that trigger sounds, and the floating control, so the control is
- * available on every authenticated screen for students and administrators.
+ * listeners that trigger sounds, and exposes them through context so the
+ * « Paramètres » page can let users switch sounds on or off.
  */
 export function NotificationSoundProvider({ children }: { children: ReactNode }) {
-  const { user, profile, loading } = useAuth()
+  const { user, profile } = useAuth()
   const uid = user?.uid ?? null
   const role = typeof profile?.role === 'string' ? profile.role : null
   const status = typeof profile?.status === 'string' ? profile.status : null
@@ -112,11 +112,10 @@ export function NotificationSoundProvider({ children }: { children: ReactNode })
     showToast('Son de test joué. Si vous ne l’entendez pas, vérifiez le volume.')
   }, [showToast])
 
-  const visible = Boolean(uid) && !loading
-  const control = useMemo(
-    () => (visible ? <SoundControl enabled={enabled} toast={toast} onToggle={() => void toggle()} onTest={() => void test()} /> : null),
-    [visible, enabled, toast, toggle, test],
+  const value = useMemo<NotificationSoundValue>(
+    () => ({ enabled, message: toast, toggle: () => void toggle(), test: () => void test() }),
+    [enabled, toast, toggle, test],
   )
 
-  return <>{children}{control}</>
+  return <NotificationSoundContext.Provider value={value}>{children}</NotificationSoundContext.Provider>
 }

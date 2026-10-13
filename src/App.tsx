@@ -85,6 +85,7 @@ const AdminBillingPage = lazy(() => import("./pages/AdminBillingPage").then((mod
 const LibraryPage = lazy(() => import("./pages/LibraryPage").then((module) => ({ default: module.LibraryPage })));
 const AdminLibraryPage = lazy(() => import("./pages/AdminLibraryPage").then((module) => ({ default: module.AdminLibraryPage })));
 const AuthActionPage = lazy(() => import("./pages/AuthActionPage").then((module) => ({ default: module.AuthActionPage })));
+import { SoundSettingsCard } from "./features/sound";
 import { markNotificationRead, subscribeMyNotifications, subscribeUnreadLessonCommentCount } from "./features/lessonComments";
 import type { Enrollment, Payment } from "./types/enrollment";
 import type { Course, CourseCardColor, CourseGroup, CourseSubject } from "./types/course";
@@ -4749,6 +4750,7 @@ function ProfilePage({ role, displayName, userEmail }: { role: Role; displayName
       </div>
       <div className="editor-actions"><button className="primary" disabled={saving} onClick={() => void save()}>{saving ? "Enregistrement..." : "Enregistrer"}</button></div>
     </div>
+    <SoundSettingsCard audience={role === "admin" || role === "teacher" ? "manager" : "student"} />
     {(role === "admin" || role === "teacher") && (
       <section className="panel maintenance-admin-card">
         <div className="maintenance-admin-head">

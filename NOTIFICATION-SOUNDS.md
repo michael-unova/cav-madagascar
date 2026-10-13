@@ -3,7 +3,7 @@
 Soft notification chimes for administrators (`super_admin`, `content_manager`) and students.
 
 ## Behaviour
-- Floating control (bottom-right, above the mobile bottom nav) on every authenticated screen: **« Activer le son »** / **« Son activé »**, plus **« Tester le son »** when enabled. French confirmation toast on every change.
+- Sound card in the **Paramètres** page (admin and student): **« Activer le son »** / **« Son activé »**, plus **« Tester le son »** when enabled. French confirmation message on every change. No floating button on the other pages.
 - Sounds are generated with the Web Audio API (no audio file, no external URL). The AudioContext is created only inside the click that enables sound, and a test chime plays at that moment. After a reload the preference is restored and audio is re-unlocked on the first interaction.
 - Preference is stored per account in `localStorage` (`cav_sound_enabled:<uid>`), default **off**.
 
@@ -26,4 +26,4 @@ Soft notification chimes for administrators (`super_admin`, `content_manager`) a
 Sounds only play while the app is open in a browser tab/app. No push/background notification (FCM) is implemented. No Firebase configuration or deployment change is required.
 
 ## Code
-`src/features/sound/` (engine, preference, listeners, provider, control, CSS), mounted in `src/main.tsx`.
+`src/features/sound/` (engine, preference, listeners, provider, context, settings card, CSS), card rendered by `ProfilePage` in `src/App.tsx`, mounted in `src/main.tsx`.
