@@ -1562,7 +1562,11 @@ function Topbar({
       <div className="top-actions">
         <span className="status-dot" /> Connecté
         {role === "student" && <div className="top-notification-wrap"><button type="button" className="top-notification-button" aria-label="Notifications" aria-expanded={open} onClick={() => setOpen(value => !value)}>🔔{notifications.length > 0 && <span>{notifications.length > 99 ? "99+" : notifications.length}</span>}</button>{open && (useMobileNotificationModal ? createPortal(notificationOverlay, document.body) : notificationOverlay)} {broadcastDetail && <div className="broadcast-detail-backdrop" role="presentation" onClick={() => setBroadcastDetail(null)}><div className="broadcast-detail-modal" role="dialog" aria-modal="true" aria-labelledby="broadcast-detail-title" onClick={event => event.stopPropagation()}><div className="broadcast-detail-brand"><div className="broadcast-preview-icon">CAV</div><div><strong>CAV Madagascar</strong><small>Annonce officielle</small></div><button type="button" className="link-button" onClick={() => setBroadcastDetail(null)}>Fermer</button></div><p className="eyebrow">{broadcastDetail.category ?? "ANNONCE"}</p><h2 id="broadcast-detail-title">{broadcastDetail.title ?? "Annonce CAV"}</h2><div className="broadcast-detail-message">{broadcastDetail.message}</div><button className="primary full" type="button" onClick={() => setBroadcastDetail(null)}>Compris</button></div></div>}</div>}
-        {photoURL ? <img src={photoURL} alt="" className="avatar-image" /> : <div className="avatar">{initials}</div>}
+        {role === "student" && onNavigate ? (
+          <button type="button" className={`top-profile-button ${currentPage === "profile" ? "is-active" : ""}`} aria-label="Ouvrir les paramètres" title="Paramètres" onClick={() => onNavigate("profile")}>
+            {photoURL ? <img src={photoURL} alt="" className="avatar-image" /> : <div className="avatar">{initials}</div>}
+          </button>
+        ) : (photoURL ? <img src={photoURL} alt="" className="avatar-image" /> : <div className="avatar">{initials}</div>)}
         <strong>{displayName}</strong>
         <button className="link-button top-logout" onClick={onLogout} type="button" aria-label="Se déconnecter">Se déconnecter</button>
       </div>

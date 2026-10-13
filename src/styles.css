@@ -4090,3 +4090,10 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
     backdrop-filter: blur(14px) saturate(135%) !important;
   }
 }
+
+/* Student top bar: avatar opens the Paramètres page */
+.top-actions .top-profile-button{appearance:none;border:0;background:transparent;padding:0;margin:0;border-radius:50%;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;line-height:0;-webkit-tap-highlight-color:transparent;transition:transform .15s ease,box-shadow .15s ease}
+.top-actions .top-profile-button:hover{transform:translateY(-1px)}
+.top-actions .top-profile-button:focus-visible{outline:3px solid rgba(23,105,224,.35);outline-offset:2px}
+.top-actions .top-profile-button.is-active{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--cav-blue,#1769e0)}
+.top-actions .top-profile-button .avatar{display:grid;line-height:1}
