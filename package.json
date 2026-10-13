@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "guard": "node scripts/assert-project.mjs",
+    "deploy:rules": "node scripts/assert-project.mjs && firebase deploy --only firestore:rules,firestore:indexes,storage --project cav-madagascar-b4beb",
+    "deploy:functions": "node scripts/assert-project.mjs && firebase deploy --only functions --project cav-madagascar-b4beb"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

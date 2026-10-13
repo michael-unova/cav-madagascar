@@ -31,3 +31,5 @@ dist-ssr
 # Local migration artifacts
 /auth-users.json
 /functions/src/index.ts.backup-*
+scripts-output/
+/functions/scripts-output/
