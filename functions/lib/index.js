@@ -536,7 +536,7 @@ export const reviewPayment = onCall({ region: 'africa-south1' }, async (request)
             transaction.set(notificationRef, {
                 userId, courseId, type: 'payment_verified',
                 title: 'Paiement confirmé',
-                message: `Votre accès à ${courseTitle} est activé pour ${accessDurationDays} jour${accessDurationDays > 1 ? 's' : ''}. Il expire le ${expiresAt.toLocaleDateString('fr-FR')}.`,
+                message: `Votre inscription à ${courseTitle} est confirmée. Votre accès est activé.`,
                 senderName: 'CAV Madagascar', actorName: 'CAV Madagascar', read: false, createdAt: new Date(),
             });
         }
