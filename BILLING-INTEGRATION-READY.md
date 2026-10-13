@@ -2,7 +2,7 @@
 
 The billing integration is preconfigured for the BigQuery table visible in the supplied screenshots.
 
-- Table: `e-learning-b2434.cav_billing.gcp_billing_export_v1_01561A_D9650F_3E70A9`
+- Table: `cav-madagascar-b4beb.DATASET.TABLE` (placeholder; create the billing export first)
 - BigQuery location: `EU`
 - Firebase callable function: `adminGetGoogleBillingSummary`
 - Function region: `africa-south1`

@@ -1,12 +1,5 @@
-﻿{
-    "projects":  {
-                     "default":  "cav-madagascar-b4beb",
-                     "cav-owner":  "cav-madagascar-b4beb"
-                 },
-    "targets":  {
-
-                },
-    "etags":  {
-
-              }
+{
+  "projects": {
+    "default": "cav-madagascar-b4beb"
+  }
 }

@@ -307,7 +307,7 @@ Firebase project:
 
 ```text
 e-learning
-Project ID: e-learning-b2434
+Project ID: cav-madagascar-b4beb (new client project; confirm before deployment)
 ```
 
 Firebase is used for application backend services.
