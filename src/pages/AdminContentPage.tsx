@@ -11,6 +11,7 @@ import { listCourseSubjectsBySubjectId } from '../features/curriculum'
 import type { Subject } from '../types/subject'
 import type { ContentNode, ContentBlock, ContentBlockType } from '../types/content'
 import type { CourseSubject } from '../types/course'
+import { confirmAction } from '../components/ConfirmDialog'
 
 export function AdminContentPage() {
   const { user } = useAuth()
@@ -118,13 +119,13 @@ export function AdminContentPage() {
   }
 
   async function deleteNode(node: ContentNode) {
-    if (!window.confirm(`Supprimer « ${node.title} » et tout son contenu ?`)) return
+    if (!(await confirmAction({ title: 'Supprimer cet élément ?', description: <><strong>« {node.title} »</strong> et tout son contenu seront supprimés définitivement.</> }))) return
     try { await deleteContentNode(node.id); if (nodeId === node.id) { setNodeId(''); setBlocks([]) }; await refreshNodes(); setMessage('Élément supprimé.') }
     catch (err) { setError(err instanceof Error ? err.message : 'Impossible de supprimer l’élément.') }
   }
 
   async function deleteBlock(block: ContentBlock) {
-    if (!window.confirm('Supprimer ce contenu ?')) return
+    if (!(await confirmAction({ title: 'Supprimer ce contenu ?', description: 'Ce contenu sera supprimé définitivement.' }))) return
     try { await deleteContentBlock(block.id); await refreshBlocks(); setMessage('Contenu supprimé.') }
     catch (err) { setError(err instanceof Error ? err.message : 'Impossible de supprimer le contenu.') }
   }

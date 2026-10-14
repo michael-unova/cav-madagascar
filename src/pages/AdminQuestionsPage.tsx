@@ -10,6 +10,7 @@ import { createQuestion, createQuestionSet, deleteQuestion, deleteQuestionSet, l
 import type { Subject } from '../types/subject'
 import type { ContentNode } from '../types/content'
 import type { Question, QuestionDifficulty, QuestionOption, QuestionSet, QuestionSetType, QuestionType } from '../types/question'
+import { confirmAction } from '../components/ConfirmDialog'
 
 const emptyOptions: QuestionOption[] = [
   { id: 'a', label: 'A', text: '' }, { id: 'b', label: 'B', text: '' }, { id: 'c', label: 'C', text: '' }, { id: 'd', label: 'D', text: '' },
@@ -109,7 +110,7 @@ export function AdminQuestionsPage() {
   }
 
   async function removeSet(set: QuestionSet) {
-    if (!window.confirm(`Supprimer « ${set.title} » ?`)) return
+    if (!(await confirmAction({ title: 'Supprimer cette évaluation ?', description: <>L’évaluation <strong>« {set.title} »</strong> sera supprimée définitivement.</> }))) return
     try { await deleteQuestionSet(set.id); await refresh() } catch (err) { setError(err instanceof Error ? err.message : 'Impossible de supprimer.') }
   }
 
@@ -118,7 +119,7 @@ export function AdminQuestionsPage() {
   }
 
   async function removeQuestion(question: Question) {
-    if (!window.confirm(`Supprimer la question « ${String(question.questionContent.text ?? '')} » ?`)) return
+    if (!(await confirmAction({ title: 'Supprimer cette question ?', description: <>La question <strong>« {String(question.questionContent.text ?? '')} »</strong> sera supprimée définitivement.</> }))) return
     try { await deleteQuestion(question.id); await refresh() } catch (err) { setError(err instanceof Error ? err.message : 'Impossible de supprimer.') }
   }
 

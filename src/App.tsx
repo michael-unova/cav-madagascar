@@ -113,6 +113,7 @@ import type {
   QuestionSet,
   QuestionType,
 } from "./types/question";
+import { confirmAction } from "./components/ConfirmDialog";
 
 type Role = "visitor" | "student" | "admin" | "teacher";
 type StudentPage =
@@ -2066,7 +2067,7 @@ function CoursePage({
   }
 
   async function removeLessonComment(commentId: string) {
-    if (!window.confirm("Supprimer cette question ?")) return;
+    if (!(await confirmAction({ title: "Supprimer cette question ?", description: "Cette question sera supprimée définitivement." }))) return;
     setLessonError("");
     try {
       await deleteLessonComment(commentId);
@@ -3363,7 +3364,7 @@ function AdminSubjects({
   }
 
   async function remove(subject: Subject) {
-    if (!window.confirm(`Supprimer la matière « ${subject.name} » ?`)) return;
+    if (!(await confirmAction({ title: "Supprimer cette matière ?", description: <>La matière <strong>« {subject.name} »</strong> sera supprimée définitivement. Cette action est irréversible.</> }))) return;
     try {
       const associations = await listCourseSubjectsBySubjectId(subject.id);
       if (associations.length)
@@ -3530,7 +3531,7 @@ function AdminCourses({
     }
   }
   async function removeGroup(group: CourseGroup) {
-    if (!window.confirm(`Supprimer le groupement « ${group.title} » ? Les concours resteront disponibles.`)) return;
+    if (!(await confirmAction({ title: "Supprimer ce groupement ?", description: <>Le groupement <strong>« {group.title} »</strong> sera supprimé définitivement.</>, hint: "Les concours resteront disponibles." }))) return;
     try {
       await Promise.all(courses.filter((course) => course.groupId === group.id).map((course) => updateCourse(course.id, { groupId: null }, userId)));
       await deleteCourseGroup(group.id);
@@ -3688,7 +3689,7 @@ function AdminCourses({
   }
   async function remove(course: CourseView) {
     if (deletingId) return;
-    if (!window.confirm(`Supprimer le concours « ${course.title} » ?`)) return;
+    if (!(await confirmAction({ title: "Supprimer ce concours ?", description: <>Le concours <strong>« {course.title} »</strong> sera supprimé définitivement. Cette action est irréversible.</> }))) return;
     setError("");
     setDeletingId(course.id);
     try {
@@ -3738,7 +3739,7 @@ function AdminCourses({
   async function removeCourseSubject(item: CourseSubject) {
     if (
       !editingId ||
-      !window.confirm(`Retirer « ${item.title} » de ce concours ?`)
+      !(await confirmAction({ title: "Retirer cette matière du concours ?", description: <>La matière <strong>« {item.title} »</strong> ne fera plus partie de ce concours.</>, confirmLabel: "Retirer" }))
     )
       return;
     try {
@@ -4287,7 +4288,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
     } catch (e) { setError(e instanceof Error ? e.message : "Impossible de dépublier la leçon."); }
   }
   async function removeQuestion(question: Question) {
-    if (!window.confirm("Supprimer cette question ?")) return;
+    if (!(await confirmAction({ title: "Supprimer cette question ?", description: "Cette question sera supprimée définitivement. Cette action est irréversible." }))) return;
     try { await deleteQuestion(question.id); await refreshQuestions(); setMessage("Question supprimée."); }
     catch (e) { setError(e instanceof Error ? e.message : "Impossible de supprimer la question."); }
   }
@@ -4512,7 +4513,7 @@ function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: s
   }
 
   async function removeQuestion(question: Question) {
-    if (!window.confirm("Supprimer cette question ?")) return;
+    if (!(await confirmAction({ title: "Supprimer cette question ?", description: "Cette question sera supprimée définitivement. Cette action est irréversible." }))) return;
     try { await deleteQuestion(question.id); setSelectedIds(ids => ids.filter(id => id !== question.id)); await refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : "Impossible de supprimer la question."); }
   }
@@ -4542,7 +4543,7 @@ function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: s
   }
 
   async function removeSet(item: QuestionSet) {
-    if (!window.confirm(`Supprimer « ${item.title} » ?`)) return;
+    if (!(await confirmAction({ title: "Supprimer cette évaluation ?", description: <>L’évaluation <strong>« {item.title} »</strong> sera supprimée définitivement. Cette action est irréversible.</> }))) return;
     try { await deleteQuestionSet(item.id); await refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : "Impossible de supprimer l'évaluation."); }
   }
@@ -4904,7 +4905,7 @@ function AdminUsers() {
   }
 
   async function deleteStudent(item: AdminStudentRow) {
-    if (!window.confirm(`Supprimer définitivement le compte de ${item.displayName} ? Cette action est irréversible.`)) return;
+    if (!(await confirmAction({ title: "Supprimer ce compte ?", description: <>Le compte de <strong>{item.displayName}</strong> sera supprimé définitivement. Cette action est irréversible.</>, confirmLabel: "Supprimer le compte" }))) return;
     setProcessing(item.uid); setError("");
     try {
       const { httpsCallable } = await import("firebase/functions");

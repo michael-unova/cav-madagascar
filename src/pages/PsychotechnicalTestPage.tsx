@@ -9,6 +9,7 @@ import type { PsychotechnicalQuestionSnapshot, PsychotechnicalTest } from '../ty
 import { PSYCHOTECHNICAL_DOMAIN_LABELS } from '../types/psychotechnical'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '../lib/firebase/config'
+import { confirmAction } from '../components/ConfirmDialog'
 
 const functions = getFunctions(getFirebaseApp(), 'africa-south1')
 const shuffle = <T,>(items: T[]): T[] => {
@@ -113,7 +114,7 @@ export function PsychotechnicalTestPage() {
           {(current.type === 'numeric' || current.type === 'short_answer') && <label className="psy-text-answer"><span>{current.type === 'numeric' ? 'Votre réponse numérique' : 'Votre réponse'}</span><input className="psy-answer-input" value={String(answers[current.id] ?? '')} onChange={e => chooseAnswer(current.id, e.target.value)} inputMode={current.type === 'numeric' ? 'decimal' : 'text'} placeholder="Saisissez votre réponse" /></label>}
         </div>
         {submitError && <div className="psy-submit-error" role="alert"><span>{submitError}</span><button type="button" onClick={() => void submit()}>Réessayer l’envoi</button></div>}
-        <div className="psy-actions">{index > 0 && <button className="ui-button ui-button-secondary" onClick={() => setIndex(i => i - 1)}>← Précédente</button>}<span className="psy-action-spacer" />{index < questions.length - 1 ? <button className="ui-button ui-button-primary" onClick={() => setIndex(i => i + 1)}>Suivante →</button> : <button className="ui-button ui-button-primary" disabled={submitting} onClick={() => { if (window.confirm(`Terminer le test ? Vous avez répondu à ${answeredCount} question(s) sur ${questions.length}.`)) void submit() }}>{submitting ? 'Envoi en cours…' : 'Terminer le test'}</button>}</div>
+        <div className="psy-actions">{index > 0 && <button className="ui-button ui-button-secondary" onClick={() => setIndex(i => i - 1)}>← Précédente</button>}<span className="psy-action-spacer" />{index < questions.length - 1 ? <button className="ui-button ui-button-primary" onClick={() => setIndex(i => i + 1)}>Suivante →</button> : <button className="ui-button ui-button-primary" disabled={submitting} onClick={() => { void confirmAction({ tone: 'info', eyebrow: 'CONFIRMATION', title: 'Terminer le test ?', description: `Vous avez répondu à ${answeredCount} question(s) sur ${questions.length}.`, confirmLabel: 'Terminer le test', cancelLabel: 'Continuer' }).then(ok => { if (ok) void submit() }) }}>{submitting ? 'Envoi en cours…' : 'Terminer le test'}</button>}</div>
       </Card></div>
   </Container>
 }

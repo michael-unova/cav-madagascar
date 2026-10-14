@@ -16,6 +16,7 @@ import type { ContentNode, ContentBlock } from '../types/content'
 import type { QuestionSet } from '../types/question'
 import type { PsychotechnicalTest } from '../types/psychotechnical'
 import type { LessonComment } from '../types/lessonComment'
+import { confirmAction } from '../components/ConfirmDialog'
 
 export function CourseLearningPage() {
   const { courseRef } = useParams<{ courseRef: string }>()
@@ -178,7 +179,7 @@ export function CourseLearningPage() {
   }
 
   async function removeLessonComment(commentId: string) {
-    if (!window.confirm('Supprimer cette question ?')) return
+    if (!(await confirmAction({ title: 'Supprimer cette question ?', description: 'Cette question sera supprimée définitivement.' }))) return
     setError('')
     try {
       await deleteLessonComment(commentId)

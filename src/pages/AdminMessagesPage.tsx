@@ -4,6 +4,7 @@ import { Container } from '../components/ui/Container'
 import { useAuth } from '../features/auth'
 import { deleteContactMessage, listContactMessages, markContactMessageRead, markContactMessageUnread } from '../features/contact'
 import type { ContactMessage } from '../types/contact'
+import { confirmAction } from '../components/ConfirmDialog'
 
 function formatDate(value: ContactMessage['createdAt']) {
   if (!value) return 'Date en cours d’enregistrement'
@@ -50,7 +51,7 @@ export function AdminMessagesPage() {
   }
 
   async function remove(item: ContactMessage) {
-    if (!window.confirm('Supprimer ce message ?')) return
+    if (!(await confirmAction({ title: 'Supprimer ce message ?', description: 'Ce message sera supprimé définitivement.' }))) return
     try {
       await deleteContactMessage(item.id)
       if (selected?.id === item.id) setSelected(null)

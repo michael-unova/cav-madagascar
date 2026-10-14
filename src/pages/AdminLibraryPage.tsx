@@ -8,6 +8,7 @@ import type { Course } from '../types/course'
 import type { LibraryBook, LibraryBookType, LibraryVisibility } from '../types/library'
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 import { getFirebaseStorage } from '../lib/firebase/storage'
+import { confirmAction } from '../components/ConfirmDialog'
 
 const emptyForm = { title: '', author: '', description: '', category: 'Culture générale', type: 'pdf' as LibraryBookType, resourceUrl: '', coverUrl: '', keywords: '', visibility: 'public' as LibraryVisibility, courseIds: [] as string[] }
 
@@ -78,7 +79,7 @@ export function AdminLibraryPage({ onBack }: { onBack?: () => void }) {
   }
 
   async function togglePublish(book: LibraryBook) { setError(''); setMessage(''); try { await updateLibraryBook(book.id, { status: book.status === 'published' ? 'draft' : 'published', visibility: book.visibility, ...(book.visibility === 'enrolled' ? { courseIds: book.courseIds ?? (book.courseId ? [book.courseId] : []) } : {}) }); await refresh(); setMessage(book.status === 'published' ? 'Livre retiré de la librairie.' : 'Livre publié dans la librairie.') } catch (err) { setError(err instanceof Error ? err.message : 'Action impossible.') } }
-  async function remove(book: LibraryBook) { if (!window.confirm(`Supprimer « ${book.title} » ?`)) return; setError(''); try { await deleteLibraryBook(book); await refresh(); if (editingId === book.id) resetForm(); setMessage('Livre supprimé.') } catch (err) { setError(err instanceof Error ? err.message : 'Suppression impossible.') } }
+  async function remove(book: LibraryBook) { if (!(await confirmAction({ title: 'Supprimer ce livre ?', description: <>Le livre <strong>« {book.title} »</strong> sera supprimé définitivement.</> }))) return; setError(''); try { await deleteLibraryBook(book); await refresh(); if (editingId === book.id) resetForm(); setMessage('Livre supprimé.') } catch (err) { setError(err instanceof Error ? err.message : 'Suppression impossible.') } }
 
   return <Container className="page-container admin-library-page">
     <div className="page-title library-admin-title"><div><button className="back" onClick={onBack}>← Retour</button><div className="eyebrow">RESSOURCES</div><h1>Librairie</h1><p>Ajoutez une fois les ressources de référence et rendez-les disponibles aux étudiants connectés.</p></div><div className="library-admin-count"><strong>{books.length}</strong><span>ressources</span></div></div>
