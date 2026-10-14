@@ -1102,6 +1102,18 @@ function PublicPreview({
           </div>
         </div>
       </div>
+      <div className="preview-mobile-bar">
+        <div>
+          <small>Prix</small>
+          <strong>{formatPrice(course.price)} Ar</strong>
+        </div>
+        <button
+          className="primary"
+          onClick={() => go(`enroll:${course.id}`)}
+        >
+          S'inscrire <Icon name="arrow" />
+        </button>
+      </div>
     </div>
   );
 }
