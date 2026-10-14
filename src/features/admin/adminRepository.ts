@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import type { Course, CourseCardColor, CourseGroup, CourseStatus } from '../../types/course'
@@ -231,7 +232,70 @@ export async function createSubject(input: {
   return ref.id
 }
 
+export interface SubjectDependencies {
+  /** Concours that still use this subject. Deletion is blocked while any exist. */
+  courses: { id: string; title: string }[]
+  nodes: number
+  blocks: number
+  questions: number
+  questionSets: number
+}
+
+async function subjectContentRefs(subjectId: string) {
+  const [nodeSnap, questionSnap, setSnap] = await Promise.all([
+    getDocs(query(collection(firestore, 'contentNodes'), where('subjectId', '==', subjectId))),
+    getDocs(query(collection(firestore, 'questions'), where('subjectId', '==', subjectId))),
+    getDocs(query(collection(firestore, 'questionSets'), where('subjectId', '==', subjectId))),
+  ])
+  const nodeIds = nodeSnap.docs.map((item) => item.id)
+  const blockRefs = []
+  for (let index = 0; index < nodeIds.length; index += 30) {
+    const chunk = nodeIds.slice(index, index + 30)
+    const blockSnap = await getDocs(query(collection(firestore, 'contentBlocks'), where('nodeId', 'in', chunk)))
+    blockRefs.push(...blockSnap.docs.map((item) => item.ref))
+  }
+  return {
+    nodeRefs: nodeSnap.docs.map((item) => item.ref),
+    blockRefs,
+    questionRefs: questionSnap.docs.map((item) => item.ref),
+    setRefs: setSnap.docs.map((item) => item.ref),
+  }
+}
+
+export async function getSubjectDependencies(subjectId: string): Promise<SubjectDependencies> {
+  const [links, courseSnap, refs] = await Promise.all([
+    getDocs(query(collection(firestore, 'courseSubjects'), where('subjectId', '==', subjectId))),
+    getDocs(collection(firestore, 'courses')),
+    subjectContentRefs(subjectId),
+  ])
+  const titles = new Map(courseSnap.docs.map((item) => [item.id, String(item.data().title ?? item.id)]))
+  const courseIds = Array.from(new Set(links.docs.map((item) => String(item.data().courseId ?? ''))))
+  return {
+    courses: courseIds.map((id) => ({ id, title: titles.get(id) ?? id })),
+    nodes: refs.nodeRefs.length,
+    blocks: refs.blockRefs.length,
+    questions: refs.questionRefs.length,
+    questionSets: refs.setRefs.length,
+  }
+}
+
+/**
+ * Deletes a subject together with its own content (themes, lessons, lesson blocks,
+ * questions and evaluations) so nothing is left orphaned. Refused while concours use it.
+ * The subject document is removed last, so a failed attempt can simply be retried.
+ */
 export async function deleteSubject(subjectId: string): Promise<void> {
+  const links = await getDocs(query(collection(firestore, 'courseSubjects'), where('subjectId', '==', subjectId)))
+  if (!links.empty) {
+    throw new Error('Cette matière est encore utilisée par un ou plusieurs concours. Retirez d’abord les associations concernées.')
+  }
+  const refs = await subjectContentRefs(subjectId)
+  const all = [...refs.blockRefs, ...refs.nodeRefs, ...refs.questionRefs, ...refs.setRefs]
+  for (let index = 0; index < all.length; index += 400) {
+    const batch = writeBatch(firestore)
+    all.slice(index, index + 400).forEach((ref) => batch.delete(ref))
+    await batch.commit()
+  }
   await deleteDoc(doc(firestore, 'subjects', subjectId))
 }
 
@@ -249,6 +313,20 @@ export async function updateSubject(
     updatedBy: userId,
     updatedAt: serverTimestamp(),
   })
+  const linkPatch: Record<string, string> = {}
+  if (input.name) linkPatch.title = input.name.trim()
+  if (input.matricule) linkPatch.matricule = input.matricule.trim().toUpperCase()
+  if (input.niveau) linkPatch.niveau = input.niveau.trim()
+  if (input.description !== undefined) linkPatch.description = input.description.trim()
+  if (Object.keys(linkPatch).length) {
+    // Concours keep a denormalised copy of the subject details: keep it in sync after an edit.
+    const linked = await getDocs(query(collection(firestore, 'courseSubjects'), where('subjectId', '==', subjectId)))
+    for (let index = 0; index < linked.docs.length; index += 400) {
+      const batch = writeBatch(firestore)
+      linked.docs.slice(index, index + 400).forEach((item) => batch.update(item.ref, { ...linkPatch, updatedAt: serverTimestamp() }))
+      await batch.commit()
+    }
+  }
   if (input.status === 'published') {
     const links = await getDocs(query(collection(firestore, 'courseSubjects'), where('subjectId', '==', subjectId)))
     const courses = await getDocs(collection(firestore, 'courses'))

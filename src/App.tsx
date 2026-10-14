@@ -32,10 +32,13 @@ import {
   deleteCourseGroup,
   createSubject,
   deleteSubject,
+  getSubjectDependencies,
   listAdminSubjects,
   updateSubject,
   listAdminUsers,
 } from "./features/admin/adminRepository";
+import type { SubjectDependencies } from "./features/admin/adminRepository";
+import { ConfirmDialog, useConfirm } from "./components/ConfirmDialog";
 import {
   attachSubject,
   deleteCourseSubject,
@@ -3257,6 +3260,10 @@ function AdminOverview({
   );
 }
 
+function plural(count: number, one: string, many: string) {
+  return `${count} ${count > 1 ? many : one}`;
+}
+
 function AdminSubjects({
   userId,
   onOpenSubject,
@@ -3271,8 +3278,13 @@ function AdminSubjects({
   const [description, setDescription] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ subject: Subject; deps: SubjectDependencies } | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   async function refresh() {
     setSubjects(await listAdminSubjects());
@@ -3287,6 +3299,21 @@ function AdminSubjects({
     );
   }, []);
 
+  // Close any open "•••" menu when clicking elsewhere.
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      document.querySelectorAll<HTMLDetailsElement>(".subject-card details.course-actions-menu[open]").forEach((menu) => {
+        if (!menu.contains(event.target as Node)) menu.removeAttribute("open");
+      });
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
+
+  function closeMenus() {
+    document.querySelectorAll(".subject-card details.course-actions-menu[open]").forEach((menu) => menu.removeAttribute("open"));
+  }
+
   function reset() {
     setEditingId(null);
     setName("");
@@ -3296,12 +3323,16 @@ function AdminSubjects({
     setShowCreate(false);
   }
   function edit(subject: Subject) {
+    closeMenus();
+    setError("");
+    setMessage("");
     setEditingId(subject.id);
     setName(subject.name);
     setMatricule(subject.matricule);
     setNiveau(subject.niveau);
     setDescription(subject.description);
     setShowCreate(true);
+    window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
 
   async function save() {
@@ -3317,6 +3348,7 @@ function AdminSubjects({
     }
     setSaving(true);
     setError("");
+    setMessage("");
     try {
       if (editingId)
         await updateSubject(
@@ -3332,6 +3364,7 @@ function AdminSubjects({
           description: description.trim(),
           userId,
         });
+      setMessage(editingId ? "La matière a été modifiée." : "La matière a été créée en brouillon.");
       reset();
       await refresh();
     } catch (error) {
@@ -3346,6 +3379,9 @@ function AdminSubjects({
   }
 
   async function toggle(subject: Subject) {
+    closeMenus();
+    setError("");
+    setMessage("");
     try {
       await updateSubject(
         subject.id,
@@ -3353,6 +3389,7 @@ function AdminSubjects({
         userId,
       );
       await refresh();
+      setMessage(subject.status === "published" ? "La matière est repassée en brouillon." : "La matière est publiée.");
     } catch (error) {
       setError(
         error instanceof Error
@@ -3362,23 +3399,81 @@ function AdminSubjects({
     }
   }
 
-  async function remove(subject: Subject) {
-    if (!window.confirm(`Supprimer la matière « ${subject.name} » ?`)) return;
+  async function askRemove(subject: Subject) {
+    closeMenus();
+    setError("");
+    setMessage("");
+    setCheckingId(subject.id);
     try {
-      const associations = await listCourseSubjectsBySubjectId(subject.id);
-      if (associations.length)
-        throw new Error(
-          "Cette matière est encore utilisée par un ou plusieurs concours. Retirez d’abord les associations concernées.",
-        );
+      setDeleteTarget({ subject, deps: await getSubjectDependencies(subject.id) });
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Impossible de vérifier le contenu de la matière.",
+      );
+    } finally {
+      setCheckingId(null);
+    }
+  }
+
+  async function confirmRemove() {
+    if (!deleteTarget || deleting) return;
+    const { subject } = deleteTarget;
+    setDeleting(true);
+    setError("");
+    try {
       await deleteSubject(subject.id);
+      if (editingId === subject.id) reset();
+      setMessage(`La matière « ${subject.name} » a été supprimée.`);
+      setDeleteTarget(null);
       await refresh();
     } catch (error) {
+      setDeleteTarget(null);
       setError(
         error instanceof Error
           ? error.message
           : "Impossible de supprimer la matière.",
       );
+    } finally {
+      setDeleting(false);
     }
+  }
+
+  function renderDeleteDialog() {
+    if (!deleteTarget) return null;
+    const { subject, deps } = deleteTarget;
+    if (deps.courses.length) {
+      return (
+        <ConfirmDialog
+          tone="info"
+          title="Suppression impossible"
+          description={<>La matière <strong>« {subject.name} »</strong> est utilisée par {plural(deps.courses.length, "concours", "concours")} : <strong>{deps.courses.map((course) => course.title).join(", ")}</strong>.</>}
+          hint="Retirez d’abord cette matière de ces concours, puis réessayez."
+          confirmLabel="Compris"
+          cancelLabel={null}
+          onConfirm={() => setDeleteTarget(null)}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      );
+    }
+    const parts = [
+      deps.nodes ? plural(deps.nodes, "thème ou leçon", "thèmes et leçons") : "",
+      deps.blocks ? plural(deps.blocks, "contenu de leçon", "contenus de leçon") : "",
+      deps.questions ? plural(deps.questions, "question", "questions") : "",
+      deps.questionSets ? plural(deps.questionSets, "évaluation", "évaluations") : "",
+    ].filter(Boolean);
+    return (
+      <ConfirmDialog
+        tone="danger"
+        title="Supprimer cette matière ?"
+        description={<>La matière <strong>« {subject.name} »</strong> sera supprimée définitivement. Cette action est irréversible.</>}
+        hint={parts.length ? <>Seront également supprimés : {parts.join(", ")}.</> : "Cette matière ne contient aucun contenu."}
+        busy={deleting}
+        onConfirm={() => void confirmRemove()}
+        onCancel={() => { if (!deleting) setDeleteTarget(null); }}
+      />
+    );
   }
 
   return (
@@ -3393,9 +3488,10 @@ function AdminSubjects({
           <Icon name="plus" /> Ajouter une matière
         </button>
       </div>
-      {error && <div className="form-error">{error}</div>}
+      {error && <div className="form-error" role="alert">{error}</div>}
+      {message && <div className="form-success" role="status">{message}</div>}
       {showCreate && (
-        <div className="panel compact-create-panel">
+        <div className="panel compact-create-panel" ref={formRef}>
           <div className="create-head">
             <div>
               <div className="eyebrow">{editingId ? "MODIFICATION" : "NOUVELLE MATIÈRE"}</div>
@@ -3433,7 +3529,7 @@ function AdminSubjects({
                 <details className="course-actions-menu"><summary aria-label="Autres actions" title="Autres actions">•••</summary><div className="course-actions-popover" role="menu">
                   <button type="button" role="menuitem" onClick={() => edit(subject)}>Modifier</button>
                   <button type="button" role="menuitem" onClick={() => void toggle(subject)}>{subject.status === "published" ? "Dépublier" : "Publier"}</button>
-                  <button type="button" role="menuitem" className="danger" onClick={() => void remove(subject)}>Supprimer</button>
+                  <button type="button" role="menuitem" className="danger" disabled={checkingId === subject.id} onClick={() => void askRemove(subject)}>{checkingId === subject.id ? "Vérification…" : "Supprimer"}</button>
                 </div></details>
               </div>
             </article>
@@ -3442,6 +3538,7 @@ function AdminSubjects({
       ) : (
         <div className="panel empty-state"><h3>Votre bibliothèque est vide.</h3><p>Créez votre première matière pour commencer à organiser les cours.</p><button className="primary" onClick={() => setShowCreate(true)}><Icon name="plus" /> Ajouter une matière</button></div>
       )}
+      {renderDeleteDialog()}
     </div>
   );
 }
@@ -3977,6 +4074,7 @@ function SubjectWorkspace({ subjectId, initialNodeId = "", onBack }: { subjectId
 }
 
 function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPreview = false, onBack }: { initialSubjectId?: string; initialNodeId?: string; initialPreview?: boolean; onBack?: () => void }) {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const { user } = useAuth();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectId, setSubjectId] = useState(initialSubjectId);
@@ -4287,11 +4385,12 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
     } catch (e) { setError(e instanceof Error ? e.message : "Impossible de dépublier la leçon."); }
   }
   async function removeQuestion(question: Question) {
-    if (!window.confirm("Supprimer cette question ?")) return;
+    if (!(await confirm({ title: "Supprimer cette question ?", description: "Cette question sera supprimée définitivement. Cette action est irréversible." }))) return;
     try { await deleteQuestion(question.id); await refreshQuestions(); setMessage("Question supprimée."); }
     catch (e) { setError(e instanceof Error ? e.message : "Impossible de supprimer la question."); }
   }
   return <div className="page">
+    {confirmDialog}
     {onBack && <button className="back" onClick={onBack}>← Retour à la matière</button>}
     <div className="page-title"><div><div className="eyebrow">ÉDITEUR PÉDAGOGIQUE</div><h1>{subjects.find(item=>item.id===subjectId)?.name || "Contenu de la matière"}</h1><p>Une matière, des thèmes, des leçons. Tout le contenu se crée au même endroit.</p></div></div>
     {error && <div className="form-error">{error}</div>}{message && <div className="form-success">{message}</div>}
@@ -4420,6 +4519,7 @@ function LessonQuestionForm({ questions, lessonId, courseId, userId }: { questio
 
 
 function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: string; onBack?: () => void }) {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const { user } = useAuth();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const subjectId = initialSubjectId;
@@ -4512,7 +4612,7 @@ function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: s
   }
 
   async function removeQuestion(question: Question) {
-    if (!window.confirm("Supprimer cette question ?")) return;
+    if (!(await confirm({ title: "Supprimer cette question ?", description: "Cette question sera supprimée définitivement. Cette action est irréversible." }))) return;
     try { await deleteQuestion(question.id); setSelectedIds(ids => ids.filter(id => id !== question.id)); await refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : "Impossible de supprimer la question."); }
   }
@@ -4542,13 +4642,14 @@ function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: s
   }
 
   async function removeSet(item: QuestionSet) {
-    if (!window.confirm(`Supprimer « ${item.title} » ?`)) return;
+    if (!(await confirm({ title: "Supprimer cette évaluation ?", description: <>L’évaluation <strong>« {item.title} »</strong> sera supprimée définitivement. Cette action est irréversible.</> }))) return;
     try { await deleteQuestionSet(item.id); await refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : "Impossible de supprimer l'évaluation."); }
   }
 
   return (
     <div className="page">
+    {confirmDialog}
       {onBack && <button className="back" onClick={onBack}>← Retour à la matière</button>}
       <div className="page-title">
         <div>

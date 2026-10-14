@@ -4097,3 +4097,6 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
 .top-actions .top-profile-button:focus-visible{outline:3px solid rgba(23,105,224,.35);outline-offset:2px}
 .top-actions .top-profile-button.is-active{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--cav-blue,#1769e0)}
 .top-actions .top-profile-button .avatar{display:grid;line-height:1}
+
+/* Matières: keep the actions menu above neighbouring cards */
+.subject-card:has(.course-actions-menu[open]){position:relative;z-index:40}
