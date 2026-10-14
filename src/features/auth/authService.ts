@@ -15,6 +15,7 @@ import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firest
 import { getFirebaseApp } from '../../lib/firebase/config'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import { getFirebaseAuth } from './firebaseAuth'
+import { getPublicSiteUrl } from '../../lib/siteUrl'
 
 const firestore = getFirebaseFirestore()
 const auth = getFirebaseAuth(getFirebaseApp())
@@ -175,10 +176,13 @@ export async function logoutUser(): Promise<void> {
 }
 
 export async function resetPassword(email: string): Promise<void> {
-  const actionUrl = `${window.location.origin}/auth/action`
+  // The link in the email is built by Firebase from the "Action URL" configured in
+  // Firebase Console > Authentication > Templates (set it to https://cav.mg/auth/action).
+  // `url` is the continue URL shown after the reset; keep it on the official domain.
+  const continueUrl = `${getPublicSiteUrl()}/?auth=login`
   auth.languageCode = 'fr'
   await sendPasswordResetEmail(auth, email.trim(), {
-    url: actionUrl,
+    url: continueUrl,
     handleCodeInApp: true,
   })
 }

@@ -1,0 +1,13 @@
+name = "cav-firebase-auth-proxy"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Only the Firebase helper paths run through this Worker. The rest of cav.mg
+# (Cloudflare Pages site) and all email DNS records are unaffected.
+routes = [
+  { pattern = "cav.mg/__/auth/*", zone_name = "cav.mg" },
+  { pattern = "cav.mg/__/firebase/init.json", zone_name = "cav.mg" },
+]
+
+[vars]
+UPSTREAM_HOST = "cav-madagascar-b4beb.firebaseapp.com"

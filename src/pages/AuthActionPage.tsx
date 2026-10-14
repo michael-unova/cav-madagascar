@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth'
 import { getFirebaseApp } from '../lib/firebase/config'
 import { getFirebaseAuth } from '../features/auth/firebaseAuth'
+import { getPublicSiteUrl, isTrustedSiteUrl } from '../lib/siteUrl'
 
 const auth = getFirebaseAuth(getFirebaseApp())
 
@@ -82,8 +83,9 @@ export function AuthActionPage() {
   }
 
   function goToLogin() {
-    const fallback = `${window.location.origin}/?auth=login`
-    window.location.assign(continueUrl || fallback)
+    const fallback = `${getPublicSiteUrl()}/?auth=login`
+    // continueUrl comes from the query string: only follow it if it stays on our own domain.
+    window.location.assign(continueUrl && isTrustedSiteUrl(continueUrl) ? continueUrl : fallback)
   }
 
   return (
