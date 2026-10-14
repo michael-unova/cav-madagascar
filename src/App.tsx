@@ -32,6 +32,7 @@ import {
   deleteCourseGroup,
   createSubject,
   deleteSubject,
+  getSubjectDependencies,
   listAdminSubjects,
   updateSubject,
   listAdminUsers,
@@ -3274,6 +3275,7 @@ function AdminSubjects({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   async function refresh() {
     setSubjects(await listAdminSubjects());
@@ -3364,14 +3366,32 @@ function AdminSubjects({
   }
 
   async function remove(subject: Subject) {
-    if (!(await confirmAction({ title: "Supprimer cette matière ?", description: <>La matière <strong>« {subject.name} »</strong> sera supprimée définitivement. Cette action est irréversible.</> }))) return;
+    if (removingId) return;
+    document.querySelectorAll(".subject-card details.course-actions-menu[open]").forEach((menu) => menu.removeAttribute("open"));
+    setError("");
+    setRemovingId(subject.id);
     try {
-      const associations = await listCourseSubjectsBySubjectId(subject.id);
-      if (associations.length)
-        throw new Error(
-          "Cette matière est encore utilisée par un ou plusieurs concours. Retirez d’abord les associations concernées.",
-        );
+      const deps = await getSubjectDependencies(subject.id);
+      const parts = [
+        deps.nodes ? `${deps.nodes} thème(s) et leçon(s)` : "",
+        deps.blocks ? `${deps.blocks} contenu(s) de leçon` : "",
+        deps.questions ? `${deps.questions} question(s)` : "",
+        deps.questionSets ? `${deps.questionSets} évaluation(s)` : "",
+      ].filter(Boolean);
+      const hint = (
+        <>
+          {deps.courses.length ? <>Elle sera retirée de {deps.courses.length} concours : <strong>{deps.courses.map((course) => course.title).join(", ")}</strong>. </> : null}
+          {parts.length ? <>Seront également supprimés : {parts.join(", ")}.</> : "Cette matière ne contient aucun contenu."}
+        </>
+      );
+      const confirmed = await confirmAction({
+        title: "Supprimer cette matière ?",
+        description: <>La matière <strong>« {subject.name} »</strong> sera supprimée définitivement. Cette action est irréversible.</>,
+        hint,
+      });
+      if (!confirmed) return;
       await deleteSubject(subject.id);
+      if (editingId === subject.id) reset();
       await refresh();
     } catch (error) {
       setError(
@@ -3379,6 +3399,9 @@ function AdminSubjects({
           ? error.message
           : "Impossible de supprimer la matière.",
       );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -3434,7 +3457,7 @@ function AdminSubjects({
                 <details className="course-actions-menu"><summary aria-label="Autres actions" title="Autres actions">•••</summary><div className="course-actions-popover" role="menu">
                   <button type="button" role="menuitem" onClick={() => edit(subject)}>Modifier</button>
                   <button type="button" role="menuitem" onClick={() => void toggle(subject)}>{subject.status === "published" ? "Dépublier" : "Publier"}</button>
-                  <button type="button" role="menuitem" className="danger" onClick={() => void remove(subject)}>Supprimer</button>
+                  <button type="button" role="menuitem" className="danger" disabled={removingId === subject.id} onClick={() => void remove(subject)}>{removingId === subject.id ? "Suppression…" : "Supprimer"}</button>
                 </div></details>
               </div>
             </article>

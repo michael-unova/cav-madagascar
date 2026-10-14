@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import type { Course, CourseCardColor, CourseGroup, CourseStatus } from '../../types/course'
@@ -231,7 +232,78 @@ export async function createSubject(input: {
   return ref.id
 }
 
+export interface SubjectDependencies {
+  /** Existing concours that include this subject. */
+  courses: { id: string; title: string }[]
+  /** Links pointing to concours that no longer exist (left behind by deleted concours). */
+  staleLinks: number
+  nodes: number
+  blocks: number
+  questions: number
+  questionSets: number
+}
+
+async function subjectDeletionRefs(subjectId: string) {
+  const [linkSnap, nodeSnap, questionSnap, setSnap, courseSnap] = await Promise.all([
+    getDocs(query(collection(firestore, 'courseSubjects'), where('subjectId', '==', subjectId))),
+    getDocs(query(collection(firestore, 'contentNodes'), where('subjectId', '==', subjectId))),
+    getDocs(query(collection(firestore, 'questions'), where('subjectId', '==', subjectId))),
+    getDocs(query(collection(firestore, 'questionSets'), where('subjectId', '==', subjectId))),
+    getDocs(collection(firestore, 'courses')),
+  ])
+  const nodeIds = nodeSnap.docs.map((item) => item.id)
+  const blockRefs = []
+  for (let index = 0; index < nodeIds.length; index += 30) {
+    const blockSnap = await getDocs(query(collection(firestore, 'contentBlocks'), where('nodeId', 'in', nodeIds.slice(index, index + 30))))
+    blockRefs.push(...blockSnap.docs.map((item) => item.ref))
+  }
+  return {
+    linkSnap,
+    courseTitles: new Map(courseSnap.docs.map((item) => [item.id, String(item.data().title ?? item.id)])),
+    nodeRefs: nodeSnap.docs.map((item) => item.ref),
+    blockRefs,
+    questionRefs: questionSnap.docs.map((item) => item.ref),
+    setRefs: setSnap.docs.map((item) => item.ref),
+  }
+}
+
+export async function getSubjectDependencies(subjectId: string): Promise<SubjectDependencies> {
+  const refs = await subjectDeletionRefs(subjectId)
+  const liveCourseIds = new Set<string>()
+  let staleLinks = 0
+  refs.linkSnap.docs.forEach((item) => {
+    const courseId = String(item.data().courseId ?? '')
+    if (refs.courseTitles.has(courseId)) liveCourseIds.add(courseId)
+    else staleLinks += 1
+  })
+  return {
+    courses: Array.from(liveCourseIds).map((id) => ({ id, title: refs.courseTitles.get(id) ?? id })),
+    staleLinks,
+    nodes: refs.nodeRefs.length,
+    blocks: refs.blockRefs.length,
+    questions: refs.questionRefs.length,
+    questionSets: refs.setRefs.length,
+  }
+}
+
+/**
+ * Permanently deletes a subject: its links to concours, themes, lessons, lesson blocks,
+ * questions and evaluations, then the subject itself (last, so a failed attempt can be retried).
+ */
 export async function deleteSubject(subjectId: string): Promise<void> {
+  const refs = await subjectDeletionRefs(subjectId)
+  const all = [
+    ...refs.linkSnap.docs.map((item) => item.ref),
+    ...refs.blockRefs,
+    ...refs.nodeRefs,
+    ...refs.questionRefs,
+    ...refs.setRefs,
+  ]
+  for (let index = 0; index < all.length; index += 400) {
+    const batch = writeBatch(firestore)
+    all.slice(index, index + 400).forEach((ref) => batch.delete(ref))
+    await batch.commit()
+  }
   await deleteDoc(doc(firestore, 'subjects', subjectId))
 }
 
