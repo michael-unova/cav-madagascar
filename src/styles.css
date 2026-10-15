@@ -4147,3 +4147,21 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
   .preview-mobile-bar strong{display:block;font-size:18px;line-height:1.25;color:var(--navy);white-space:nowrap}
   .preview-mobile-bar button{display:inline-flex;align-items:center;justify-content:center;gap:8px;flex:0 1 auto;min-height:46px;padding:0 22px;white-space:nowrap}
 }
+
+/* Legacy platform notice (welcome page) */
+.cav-legacy-notice{background:#fff8e6;border-bottom:1px solid #f0dfae}
+.cav-legacy-notice-inner{display:flex;align-items:center;justify-content:center;gap:12px;padding-top:11px;padding-bottom:11px}
+.cav-legacy-notice-icon{flex:none;width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:#d9a441;color:#fff;font-size:14px;font-weight:800;font-style:italic;font-family:Georgia,'Times New Roman',serif;line-height:1}
+.cav-legacy-notice p{margin:0;color:#3d3420;font-size:.95rem;line-height:1.55}
+.cav-legacy-notice strong{color:#0b1f3a;font-weight:800}
+.cav-legacy-notice-link{display:inline-block;padding:3px 12px;border-radius:999px;background:#0b1f3a;color:#fff;font-weight:800;text-decoration:none;white-space:nowrap;line-height:1.3;transition:background .15s ease,transform .15s ease}
+.cav-legacy-notice+.cav-welcome-hero{margin-top:0}
+.cav-legacy-notice-link:hover{background:#1769e0}
+.cav-legacy-notice-link:focus-visible{outline:3px solid rgba(23,105,224,.35);outline-offset:2px}
+@media(max-width:760px){
+  .cav-legacy-notice-inner{align-items:flex-start;justify-content:flex-start;gap:10px;padding-top:12px;padding-bottom:12px}
+  .cav-legacy-notice-icon{margin-top:1px}
+  .cav-legacy-notice p{font-size:.88rem;line-height:1.6}
+  .cav-legacy-notice-link{padding:5px 14px;margin-top:2px}
+}
+@media(prefers-reduced-motion:reduce){.cav-legacy-notice-link{transition:none}}
