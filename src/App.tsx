@@ -432,7 +432,7 @@ function Icon({ name }: { name: string }) {
 function Logo() {
   return (
     <button className="brand-logo" type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="CAV Madagascar">
-      <img src="/assets/cav-logo.png" alt="CAV Madagascar" />
+      <img src="/assets/cav-logo.webp" alt="CAV Madagascar" />
     </button>
   );
 }
@@ -539,7 +539,7 @@ function PublicHome({
           <div className="hero-visual cav-responsive-hero-visual">
             <img
               className="cav-responsive-student-photo"
-              src="/assets/cav-home-student.jpg"
+              src="/assets/cav-home-student.webp"
               alt="Une étudiante malgache concentrée sur ses révisions"
               fetchPriority="high"
             />
@@ -611,7 +611,7 @@ function PublicHome({
           </div>
           <div className="products-visual">
             <div className="products-image-wrap">
-              <img src="/assets/cav-learning.jpg" alt="Apprenant en train de travailler sur une préparation CAV Madagascar" />
+              <img src="/assets/cav-learning.webp" alt="Apprenant en train de travailler sur une préparation CAV Madagascar" loading="lazy" decoding="async" />
               <div className="products-badge"><Icon name="play" /><span>Apprendre efficacement<br /><strong>où que vous soyez</strong></span></div>
             </div>
           </div>
@@ -4666,7 +4666,7 @@ function MaintenanceNoticeScreen({
         <div className="maintenance-glow maintenance-glow-one" />
         <div className="maintenance-glow maintenance-glow-two" />
         <div className="maintenance-logo-wrap">
-          <img src="/assets/cav-logo.png" alt="CAV Madagascar" className="maintenance-logo" />
+          <img src="/assets/cav-logo.webp" alt="CAV Madagascar" className="maintenance-logo" />
         </div>
         <div className="maintenance-illustration" aria-hidden="true">
           <div className="maintenance-orbit orbit-one" />
@@ -4801,7 +4801,7 @@ function ProfilePage({ role, displayName, userEmail }: { role: Role; displayName
           <label>Titre du message<input className="fake-input" value={maintenanceTitle} onChange={e => setMaintenanceTitle(e.target.value)} placeholder="Maintenance en cours" /></label>
         </div>
         <label>Message <span className="optional-label">(modifiable)</span><textarea className="fake-textarea maintenance-message-input" rows={5} maxLength={1000} value={maintenanceMessage} onChange={e => setMaintenanceMessage(e.target.value)} /></label>
-        <div className="maintenance-admin-preview"><div className="eyebrow">APERÇU</div><div className="maintenance-mini-preview"><img src="/assets/cav-logo.png" alt="CAV Madagascar" /><strong>{maintenanceTitle || "Maintenance en cours"}</strong><p>{maintenanceMessage || "Votre message apparaîtra ici."}</p><span>Compris →</span></div></div>
+        <div className="maintenance-admin-preview"><div className="eyebrow">APERÇU</div><div className="maintenance-mini-preview"><img src="/assets/cav-logo.webp" alt="CAV Madagascar" /><strong>{maintenanceTitle || "Maintenance en cours"}</strong><p>{maintenanceMessage || "Votre message apparaîtra ici."}</p><span>Compris →</span></div></div>
         <div className="editor-actions"><button className="primary" disabled={maintenanceSaving} onClick={() => void saveMaintenance()}>{maintenanceSaving ? "Enregistrement..." : "Enregistrer les modifications"}</button></div>
       </section>
     )}
@@ -5730,7 +5730,7 @@ function AppContent() {
       <div className="loading-screen" role="status" aria-live="polite" aria-label="Chargement de votre espace">
         <div className="loading-screen-inner">
           <div className="loading-screen-logo-wrap">
-            <img className="loading-screen-logo" src="/assets/cav-logo.png" alt="CAV Madagascar" />
+            <img className="loading-screen-logo" src="/assets/cav-logo.webp" alt="CAV Madagascar" />
           </div>
           <p className="loading-screen-kicker">COURS D'APPUI VIRTUEL</p>
           <h1 className="loading-screen-title">Préparez votre réussite avec CAV.</h1>

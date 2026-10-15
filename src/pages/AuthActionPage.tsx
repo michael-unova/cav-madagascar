@@ -101,7 +101,7 @@ export function AuthActionPage() {
 
       <section className="cav-auth-action-card" aria-labelledby="reset-title">
         <div className="cav-auth-action-logo-wrap">
-          <img src="/assets/cav-logo.png" alt="CAV Madagascar" className="cav-auth-action-logo" />
+          <img src="/assets/cav-logo.webp" alt="CAV Madagascar" className="cav-auth-action-logo" />
         </div>
 
         {loading ? (

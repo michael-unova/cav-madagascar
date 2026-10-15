@@ -2,19 +2,24 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/assets/cav-logo.png" />
+    <link rel="icon" type="image/png" href="/assets/cav-favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="CAV Madagascar, plateforme de formation en ligne pour la préparation aux concours administratifs et les formations professionnelles modulaires." />
     <title>CAV Madagascar | Préparation aux concours</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Libre+Franklin:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <style>
+      /* Instant first paint while the app bundle downloads (replaced by React on load). */
+      html,body{margin:0;background:#f6f9fd}
+      .boot{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#102d52}
+      .boot b{font-size:44px;line-height:1;letter-spacing:-1px;color:#1769bf;font-weight:800}
+      .boot small{font-size:13px;color:#637a95;letter-spacing:.4px}
+      .boot i{width:120px;height:4px;border-radius:4px;background:#dbe8f6;overflow:hidden;position:relative}
+      .boot i::after{content:"";position:absolute;inset:0;width:40%;border-radius:4px;background:#1769bf;animation:boot 1.1s ease-in-out infinite}
+      @keyframes boot{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+      @media(prefers-reduced-motion:reduce){.boot i::after{animation:none;width:100%}}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot" role="status" aria-live="polite"><b>CAV</b><i></i><small>Chargement…</small></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

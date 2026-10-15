@@ -152,7 +152,7 @@ export function StudentNavbar() {
   return <header className="student-navbar">
     <div className="student-navbar-inner">
       <Link to="/dashboard" className="student-brand" aria-label="CAV Madagascar">
-        <img src="/assets/cav-logo.png" alt="CAV Madagascar" />
+        <img src="/assets/cav-logo.webp" alt="CAV Madagascar" />
       </Link>
       <nav className="student-nav-links" aria-label="Navigation étudiant">
         {links.map(([href, icon, label], index) => {

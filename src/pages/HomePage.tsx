@@ -34,7 +34,7 @@ export function HomePage() {
         </div>
         <div className="cav-welcome-photo-wrap">
           <div className="cav-welcome-photo-backdrop" aria-hidden="true" />
-          <img className="cav-welcome-photo" src="/assets/cav-home-student.jpg" alt="Une étudiante se concentre sur ses révisions avec CAV Madagascar" />
+          <img className="cav-welcome-photo" src="/assets/cav-home-student.webp" alt="Une étudiante se concentre sur ses révisions avec CAV Madagascar" />
           <div className="cav-preparation-pill" aria-live="polite">
             <span className="cav-preparation-icon" aria-hidden="true">▤</span>
             <span>{preparationCount === null ? 'Découvrez nos préparations' : `${preparationCount} préparation${preparationCount > 1 ? 's' : ''} disponible${preparationCount > 1 ? 's' : ''}`}</span>

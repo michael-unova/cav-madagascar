@@ -1,0 +1,7 @@
+# Hashed build files (JS, CSS, fonts): the file name changes whenever the content changes.
+/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Hand-managed images: cache for a week, refresh in the background after that.
+/assets/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400

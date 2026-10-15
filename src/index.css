@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&family=Montserrat:wght@600;700;800&display=swap');
 
 :root{font-family:'DM Sans',system-ui,sans-serif;color:#17283d;background:#f5f8fc;font-synthesis:none;text-rendering:optimizeLegibility;--navy:#123b68;--navy2:#0d2d51;--blue:#2e6ea6;--teal:#168b86;--gold:#c48a2c;--ink:#17283d;--muted:#6d7d91;--line:#dfe7f0;--white:#fff;--shadow:0 14px 40px rgba(18,59,104,.08)}
 *{box-sizing:border-box}body{margin:0;background:#f5f8fc}button{font:inherit;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}svg{width:19px;height:19px;flex:none}

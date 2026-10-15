@@ -2320,7 +2320,7 @@ textarea:focus-visible {
 .student-topbar .top-actions .top-logout{font-size:11px;font-weight:700;color:#5f7084}
 
 .student-app .page{max-width:1400px;margin:0 auto;padding:38px 52px 90px}
-.student-app .hero{position:relative;min-height:220px;padding:34px 38px!important;border:1px solid #e4ebf3;border-radius:24px;background:linear-gradient(90deg,rgba(255,255,255,.98) 0%,rgba(255,255,255,.94) 48%,rgba(255,255,255,.42) 100%),url('/assets/cav-hero-education.jpg') right center/cover no-repeat;box-shadow:0 12px 32px rgba(18,49,83,.06);display:flex;align-items:center;justify-content:space-between;gap:30px;overflow:hidden}
+.student-app .hero{position:relative;min-height:220px;padding:34px 38px!important;border:1px solid #e4ebf3;border-radius:24px;background:linear-gradient(90deg,rgba(255,255,255,.98) 0%,rgba(255,255,255,.94) 48%,rgba(255,255,255,.42) 100%),url('/assets/cav-hero-education.webp') right center/cover no-repeat;box-shadow:0 12px 32px rgba(18,49,83,.06);display:flex;align-items:center;justify-content:space-between;gap:30px;overflow:hidden}
 .student-app .hero h1{font-size:42px!important;margin:7px 0 9px!important;color:#102b4a!important}
 .student-app .hero h1 span{color:#d79a2b}
 .student-app .hero p{font-size:15px;max-width:610px;margin:0}
@@ -2378,7 +2378,7 @@ textarea:focus-visible {
   .student-topbar .top-actions{gap:7px}.student-topbar .top-actions>span:not(.status-dot),.student-topbar .top-actions strong{display:none}
   .student-topbar .top-actions .top-logout{display:none}
   .student-topbar .top-actions .avatar-image,.student-topbar .top-actions .avatar{width:35px;height:35px}
-  .student-app .hero{min-height:0;padding:25px 20px!important;background:linear-gradient(90deg,rgba(255,255,255,.98),rgba(255,255,255,.84)),url('/assets/cav-hero-education.jpg') center/cover}
+  .student-app .hero{min-height:0;padding:25px 20px!important;background:linear-gradient(90deg,rgba(255,255,255,.98),rgba(255,255,255,.84)),url('/assets/cav-hero-education.webp') center/cover}
   .student-app .hero{display:block}.student-app .hero .primary{margin-top:20px;width:100%}
   .student-app .hero h1{font-size:31px!important}.student-app .hero p{font-size:13px}
   .student-app .section-head{margin-top:28px}.student-app .section-head h2{font-size:19px}
@@ -2488,7 +2488,7 @@ textarea:focus-visible {
   gap:18px;
   padding:34px 38px;
   background-color:#eaf4ff;
-  background-image:url('/assets/cav-student-welcome.jpg');
+  background-image:url('/assets/cav-student-welcome.webp');
   background-size:cover;
   background-position:center 38%;
   box-shadow:0 12px 35px rgba(20,67,112,.06);
@@ -2763,7 +2763,7 @@ textarea:focus-visible {
   overflow-y:auto!important;
   background:
     linear-gradient(135deg, rgba(241,247,255,.16), rgba(238,245,253,.12)),
-    url("/assets/cav-auth-background.jpg") center center / cover no-repeat fixed!important;
+    url("/assets/cav-auth-background.webp") center center / cover no-repeat fixed!important;
 }
 .auth-shell::before{
   content:"";position:fixed;width:520px;height:520px;border-radius:50%;
@@ -3384,7 +3384,7 @@ th, td { line-height: 1.5; }
   position:absolute;
   top:0;right:0;bottom:0;
   width:min(912px,100%);
-  background:url('/assets/cav-student-welcome.jpg') 100% 25%/auto 190% no-repeat;
+  background:url('/assets/cav-student-welcome.webp') 100% 25%/auto 190% no-repeat;
   -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 42%);
   mask-image:linear-gradient(90deg,transparent 0,#000 42%);
   z-index:0;
