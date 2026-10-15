@@ -1,10 +1,12 @@
 import { initializeApp } from 'firebase-admin/app'
 import type { Firestore, DocumentData } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
+import { getStorage } from 'firebase-admin/storage'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https'
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { assertCanManageTarget, isAuthUserNotFound } from './userAdmin.js'
 
 initializeApp()
 const db: Firestore = getFirestore()
@@ -334,11 +336,48 @@ export const setUserRole = onCall({ region: 'africa-south1' }, async request => 
 })
 
 
+// Personal learning data keyed by `userId`. Payments and enrollmentHistory are
+// intentionally kept as financial / audit records.
+const USER_DATA_COLLECTIONS = [
+  'enrollments',
+  'progress',
+  'bookmarks',
+  'notes',
+  'notifications',
+  'userAchievements',
+  'lessonAttempts',
+  'practiceAttempts',
+  'psychotechnicalAttempts',
+]
+
+async function deleteByUserId(collectionName: string, userId: string) {
+  for (;;) {
+    const snapshot = await db.collection(collectionName).where('userId', '==', userId).limit(400).get()
+    if (snapshot.empty) return
+    const batch = db.batch()
+    snapshot.docs.forEach(item => batch.delete(item.ref))
+    await batch.commit()
+    if (snapshot.size < 400) return
+  }
+}
+
+async function purgeUserData(userId: string) {
+  const tasks: Array<[string, () => Promise<unknown>]> = [
+    ...USER_DATA_COLLECTIONS.map((name): [string, () => Promise<unknown>] => [name, () => deleteByUserId(name, userId)]),
+    ['userSessions', () => db.doc(`userSessions/${userId}`).delete()],
+    ['storage', () => getStorage().bucket().deleteFiles({ prefix: `users/${userId}/`, force: true })],
+  ]
+  // Best effort: the account itself is already gone, so one failing cleanup must not fail the request.
+  await Promise.all(tasks.map(async ([label, run]) => {
+    try { await run() } catch (error) { console.error(`User data cleanup failed (${label}) for ${userId}`, error) }
+  }))
+}
+
 export const setUserStatus = onCall({ region: 'africa-south1' }, async request => {
   const uid = request.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
 
-  await requireAdmin(uid)
+  const actor = await requireAdmin(uid)
 
   const targetUserId = typeof request.data?.userId === 'string' ? request.data.userId : ''
   const status = request.data?.status === 'active' || request.data?.status === 'suspended'
@@ -353,11 +392,19 @@ export const setUserStatus = onCall({ region: 'africa-south1' }, async request =
   if (!targetSnapshot.exists) throw new HttpsError('not-found', 'Utilisateur introuvable.')
 
   const targetProfile = targetSnapshot.data() ?? {}
-  if (targetProfile.role === 'super_admin') {
-    throw new HttpsError('permission-denied', 'Le statut d’un super administrateur ne peut pas être modifié ici.')
-  }
+  assertCanManageTarget(actor, targetProfile, 'suspend')
 
-  await getAuth().updateUser(targetUserId, { disabled: status === 'suspended' })
+  try {
+    await getAuth().updateUser(targetUserId, { disabled: status === 'suspended' })
+    // End sessions that are already open so a suspension takes effect immediately.
+    if (status === 'suspended') await getAuth().revokeRefreshTokens(targetUserId)
+  } catch (error) {
+    // Profile without a sign-in record (e.g. imported data): the Firestore status still applies.
+    if (!isAuthUserNotFound(error)) {
+      console.error('setUserStatus auth update failed', error)
+      throw new HttpsError('internal', 'Impossible de mettre à jour le compte de connexion.')
+    }
+  }
   await targetRef.update({ status, updatedAt: new Date() })
 
   return { success: true, userId: targetUserId, status }
@@ -368,7 +415,7 @@ export const deleteUserAccount = onCall({ region: 'africa-south1' }, async reque
   const uid = request.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
 
-  await requireAdmin(uid)
+  const actor = await requireAdmin(uid)
 
   const targetUserId = typeof request.data?.userId === 'string' ? request.data.userId : ''
   if (!targetUserId) throw new HttpsError('invalid-argument', 'Utilisateur invalide.')
@@ -379,15 +426,19 @@ export const deleteUserAccount = onCall({ region: 'africa-south1' }, async reque
   if (!targetSnapshot.exists) throw new HttpsError('not-found', 'Utilisateur introuvable.')
 
   const targetProfile = targetSnapshot.data() ?? {}
-  if (targetProfile.role === 'super_admin') {
-    throw new HttpsError('permission-denied', 'Le compte super administrateur ne peut pas être supprimé ici.')
-  }
-  if (targetProfile.role !== 'student') {
-    throw new HttpsError('failed-precondition', 'Cette action est réservée aux comptes étudiants.')
-  }
+  assertCanManageTarget(actor, targetProfile, 'delete')
 
-  await getAuth().deleteUser(targetUserId)
+  try {
+    await getAuth().deleteUser(targetUserId)
+  } catch (error) {
+    // Already missing from Firebase Auth (orphan profile): continue and remove the rest.
+    if (!isAuthUserNotFound(error)) {
+      console.error('deleteUserAccount auth delete failed', error)
+      throw new HttpsError('internal', 'Impossible de supprimer le compte de connexion. Réessayez.')
+    }
+  }
   await targetRef.delete()
+  await purgeUserData(targetUserId)
 
   return { success: true, userId: targetUserId }
 })

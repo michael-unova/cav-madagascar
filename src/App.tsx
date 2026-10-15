@@ -115,6 +115,7 @@ import type {
   QuestionType,
 } from "./types/question";
 import { confirmAction } from "./components/ConfirmDialog";
+import { callableErrorMessage } from "./lib/firebase/callableError";
 
 type Role = "visitor" | "student" | "admin" | "teacher";
 type StudentPage =
@@ -4935,12 +4936,12 @@ function AdminUsers() {
       const setUserStatus = httpsCallable<{ userId: string; status: "active" | "suspended" }, { success: boolean }>(getFirebaseFunctions(), "setUserStatus");
       await setUserStatus({ userId: item.uid, status: item.status === "active" ? "suspended" : "active" });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de modifier le statut.");
+      setError(callableErrorMessage(e, "Impossible de modifier le statut. Réessayez dans un instant."));
     } finally { setProcessing(null); }
   }
 
   async function deleteStudent(item: AdminStudentRow) {
-    if (!(await confirmAction({ title: "Supprimer ce compte ?", description: <>Le compte de <strong>{item.displayName}</strong> sera supprimé définitivement. Cette action est irréversible.</>, confirmLabel: "Supprimer le compte" }))) return;
+    if (!(await confirmAction({ title: "Supprimer ce compte ?", description: <>Le compte de <strong>{item.displayName}</strong> sera supprimé définitivement, avec sa progression, ses notes et ses inscriptions. Cette action est irréversible. Pour simplement bloquer l’accès, utilisez plutôt « Suspendre ».</>, confirmLabel: "Supprimer le compte" }))) return;
     setProcessing(item.uid); setError("");
     try {
       const { httpsCallable } = await import("firebase/functions");
@@ -4948,7 +4949,7 @@ function AdminUsers() {
       const deleteUserAccount = httpsCallable<{ userId: string }, { success: boolean }>(getFirebaseFunctions(), "deleteUserAccount");
       await deleteUserAccount({ userId: item.uid });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de supprimer cet étudiant.");
+      setError(callableErrorMessage(e, "Impossible de supprimer ce compte. Réessayez dans un instant."));
     } finally { setProcessing(null); }
   }
 
