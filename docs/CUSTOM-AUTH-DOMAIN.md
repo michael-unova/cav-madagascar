@@ -12,7 +12,8 @@ Firebase exposes the default domain in three places. Each has a different fix:
 
 ## What the code does
 - `VITE_FIREBASE_AUTH_DOMAIN=cav.mg` (set in Cloudflare Pages + GitHub Actions variables; see `.env.example`).
-- `cloudflare/firebase-auth-proxy/`: Worker bound only to `cav.mg/__/auth/*` and `cav.mg/__/firebase/init.json`; forwards to the Firebase-hosted originals. Nothing else on cav.mg is touched.
+- `public/_worker.js` + `public/_routes.json`: a Cloudflare Pages worker, deployed automatically with the site, that serves `/__/auth/*` and `/__/firebase/init.json` from Firebase. Without a proxy, Cloudflare Pages answers `/__/auth/handler` with the website's home page and the Google sign-in popup shows the site instead of Google. `_routes.json` limits the worker to `/__/*`, so every other request is served as static files as before.
+- `cloudflare/firebase-auth-proxy/` (alternative, optional if the Pages worker above is active): Worker bound only to `cav.mg/__/auth/*` and `cav.mg/__/firebase/init.json`; forwards to the Firebase-hosted originals. Nothing else on cav.mg is touched.
 - Password reset `continueUrl` now always uses `https://cav.mg/?auth=login` (`src/lib/siteUrl.ts`); the action page only follows same-site `continueUrl` values.
 
 ## Deployment order (do not skip; the order avoids an outage)
