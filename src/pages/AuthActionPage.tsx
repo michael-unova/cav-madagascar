@@ -32,7 +32,9 @@ export function AuthActionPage() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  // `error` = the link itself is unusable (full-page state). `formError` = a fixable mistake shown inside the form.
   const [error, setError] = useState('')
+  const [formError, setFormError] = useState('')
   const [success, setSuccess] = useState(false)
 
   useEffect(() => {
@@ -58,14 +60,14 @@ export function AuthActionPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    setError('')
+    setFormError('')
     if (!oobCode) return
     if (password.length < 6) {
-      setError('Votre mot de passe doit contenir au moins 6 caractères.')
+      setFormError('Votre mot de passe doit contenir au moins 6 caractères.')
       return
     }
     if (password !== confirmPassword) {
-      setError('Les deux mots de passe ne correspondent pas.')
+      setFormError('Les deux mots de passe ne correspondent pas.')
       return
     }
     setSubmitting(true)
@@ -74,9 +76,13 @@ export function AuthActionPage() {
       setSuccess(true)
     } catch (err) {
       const code = String((err as { code?: string })?.code ?? '')
-      setError(code.includes('expired') || code.includes('invalid-action-code')
-        ? 'Ce lien est invalide ou a expiré. Demandez un nouveau lien de réinitialisation.'
-        : 'Impossible de modifier le mot de passe pour le moment. Veuillez réessayer.')
+      if (code.includes('expired') || code.includes('invalid-action-code')) {
+        setError('Ce lien est invalide ou a expiré. Demandez un nouveau lien de réinitialisation.')
+      } else if (code.includes('weak-password')) {
+        setFormError('Ce mot de passe est trop faible. Choisissez-en un plus long ou plus complexe.')
+      } else {
+        setFormError('Impossible de modifier le mot de passe pour le moment. Veuillez réessayer.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -151,7 +157,7 @@ export function AuthActionPage() {
                 </div>
               </label>
 
-              {error && <div className="cav-auth-action-alert" role="alert">{error}</div>}
+              {formError && <div className="cav-auth-action-alert" role="alert">{formError}</div>}
 
               <button className="cav-auth-action-primary" disabled={submitting} type="submit">
                 {submitting ? 'Enregistrement…' : 'Enregistrer le nouveau mot de passe'}
