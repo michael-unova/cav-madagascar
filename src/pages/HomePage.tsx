@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { Container } from '../components/ui/Container'
 import { Card } from '../components/ui/Card'
 import { listPublishedCourses } from '../features/courses'
-import { LegacyPlatformNotice } from '../components/LegacyPlatformNotice'
 
 export function HomePage() {
   const [preparationCount, setPreparationCount] = useState<number | null>(null)
@@ -17,7 +16,6 @@ export function HomePage() {
   }, [])
 
   return <div className="redesign-public-home cav-public-home">
-    <LegacyPlatformNotice />
     <section className="cav-welcome-hero">
       <div className="cav-hero-decoration cav-hero-decoration-one" aria-hidden="true" />
       <div className="cav-hero-decoration cav-hero-decoration-two" aria-hidden="true" />

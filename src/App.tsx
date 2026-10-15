@@ -91,6 +91,7 @@ import { markNotificationRead, subscribeMyNotifications, subscribeUnreadLessonCo
 import type { Enrollment, Payment } from "./types/enrollment";
 import type { Course, CourseCardColor, CourseGroup, CourseSubject } from "./types/course";
 import { courseIllustration } from "./components/CourseIllustration";
+import { LegacyPlatformNotice } from "./components/LegacyPlatformNotice";
 import { ContentProtection } from "./components/ContentProtection";
 import { SessionReplacedNotice } from "./components/SessionReplacedNotice";
 import type {
@@ -512,6 +513,7 @@ function PublicHome({
     <div className="public-shell">
       <PublicNavbar go={go} active="home" />
       <main>
+        <LegacyPlatformNotice />
         <section className="landing-hero cav-responsive-landing-hero">
           <div className="landing-copy">
             <span className="pill blue-pill">PRÉPARATION AUX CONCOURS</span>
