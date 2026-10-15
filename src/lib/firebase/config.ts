@@ -1,4 +1,13 @@
 import { getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app'
+import { browserAuthDomainEnv, resolveAuthDomain } from './authDomain'
+
+// On the custom domain, falls back to <projectId>.firebaseapp.com when cav.mg does not
+// serve Firebase's /__/auth pages (see ./authDomain.ts). Resolved once, before the app starts.
+const authDomain = await resolveAuthDomain(
+  import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  browserAuthDomainEnv(),
+)
 
 /**
  * Firebase client configuration.
@@ -11,7 +20,7 @@ import { getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from '
  */
 const firebaseConfig: FirebaseOptions = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  authDomain,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
