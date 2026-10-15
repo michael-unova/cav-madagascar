@@ -4147,9 +4147,3 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
   .preview-mobile-bar strong{display:block;font-size:18px;line-height:1.25;color:var(--navy);white-space:nowrap}
   .preview-mobile-bar button{display:inline-flex;align-items:center;justify-content:center;gap:8px;flex:0 1 auto;min-height:46px;padding:0 22px;white-space:nowrap}
 }
-
-/* Success toast for admin actions (stays visible while scrolling) */
-.admin-toast{position:fixed;right:24px;bottom:24px;z-index:1200;display:flex;align-items:center;gap:10px;max-width:min(420px,calc(100vw - 32px));padding:13px 14px;border-radius:12px;box-shadow:0 14px 40px rgba(16,59,93,.18);font-size:12.5px;font-weight:700;line-height:1.4;animation:cavPageIn .25s ease both}
-.admin-toast>span:first-child{display:grid;place-items:center;flex:none;width:22px;height:22px;border-radius:50%;background:#247a54;color:#fff;font-size:12px}
-.admin-toast button{margin-left:auto;border:0;background:transparent;color:inherit;font-size:18px;line-height:1;cursor:pointer;padding:0 2px}
-@media(max-width:600px){.admin-toast{left:16px;right:16px;bottom:16px;max-width:none}}

@@ -4828,7 +4828,6 @@ function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
@@ -4929,21 +4928,25 @@ function AdminUsers() {
     return () => { unsubUsers(); unsubEnrollments(); unsubHistory(); unsubCourses(); };
   }, [db]);
 
-  useEffect(() => {
-    if (!success) return;
-    const timer = window.setTimeout(() => setSuccess(""), 5000);
-    return () => window.clearTimeout(timer);
-  }, [success]);
+  // Centered "success" dialog (same component as the delete confirmation, which is known to render).
+  function announceSuccess(title: string, description: string) {
+    void confirmAction({ tone: "info", eyebrow: "SUCCÈS", title, description, confirmLabel: "Compris", cancelLabel: null });
+  }
 
   async function toggleStatus(item: AdminStudentRow) {
     const suspending = item.status === "active";
-    setProcessing(item.uid); setError(""); setSuccess("");
+    setProcessing(item.uid); setError("");
     try {
       const { httpsCallable } = await import("firebase/functions");
       const { getFirebaseFunctions } = await import("./lib/firebase/functions");
       const setUserStatus = httpsCallable<{ userId: string; status: "active" | "suspended" }, { success: boolean }>(getFirebaseFunctions(), "setUserStatus");
       await setUserStatus({ userId: item.uid, status: suspending ? "suspended" : "active" });
-      setSuccess(suspending ? `Le compte de ${item.displayName} a été suspendu avec succès.` : `Le compte de ${item.displayName} a été réactivé avec succès.`);
+      announceSuccess(
+        suspending ? "Compte suspendu" : "Compte réactivé",
+        suspending
+          ? `Le compte de ${item.displayName} a été suspendu avec succès. Cette personne ne peut plus se connecter.`
+          : `Le compte de ${item.displayName} a été réactivé avec succès. Cette personne peut de nouveau se connecter.`,
+      );
     } catch (e) {
       setError(callableErrorMessage(e, "Impossible de modifier le statut. Réessayez dans un instant."));
     } finally { setProcessing(null); }
@@ -4951,13 +4954,13 @@ function AdminUsers() {
 
   async function deleteStudent(item: AdminStudentRow) {
     if (!(await confirmAction({ title: "Supprimer ce compte ?", description: <>Le compte de <strong>{item.displayName}</strong> sera supprimé définitivement, avec sa progression, ses notes et ses inscriptions. Cette action est irréversible. Pour simplement bloquer l’accès, utilisez plutôt « Suspendre ».</>, confirmLabel: "Supprimer le compte" }))) return;
-    setProcessing(item.uid); setError(""); setSuccess("");
+    setProcessing(item.uid); setError("");
     try {
       const { httpsCallable } = await import("firebase/functions");
       const { getFirebaseFunctions } = await import("./lib/firebase/functions");
       const deleteUserAccount = httpsCallable<{ userId: string }, { success: boolean }>(getFirebaseFunctions(), "deleteUserAccount");
       await deleteUserAccount({ userId: item.uid });
-      setSuccess(`Le compte de ${item.displayName} a été supprimé définitivement.`);
+      announceSuccess("Compte supprimé", `Le compte de ${item.displayName} a été supprimé définitivement.`);
     } catch (e) {
       setError(callableErrorMessage(e, "Impossible de supprimer ce compte. Réessayez dans un instant."));
     } finally { setProcessing(null); }
@@ -5006,15 +5009,15 @@ function AdminUsers() {
     }
     setSavingRole(true);
     setError("");
-    setSuccess("");
     try {
       const { httpsCallable } = await import("firebase/functions");
       const { getFirebaseFunctions } = await import("./lib/firebase/functions");
       const setUserRole = httpsCallable<{ userId: string; role: "student" | "content_manager" }, { success: boolean; role: "student" | "content_manager" }>(getFirebaseFunctions(), "setUserRole");
       await setUserRole({ userId: selectedRoleStudent.uid, role: roleDraft });
       setUsers(current => current.map(user => user.uid === selectedRoleStudent.uid ? { ...user, role: roleDraft } : user));
-      setSuccess(`Le rôle de ${selectedRoleStudent.displayName} a été modifié avec succès.`);
+      const changedName = selectedRoleStudent.displayName;
       setSelectedRoleStudent(null);
+      announceSuccess("Rôle modifié", `Le rôle de ${changedName} a été modifié avec succès.`);
     } catch (e) {
       console.error(e);
       setError(callableErrorMessage(e, "Impossible de modifier le rôle de ce compte. Réessayez dans un instant."));
@@ -5037,7 +5040,6 @@ function AdminUsers() {
       </div>
     </div>
     {error && <div className="form-error">{error}</div>}
-    {success && <div className="form-success admin-toast" role="status" aria-live="polite"><span aria-hidden="true">✓</span><span>{success}</span><button type="button" aria-label="Fermer" onClick={() => setSuccess("")}>×</button></div>}
     <div className="users-filter-panel">
       <div className="users-filter-row">
         <label className="users-filter-search">Rechercher
