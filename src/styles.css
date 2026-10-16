@@ -1,4 +1,4 @@
-
+﻿
 /* Professional course editor */
 .lesson-editor-pro{border:1px solid #dce6f0;border-radius:20px;background:#fff;overflow:visible;box-shadow:0 14px 38px rgba(21,55,91,.07)}
 .lesson-editor-header{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:24px 26px 18px;background:#fff}
@@ -27,7 +27,7 @@
 @media (max-width: 900px) { .user-row { flex-wrap: wrap; gap: 10px; } .user-identity { min-width: 180px; flex: 1 1 240px; } .user-role-control { flex: 1 1 190px; } }
 
 /* ================================================================
-   CAV PREMIUM UI SYSTEM — VISUAL ONLY
+   CAV PREMIUM UI SYSTEM â€” VISUAL ONLY
    This layer intentionally changes presentation only. It does not
    alter data, routes, workflows, Firebase calls, or permissions.
    ================================================================ */
@@ -282,7 +282,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--cav-blue)!important;b
 .profile-settings-photo{border-color:var(--cav-line)!important}
 .avatar-image.xl{box-shadow:0 12px 28px rgba(23,105,224,.13)!important}
 
-/* Lesson editor — retain all controls, make the workspace premium */
+/* Lesson editor â€” retain all controls, make the workspace premium */
 .lesson-editor-pro{border:1px solid var(--cav-line)!important;border-radius:22px!important;box-shadow:var(--cav-shadow)!important}
 .lesson-editor-header{padding:25px 27px 19px!important}
 .lesson-editor-toolbar{border-color:#dbe5ef!important;background:#f8fbff!important}
@@ -570,7 +570,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--cav-blue)!important;b
 .lesson-workspace-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:4px 0 18px}.lesson-workspace-head h2{margin:6px 0 3px}.lesson-workspace-head small{color:var(--color-muted)}.lesson-workspace-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.content-tree-simple{margin-top:14px}.content-tree-topic+.content-tree-topic{margin-top:4px}.content-tree-topic .tree-item{width:100%;display:flex;align-items:center;gap:10px;text-align:left}.content-tree-topic .tree-item>b{margin-left:auto;color:#7890a4}.content-tree-lessons{margin-left:18px;border-left:1px solid #dce7ef;padding-left:8px}.lesson-tree-item{width:100%;display:flex;align-items:center;gap:9px;text-align:left;border:0;background:transparent;padding:9px 10px}.lesson-tree-item span{color:#7a91a6;font-weight:700}.tree-add-lesson{width:100%;border:0;background:transparent;text-align:left;color:#1769e0;font-weight:700;padding:8px 10px;cursor:pointer}.compact-create-form{padding:20px;border:1px solid #dce7ef;border-radius:16px;background:#fbfdff;margin-bottom:18px}.lesson-save-bar{display:flex;align-items:center;gap:14px;padding:14px 4px}.lesson-save-bar span{font-size:.78rem;color:#72869a}.lesson-questions-section{margin-top:24px;border-top:1px solid #e6edf3;padding-top:22px}.question-inline-form{padding:18px;border:1px solid #dce7ef;border-radius:14px;background:#fbfdff;margin:14px 0}.question-inline-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.radio-inline{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:.75rem;color:#62788c}.lesson-question-list{display:flex;flex-direction:column;gap:8px}.lesson-question-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid #e3ebf2;border-radius:11px;background:#fff}.lesson-question-row>div{display:flex;flex-direction:column;gap:3px}.lesson-question-row small{color:#7b8d9d}.topic-lesson-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}.topic-lesson-card{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:16px;border:1px solid #dce7ef;border-radius:14px;background:#fff;text-align:left;cursor:pointer}.topic-lesson-card:hover{border-color:#9fc2df;transform:translateY(-1px)}.topic-lesson-card span{color:#1769e0;font-weight:800}.topic-lesson-card small{color:#7b8d9d}.lesson-reader-preview{background:#f4f7fa;border:1px solid #dce5ed;border-radius:16px;padding:14px}.lesson-reader-toolbar{display:flex;align-items:center;gap:14px;justify-content:space-between;padding:4px 2px 14px}.lesson-reader-toolbar span{font-size:.8rem;color:#6d8294}.lesson-reader-toolbar>div{display:flex;gap:7px}.lesson-reader-page{width:794px;height:1122px;max-width:100%;margin:0 auto;background:#fff;overflow:hidden;position:relative;box-shadow:0 8px 28px rgba(25,60,90,.1)}.lesson-reader-page-inner{width:794px;min-height:1122px;box-sizing:border-box;padding:72px 68px;line-height:1.72;color:#263b50;font-size:1rem}.lesson-reader-page-inner h1,.lesson-reader-page-inner h2,.lesson-reader-page-inner h3{color:#173f65}.lesson-reader-page-inner img{max-width:100%;height:auto}.lesson-reader-mask{position:absolute;inset:0;pointer-events:none}.lesson-reader-quiz{max-width:794px;margin:14px auto 0;padding:14px 16px;background:#fff;border:1px solid #dce7ef;border-radius:12px;display:flex;justify-content:space-between}.lesson-reader-quiz span{color:#71869a}@media(max-width:760px){.lesson-workspace-head{flex-direction:column}.lesson-workspace-actions{justify-content:flex-start}.question-inline-options{grid-template-columns:1fr}.lesson-save-bar{align-items:flex-start;flex-direction:column}.lesson-reader-page{height:760px}.lesson-reader-page-inner{width:100%;min-height:760px;padding:38px 28px}.lesson-reader-toolbar{flex-wrap:wrap}.lesson-reader-toolbar>div{width:100%}}
 
 
-/* Student curriculum: compact Matière-first navigation */
+/* Student curriculum: compact MatiÃ¨re-first navigation */
 .student-subject-list { display:grid; gap:14px; }
 .student-subject-list-card { width:100%; display:flex; align-items:center; justify-content:space-between; gap:24px; text-align:left; padding:22px 24px; border:1px solid var(--color-border, #e2e8f0); border-radius:18px; background:#fff; color:inherit; cursor:pointer; transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
 .student-subject-list-card:hover { transform:translateY(-2px); box-shadow:0 12px 30px rgba(15,23,42,.08); border-color:#bfdbfe; }
@@ -783,7 +783,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--cav-blue)!important;b
 
 /* ========================================================================
    CAV RESPONSIVE HARDENING v1
-   Touch-first, Android + iPhone, 320px → large desktop.
+   Touch-first, Android + iPhone, 320px â†’ large desktop.
    This layer intentionally sits last so it can normalize legacy rules.
    ======================================================================== */
 
@@ -895,7 +895,7 @@ textarea:focus-visible {
 }
 
 /* ------------------------------------------------------------------------
-   Phones: 320px–767px
+   Phones: 320pxâ€“767px
    ------------------------------------------------------------------------ */
 @media (max-width: 767px) {
   :root {
@@ -1630,7 +1630,7 @@ textarea:focus-visible {
   .lesson-questions-student .section-head { gap:8px; }
 }
 
-/* Comments v2 — clean professional blue system */
+/* Comments v2 â€” clean professional blue system */
 .lesson-comments-section {
   --comments-blue: #2563eb;
   --comments-blue-dark: #1d4ed8;
@@ -1720,7 +1720,7 @@ textarea:focus-visible {
   .lesson-comment-edit-footer .lesson-comment-actions button { flex:1; }
 }
 
-/* Comments v3 — actual student lesson implementation */
+/* Comments v3 â€” actual student lesson implementation */
 .lesson-comment-avatar { overflow:hidden; }
 .lesson-comment-avatar-image { width:100%; height:100%; display:block; object-fit:cover; border-radius:50%; }
 .lesson-comment-tools { display:flex; align-items:center; gap:6px; }
@@ -1742,7 +1742,7 @@ textarea:focus-visible {
   .lesson-comment-reply-tools .lesson-comment-edit-footer { min-width:0; }
 }
 
-/* Comments — compact learning-feed reactions */
+/* Comments â€” compact learning-feed reactions */
 .lesson-comment-love { color:#64778d; }
 .lesson-comment-love span { font-size:1.08rem; line-height:1; }
 .lesson-comment-love b { font-size:.68rem; font-weight:800; }
@@ -1770,7 +1770,7 @@ textarea:focus-visible {
   .lesson-comment-reply-item .lesson-comment-actions.comment-actions { margin-left:40px; }
 }
 
-/* Comments v4 — compact approved learning-feed layout */
+/* Comments v4 â€” compact approved learning-feed layout */
 .lesson-comments-panel { background:#fff; padding:0; overflow:hidden; }
 .lesson-comments-panel-head { padding:14px 18px; }
 .lesson-comment-composer { margin:12px 14px 14px; padding:12px; border-radius:14px; }
@@ -1827,7 +1827,7 @@ textarea:focus-visible {
   .lesson-comment-menu button { min-height:34px; }
 }
 
-/* Comments v5 — ultra-compact feed spacing (approved visual direction) */
+/* Comments v5 â€” ultra-compact feed spacing (approved visual direction) */
 .lesson-comments-panel { padding:0 !important; }
 .lesson-comments-panel-head { padding:10px 14px !important; }
 .lesson-comment-composer { margin:7px 8px 8px !important; padding:8px !important; border-radius:12px !important; }
@@ -2013,7 +2013,7 @@ textarea:focus-visible {
 .analytics-dashboard { --chart-1:#2563eb; --chart-2:#8b5cf6; --chart-3:#10b981; }
 
 /* --------------------------------------------------------------------------
-   Analytics v2 — executive / Power BI-inspired dashboard
+   Analytics v2 â€” executive / Power BI-inspired dashboard
    -------------------------------------------------------------------------- */
 .analytics-dashboard {
   max-width: 1480px;
@@ -2177,7 +2177,7 @@ textarea:focus-visible {
 @media(max-width:1150px){.analytics-kpis{grid-template-columns:repeat(2,1fr)}.analytics-overview-grid{grid-template-columns:1fr}.analytics-grid-3{grid-template-columns:1fr 1fr}.analytics-grid-3 > article:last-child{grid-column:1/-1}.analytics-bottom-grid{grid-template-columns:1fr}.analytics-full{grid-column:auto}}
 @media(max-width:760px){.analytics-dashboard{padding:17px 12px 46px}.analytics-header{align-items:stretch;flex-direction:column;gap:14px}.analytics-heading-row{flex-direction:column}.analytics-live{align-self:flex-start}.analytics-toolbar{width:100%}.analytics-period,.analytics-refresh{flex:1;justify-content:center}.analytics-kpis{grid-template-columns:1fr}.analytics-kpi{min-height:112px}.analytics-grid-3{grid-template-columns:1fr}.analytics-grid-3 > article:last-child{grid-column:auto}.analytics-panel{padding:15px}.analytics-line-chart{height:245px}.donut-layout{justify-content:center;flex-wrap:wrap}.donut-chart{width:145px;flex-basis:145px}.analytics-bars{height:195px}.ops-cards{grid-template-columns:1fr}.recent-list > div{grid-template-columns:31px minmax(0,1fr) auto}.recent-list b{font-size:.62rem}}
 
-/* FINAL MOBILE AUTH HEADER FIX — logout must remain visible */
+/* FINAL MOBILE AUTH HEADER FIX â€” logout must remain visible */
 @media (max-width: 720px) {
   .topbar {
     width: 100%;
@@ -2293,7 +2293,7 @@ textarea:focus-visible {
 @media(max-width:560px){.student-brand img{width:94px}.student-logout{font-size:9px}.student-bell{width:31px}.redesign-welcome h1{font-size:29px}.redesign-stat-strip{grid-template-columns:1fr}.redesign-stat-strip>div{display:flex;align-items:baseline;justify-content:space-between}.redesign-contest-card{grid-template-columns:1fr}.redesign-contest-image{height:150px;order:-1}.redesign-contest-copy{min-height:205px}.redesign-discover-grid{grid-template-columns:1fr}.redesign-catalog-search{width:100%}}
 
 /* ================================================================
-   CAV STUDENT REDESIGN — APPROVED DIRECTION
+   CAV STUDENT REDESIGN â€” APPROVED DIRECTION
    Student space: top navigation, illustration-led cards, calm UI.
    ================================================================ */
 .student-app{display:block;min-height:100vh;background:#f7f9fc}
@@ -2389,7 +2389,7 @@ textarea:focus-visible {
 }
 
 /* ================================================================
-   CAV STUDENT UI v80 — compact, responsive card system
+   CAV STUDENT UI v80 â€” compact, responsive card system
    ================================================================ */
 .student-app .student-topnav-item.is-active{background:#edf5ff;color:#1769e0;box-shadow:inset 0 -2px 0 #1769e0}
 .student-app .student-topnav-item:first-child{background:transparent;color:#53657b;box-shadow:none}
@@ -2474,7 +2474,7 @@ textarea:focus-visible {
   .student-app .top-actions .top-logout{font-size:8px;padding:0 6px}
 }
 
-/* CAV dashboard hero — student welcome photo */
+/* CAV dashboard hero â€” student welcome photo */
 .redesign-welcome-photo{
   min-height:220px;
   border-radius:24px;
@@ -2547,7 +2547,7 @@ textarea:focus-visible {
 .image-change-button input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 @media(max-width:560px){.concours-image-preview{align-items:flex-start;flex-direction:column}.concours-image-preview img{width:100%;height:160px}.image-preview-actions{width:100%}}
 
-/* Concours editor v89 — dedicated create/edit workspace */
+/* Concours editor v89 â€” dedicated create/edit workspace */
 .course-editor-page{padding-top:28px}
 .course-editor-back{display:inline-flex;align-items:center;gap:7px;margin-bottom:16px;color:#526a83;font-weight:800}
 .course-editor-back:hover{color:var(--cav-blue)}
@@ -2663,7 +2663,7 @@ textarea:focus-visible {
   .auth-heading h1{font-size:27px!important}
 }
 
-/* Authentication v94 — refined, compact and balanced */
+/* Authentication v94 â€” refined, compact and balanced */
 .auth-shell{
   min-height:100dvh!important;
   background:#f5f8fc!important;
@@ -2754,7 +2754,7 @@ textarea:focus-visible {
   .auth-heading h1{font-size:26px!important}
 }
 
-/* v95 — single-page authentication experience */
+/* v95 â€” single-page authentication experience */
 .auth-shell{
   min-height:100dvh!important;
   display:block!important;
@@ -2847,12 +2847,12 @@ textarea:focus-visible {
 }
 
 
-/* v96 — official Google G mark */
+/* v96 â€” official Google G mark */
 .google-logo{width:20px!important;height:20px!important;display:block!important;flex:0 0 20px!important}
 .google-button .google-mark{display:none!important}
 
 
-/* Branded Firebase email-action handler — French CAV password reset */
+/* Branded Firebase email-action handler â€” French CAV password reset */
 .cav-auth-action-page{min-height:100dvh;position:relative;overflow:hidden;display:grid;place-items:center;padding:32px 18px;background:linear-gradient(145deg,#f4f8fc 0%,#eef5fa 52%,#f8fbfd 100%);font-family:Manrope,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18324d}
 .cav-auth-action-card{position:relative;z-index:2;width:min(500px,100%);background:rgba(255,255,255,.97);border:1px solid #dce7f0;border-radius:24px;padding:34px 40px 22px;box-shadow:0 24px 70px rgba(16,59,93,.12);backdrop-filter:blur(8px);animation:cavPageIn .42s cubic-bezier(.2,.7,.2,1) both}
 .cav-auth-action-logo-wrap{display:flex;justify-content:center;margin-bottom:25px;padding-bottom:23px;border-bottom:1px solid #edf2f6}
@@ -2913,7 +2913,7 @@ textarea:focus-visible {
   .public-shell .modern-course-title-row h3{font-size:20px}
 }
 
-/* Student chapter navigation — placed immediately after lesson content. */
+/* Student chapter navigation â€” placed immediately after lesson content. */
 .lesson-chapter-navigation {
   display: grid;
   grid-template-columns: minmax(100px, 1fr) auto minmax(100px, 1fr);
@@ -2994,7 +2994,7 @@ textarea:focus-visible {
 .user-role-help{margin:2px 0 0;font-size:12px;line-height:1.6;color:#718197;}
 .user-role-modal .student-history-actions{gap:8px;}
 
-/* v97 — official logo sizing and truly centered authentication layout */
+/* v97 â€” official logo sizing and truly centered authentication layout */
 .sidebar .brand-logo{
   width:100%!important;
   display:flex!important;
@@ -3059,7 +3059,7 @@ textarea:focus-visible {
   .auth-panel{justify-content:flex-start!important;padding-top:18px!important;padding-bottom:24px!important}
 }
 
-/* v98 — make the official logo fill its container cleanly, without transparent canvas whitespace */
+/* v98 â€” make the official logo fill its container cleanly, without transparent canvas whitespace */
 .sidebar .brand-logo{min-height:104px!important;padding:8px 5px 18px!important}
 .sidebar .brand-logo img{width:min(190px,100%)!important;max-height:84px!important;height:auto!important;object-fit:contain!important;object-position:center!important}
 .auth-single-brand{margin-bottom:16px!important}
@@ -3456,7 +3456,7 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
 .cav-welcome-secondary{color:#102747;background:rgba(255,255,255,.86);border:1px solid #dce7f5;box-shadow:0 6px 18px #193e690b}
 .cav-welcome-secondary:hover{border-color:#aac8f1;background:#fff}
 .cav-welcome-benefits{display:flex;gap:clamp(15px,2vw,32px);flex-wrap:wrap;list-style:none;margin:25px 0 0;padding:0;color:#617995;font-size:1rem}
-.cav-welcome-benefits li:before{content:'✓';color:#1769e0;font-weight:900;margin-right:7px}
+.cav-welcome-benefits li:before{content:'âœ“';color:#1769e0;font-weight:900;margin-right:7px}
 .cav-welcome-photo-wrap{position:relative;align-self:stretch;display:flex;align-items:stretch;min-width:0;min-height:490px;margin-right:calc((100vw - min(100vw - 40px, 1320px))/ -2);margin-left:-42px}
 .cav-welcome-photo-backdrop{position:absolute;inset:0 0 0 5%;border-radius:48% 0 0 48%;background:linear-gradient(135deg,#dceaff,#edf5ff 65%,#d3e5ff);transform:scale(1.04)}
 .cav-welcome-photo{position:relative;z-index:1;width:100%;height:100%;min-height:490px;object-fit:cover;object-position:center 38%;border-radius:48% 0 0 48%;-webkit-mask-image:linear-gradient(90deg,transparent 0%,rgba(0,0,0,.18) 8%,#000 26%);mask-image:linear-gradient(90deg,transparent 0%,rgba(0,0,0,.18) 8%,#000 26%)}
@@ -3648,7 +3648,7 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
   .cav-public-footer .cav-footer-external { font-size: 14px !important; }
 }
 
-/* v97 — authentication typography refinement: improve readability without changing layout */
+/* v97 â€” authentication typography refinement: improve readability without changing layout */
 .auth-modern-card .auth-back,
 .auth-modern-card .auth-secondary-link { font-size: 13px !important; line-height: 1.5 !important; }
 .auth-modern-card .auth-heading .eyebrow { font-size: 10px !important; }
@@ -4091,7 +4091,7 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
   }
 }
 
-/* Student top bar: avatar opens the Paramètres page */
+/* Student top bar: avatar opens the ParamÃ¨tres page */
 .top-actions .top-profile-button{appearance:none;border:0;background:transparent;padding:0;margin:0;border-radius:50%;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;line-height:0;-webkit-tap-highlight-color:transparent;transition:transform .15s ease,box-shadow .15s ease}
 .top-actions .top-profile-button:hover{transform:translateY(-1px)}
 .top-actions .top-profile-button:focus-visible{outline:3px solid rgba(23,105,224,.35);outline-offset:2px}
@@ -4164,3 +4164,11 @@ body.student-content-protected .lesson-content-reader img,body.student-content-p
   .cav-legacy-notice-link{padding:5px 14px;margin-top:2px}
 }
 @media(prefers-reduced-motion:reduce){.cav-legacy-notice-link{transition:none}}
+
+/* Public privacy policy page */
+.privacy-page{min-height:100vh;background:#f4f7fb;color:#26384c;font-family:'DM Sans',sans-serif;padding:0 22px 48px}
+.privacy-header{max-width:1120px;margin:0 auto;min-height:92px;display:flex;align-items:center;justify-content:space-between;gap:18px;border-bottom:1px solid #e0e8f0}
+.privacy-brand{display:flex;align-items:center;gap:12px;color:#14395d;text-decoration:none}.privacy-brand img{width:48px;height:48px;object-fit:contain}.privacy-brand span,.privacy-brand strong,.privacy-brand small{display:block}.privacy-brand strong{font:800 16px Manrope,sans-serif}.privacy-brand small{font-size:11px;color:#718399;margin-top:3px}.privacy-home-link,.privacy-bottom a{color:#1769bf;text-decoration:none;font-weight:700;font-size:13px}.privacy-home-link:hover,.privacy-bottom a:hover{text-decoration:underline}
+.privacy-content{max-width:860px;margin:48px auto 0;background:#fff;border:1px solid #e2eaf2;border-radius:22px;padding:clamp(24px,5vw,58px);box-shadow:0 18px 55px rgba(25,60,95,.07)}
+.privacy-eyebrow{font-size:10px;letter-spacing:.15em;font-weight:800;color:#237e8a}.privacy-content h1{font:800 clamp(30px,5vw,43px)/1.15 Manrope,sans-serif;color:#14395d;margin:14px 0 12px;letter-spacing:-.035em}.privacy-updated{font-size:12px!important;color:#7c8b9b!important;margin-bottom:30px!important}.privacy-content p,.privacy-content li{font-size:14px;line-height:1.85;color:#526477}.privacy-content p{margin:0 0 15px}.privacy-content a{color:#1769bf;overflow-wrap:anywhere}.privacy-content section{padding-top:25px;margin-top:25px;border-top:1px solid #e9eef4}.privacy-content h2{font:750 19px/1.35 Manrope,sans-serif;color:#173f65;margin:0 0 13px}.privacy-content ul{padding-left:22px;margin:8px 0 16px}.privacy-content li{padding-left:4px;margin:7px 0}.privacy-content strong{color:#2b4158}.privacy-content code{font-size:.9em;background:#f0f5f9;border-radius:5px;padding:2px 5px;color:#174c7b}.privacy-bottom{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:36px;padding-top:22px;border-top:1px solid #e9eef4}.privacy-bottom span{font-size:11px;color:#8291a1}.cav-footer-privacy{display:inline-flex;align-items:center;color:inherit;font-size:12px;text-decoration:none;margin-top:8px}.cav-footer-privacy:hover{text-decoration:underline}
+@media(max-width:600px){.privacy-page{padding:0 12px 24px}.privacy-header{min-height:76px}.privacy-brand img{width:39px;height:39px}.privacy-brand strong{font-size:14px}.privacy-brand small{font-size:10px}.privacy-home-link{font-size:12px}.privacy-content{margin-top:22px;padding:24px 19px;border-radius:15px}.privacy-content p,.privacy-content li{font-size:13px}.privacy-content h2{font-size:17px}.privacy-content section{padding-top:21px;margin-top:21px}}

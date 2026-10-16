@@ -456,6 +456,7 @@ function PublicFooter() {
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a7 7 0 0 0-7 7c0 5.1 7 12 7 12s7-6.9 7-12a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
           <span className="cav-footer-address-lines">IVB 33 Ter Ambatomitsangana<br />En Face Look's 3e etage.</span>
         </div>
+        <a className="cav-footer-privacy" href="/privacy-policy">Politique de confidentialité</a>
       </div>
     </footer>
   );
@@ -5991,7 +5992,98 @@ function AppContent() {
 }
 
 
+function PrivacyPolicyPage() {
+  useEffect(() => {
+    document.title = "Politique de confidentialité | CAV Madagascar";
+    const description = document.querySelector('meta[name="description"]');
+    description?.setAttribute("content", "Politique de confidentialité de CAV Madagascar, notamment concernant la connexion Google et les données personnelles.");
+    return () => {
+      document.title = "CAV Madagascar | Préparation aux concours";
+    };
+  }, []);
+
+  return (
+    <main className="privacy-page">
+      <header className="privacy-header">
+        <a className="privacy-brand" href="/" aria-label="Accueil CAV Madagascar">
+          <img src="/assets/cav-logo.webp" alt="CAV Madagascar" />
+          <span><strong>CAV Madagascar</strong><small>Cours d'Appui Virtuel</small></span>
+        </a>
+        <a className="privacy-home-link" href="/">Retour à l'accueil</a>
+      </header>
+      <article className="privacy-content">
+        <div className="privacy-eyebrow">INFORMATIONS ET TRANSPARENCE</div>
+        <h1>Politique de confidentialité</h1>
+        <p className="privacy-updated">Dernière mise à jour : 16 octobre 2026</p>
+        <p>CAV Madagascar est une plateforme de formation en ligne destinée notamment à la préparation aux concours. Cette politique explique quelles données personnelles sont traitées, pourquoi elles le sont, comment elles sont protégées et comment vous pouvez demander leur suppression.</p>
+
+        <section><h2>1. Responsable et contact</h2>
+          <p>Le service CAV Madagascar est accessible à l'adresse <a href="https://cav.mg">https://cav.mg</a>. Pour toute question relative à vos données personnelles, utilisez le formulaire de contact disponible sur le site. Pour une demande de suppression, indiquez l'adresse e-mail associée à votre compte et précisez que votre demande concerne vos données personnelles.</p>
+        </section>
+
+        <section><h2>2. Données que nous collectons</h2>
+          <p>Selon les fonctions que vous utilisez, CAV peut traiter les catégories de données suivantes :</p>
+          <ul>
+            <li><strong>Données de compte :</strong> nom affiché, adresse e-mail, numéro de téléphone si vous le fournissez, identifiant de compte et date de création.</li>
+            <li><strong>Connexion avec Google :</strong> si vous choisissez cette option, Firebase Authentication reçoit les informations d'identification nécessaires et CAV peut recevoir de Google votre nom de profil, votre adresse e-mail, votre photo de profil si elle est disponible et un identifiant de compte. Ces informations servent à créer ou à retrouver votre compte CAV.</li>
+            <li><strong>Utilisation de la plateforme :</strong> inscriptions aux formations, progression, résultats de quiz, exercices, commentaires, messages envoyés et préférences de notification.</li>
+            <li><strong>Paiements et inscriptions :</strong> informations nécessaires au suivi d'une demande d'inscription et à la vérification de paiement. Les informations de paiement transmises par l'utilisateur peuvent être consultées par les personnes autorisées à valider l'inscription.</li>
+            <li><strong>Données techniques :</strong> informations de diagnostic et journaux techniques générés par les services d'hébergement et de sécurité utilisés pour faire fonctionner le site.</li>
+          </ul>
+        </section>
+
+        <section><h2>3. Utilisation des données Google et autorisations OAuth</h2>
+          <p>La connexion Google est une méthode facultative d'authentification. Dans l'implémentation actuelle, CAV utilise Google Sign-In via Firebase Authentication pour authentifier l'utilisateur. La demande d'autorisation utilise les informations de base du compte Google nécessaires à l'identification, notamment les éléments associés aux autorisations standard <code>openid</code>, <code>email</code> et <code>profile</code> lorsque celles-ci sont fournies par le flux de connexion.</p>
+          <p>CAV n'utilise pas cette connexion pour accéder à Gmail, Google Drive, Google Calendar, aux contacts Google ou au contenu Google Workspace. Le code de connexion examiné ne demande pas d'autorisation OAuth supplémentaire pour ces services.</p>
+          <p>Les données reçues lors de la connexion Google servent uniquement à authentifier l'utilisateur, à associer la connexion à son compte CAV, à afficher les informations de profil disponibles et à gérer l'accès à la plateforme. CAV ne vend pas les données Google et ne les utilise pas pour la publicité ciblée ni pour entraîner des modèles d'intelligence artificielle.</p>
+        </section>
+
+        <section><h2>4. Services et stockage</h2>
+          <p>CAV utilise les services Firebase de Google pour l'authentification, la base de données et le stockage des fichiers nécessaires au fonctionnement de la plateforme. Les données de compte et les données pédagogiques sont enregistrées dans les services de données de CAV avec des règles d'accès destinées à limiter la consultation aux utilisateurs concernés et aux personnes autorisées selon leur rôle. Les fichiers nécessaires aux cours peuvent être hébergés dans le stockage associé à la plateforme.</p>
+          <p>Le site est diffusé via son infrastructure d'hébergement et de distribution. Les prestataires techniques peuvent traiter certaines données dans la mesure nécessaire à l'hébergement, à la sécurité, à la maintenance et au fonctionnement du service.</p>
+        </section>
+
+        <section><h2>5. Partage des données</h2>
+          <p>CAV ne vend pas les données personnelles. Elles peuvent être traitées ou communiquées uniquement dans les cas nécessaires suivants :</p>
+          <ul>
+            <li>aux services Google Firebase utilisés pour l'authentification, le stockage et le fonctionnement technique de CAV ;</li>
+            <li>aux administrateurs ou membres autorisés de CAV, uniquement dans le cadre de la gestion des comptes, des formations, des paiements, de l'assistance ou de la sécurité ;</li>
+            <li>aux prestataires techniques qui contribuent à l'hébergement ou à la sécurité, dans la limite de leurs fonctions ;</li>
+            <li>lorsque la loi l'exige ou pour protéger les droits, la sécurité et l'intégrité du service.</li>
+          </ul>
+          <p>Les données Google obtenues lors de la connexion ne sont pas partagées avec des tiers à des fins indépendantes de celles décrites dans cette politique.</p>
+        </section>
+
+        <section><h2>6. Sécurité</h2>
+          <p>CAV applique des mesures techniques et organisationnelles visant à protéger les données, notamment l'authentification des utilisateurs, la gestion des droits d'accès et les règles de sécurité des services Firebase. L'accès administratif est réservé aux personnes autorisées. Aucun système ne pouvant garantir une sécurité absolue, les utilisateurs doivent également protéger leurs identifiants et signaler toute activité suspecte.</p>
+        </section>
+
+        <section><h2>7. Conservation et suppression</h2>
+          <p>Les données sont conservées pendant la durée nécessaire à la gestion du compte, à l'accès aux formations, au suivi pédagogique, à la sécurité et au respect des obligations légales applicables. Certaines informations peuvent être conservées plus longtemps lorsqu'une obligation légale ou un besoin légitime de résolution de litige l'exige.</p>
+          <p>Vous pouvez demander la suppression de votre compte et des données personnelles associées en utilisant le formulaire de contact sur <a href="https://cav.mg">cav.mg</a>. Indiquez l'adresse e-mail de votre compte. CAV vérifiera la demande avant de la traiter. Certaines données peuvent être conservées lorsque la loi l'impose. La suppression du compte peut entraîner la perte de l'accès aux cours, à la progression et aux résultats associés.</p>
+        </section>
+
+        <section><h2>8. Choix de l'utilisateur</h2>
+          <p>Vous pouvez choisir de ne pas utiliser la connexion Google et créer un compte avec une adresse e-mail et un mot de passe. Vous pouvez également demander l'accès, la correction ou la suppression des données personnelles vous concernant, sous réserve des obligations légales applicables.</p>
+        </section>
+
+        <section><h2>9. Mineurs</h2>
+          <p>Les utilisateurs mineurs doivent utiliser la plateforme avec l'accord et, lorsque cela est requis, sous la supervision de leur parent ou représentant légal.</p>
+        </section>
+
+        <section><h2>10. Modifications de cette politique</h2>
+          <p>Cette politique peut être mise à jour pour refléter l'évolution de la plateforme, des services utilisés ou des obligations applicables. La version en vigueur est publiée sur cette page avec sa date de mise à jour.</p>
+        </section>
+        <div className="privacy-bottom"><a href="/">Retour à CAV Madagascar</a><span>© 2026 CAV Madagascar</span></div>
+      </article>
+    </main>
+  );
+}
+
 export default function App() {
+  if (window.location.pathname === "/privacy-policy" || window.location.pathname === "/privacy-policy/") {
+    return <PrivacyPolicyPage />;
+  }
   if (window.location.pathname === "/auth/action") {
     return <Suspense fallback={<LightweightLoader label="Chargement…" />}><AuthActionPage /></Suspense>;
   }

@@ -1,4 +1,4 @@
-# Using cav.mg instead of `cav-madagascar-b4beb.firebaseapp.com`
+﻿# Using cav.mg instead of `cav-madagascar-b4beb.firebaseapp.com`
 
 Firebase exposes the default domain in three places. Each has a different fix:
 
@@ -20,18 +20,18 @@ Firebase exposes the default domain in three places. Each has a different fix:
 ## Deployment order (do not skip; the order avoids an outage)
 1. **Deploy the Worker first** (`cd cloudflare/firebase-auth-proxy && npx wrangler deploy`). The zone `cav.mg` must be on this Cloudflare account and the `cav.mg` record proxied (orange cloud).
    Check: `curl -sI https://cav.mg/__/auth/handler` returns 200 and `curl -s https://cav.mg/__/firebase/init.json` returns the Firebase config JSON.
-2. **Firebase Console → Authentication → Settings → Authorized domains**: add `cav.mg` (and `www.cav.mg` if used). Keep `cav-madagascar-b4beb.firebaseapp.com` and `localhost`.
-3. **Google Cloud Console → APIs & Services → Credentials** (project `cav-madagascar-b4beb`) → the **Web client** used by Firebase Google sign-in (`Web client (auto created by Google Service)`):
+2. **Firebase Console â†’ Authentication â†’ Settings â†’ Authorized domains**: add `cav.mg` (and `www.cav.mg` if used). Keep `cav-madagascar-b4beb.firebaseapp.com` and `localhost`.
+3. **Google Cloud Console â†’ APIs & Services â†’ Credentials** (project `cav-madagascar-b4beb`) â†’ the **Web client** used by Firebase Google sign-in (`Web client (auto created by Google Service)`):
    - Authorized JavaScript origins: add `https://cav.mg`
    - Authorized redirect URIs: add `https://cav.mg/__/auth/handler` (**keep** the existing `https://cav-madagascar-b4beb.firebaseapp.com/__/auth/handler` until everything is verified)
    - Wait a few minutes for propagation.
-4. **Google Cloud → OAuth consent screen / Branding**: set the Application home page to `https://cav.mg` and add `cav.mg` under Authorized domains (requires the domain verified in Google Search Console). This controls what Google's consent screen displays.
-5. **Firebase Console → Authentication → Templates → Password reset → edit (pencil) → Customize action URL** → `https://cav.mg/auth/action`. Set the template language to French if desired.
-6. **Set the build variable** `VITE_FIREBASE_AUTH_DOMAIN=cav.mg` in Cloudflare Pages (Production, and Preview if you test there with `*.pages.dev` set it back to the firebaseapp.com value) and, for the Android build, in GitHub → Settings → Variables (`VITE_FIREBASE_AUTH_DOMAIN`, optionally `VITE_PUBLIC_SITE_URL=https://cav.mg`). Redeploy.
+4. **Google Cloud â†’ OAuth consent screen / Branding**: set the Application home page to `https://cav.mg` and add `cav.mg` under Authorized domains (requires the domain verified in Google Search Console). This controls what Google's consent screen displays.
+5. **Firebase Console â†’ Authentication â†’ Templates â†’ Password reset â†’ edit (pencil) â†’ Customize action URL** â†’ `https://cav.mg/auth/action`. Set the template language to French if desired.
+6. **Set the build variable** `VITE_FIREBASE_AUTH_DOMAIN=cav.mg` in Cloudflare Pages (Production, and Preview if you test there with `*.pages.dev` set it back to the firebaseapp.com value) and, for the Android build, in GitHub â†’ Settings â†’ Variables (`VITE_FIREBASE_AUTH_DOMAIN`, optionally `VITE_PUBLIC_SITE_URL=https://cav.mg`). Redeploy.
 7. Verify (below), then optionally remove the old firebaseapp.com redirect URI.
 
 ## Optional: hide the sender domain of the reset email
-Firebase Console → Authentication → Templates → Password reset → **Customize sender email / domain**. Firebase will show the exact DNS records to add. In Cloudflare DNS add **only** those new records (typically `firebase1._domainkey` / `firebase2._domainkey` CNAMEs and a verification TXT), set them to **DNS only** (grey cloud). Do **not** edit or replace existing MX records. If you already have an SPF TXT record (`v=spf1 ...`), merge any new `include:` into that single record, since two SPF records break delivery. Leave DKIM/DMARC records of your existing mail provider as-is.
+Firebase Console â†’ Authentication â†’ Templates â†’ Password reset â†’ **Customize sender email / domain**. Firebase will show the exact DNS records to add. In Cloudflare DNS add **only** those new records (typically `firebase1._domainkey` / `firebase2._domainkey` CNAMEs and a verification TXT), set them to **DNS only** (grey cloud). Do **not** edit or replace existing MX records. If you already have an SPF TXT record (`v=spf1 ...`), merge any new `include:` into that single record, since two SPF records break delivery. Leave DKIM/DMARC records of your existing mail provider as-is.
 
 ## Verification checklist
 - Google sign-in on https://cav.mg: popup address bar shows `cav.mg`, login succeeds (also test an in-app browser/Safari, where redirect flow is used).
