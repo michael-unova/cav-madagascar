@@ -17,6 +17,14 @@ function isInsideProtectedContent(target: EventTarget | null) {
   return Boolean(element?.closest(PROTECTED_SELECTOR))
 }
 
+// Right-click stays available on plain links (so "Open in new tab" works), but never on media.
+const MEDIA_SELECTOR = 'img, video, audio, canvas, svg, picture, iframe, object, embed'
+
+function isPlainLink(target: EventTarget | null) {
+  const element = target instanceof Element ? target : null
+  return Boolean(element?.closest('a[href]')) && !element?.closest(MEDIA_SELECTOR)
+}
+
 function selectionTouchesProtectedContent() {
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false
@@ -38,6 +46,7 @@ export function ContentProtection({ children }: { children: ReactNode }) {
       if (isInsideProtectedContent(event.target) || selectionTouchesProtectedContent()) event.preventDefault()
     }
     const blockContextMenu = (event: MouseEvent) => {
+      if (isPlainLink(event.target)) return
       if (!isEditableTarget(event.target) && isInsideProtectedContent(event.target)) event.preventDefault()
     }
     const blockDrag = (event: DragEvent) => {

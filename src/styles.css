@@ -3429,6 +3429,8 @@ th, td { line-height: 1.5; }
 /* Student copy protection: lesson content only */
 body.student-content-protected .lesson-content-reader,body.student-content-protected .lesson-reader-page,body.student-content-protected .lesson-content,body.student-content-protected .lesson-preview,body.student-content-protected .lesson-document{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none}
 body.student-content-protected .lesson-content-reader img,body.student-content-protected .lesson-reader-page img,body.student-content-protected .lesson-content img,body.student-content-protected .lesson-preview img,body.student-content-protected .lesson-document img{-webkit-user-drag:none}
+/* Plain links in protected lessons keep the native menu (open in new tab); media stays protected */
+body.student-content-protected .lesson-document a[href],body.student-content-protected .lesson-content a[href],body.student-content-protected .lesson-content-reader a[href],body.student-content-protected .lesson-reader-page a[href],body.student-content-protected .lesson-preview a[href]{-webkit-touch-callout:default}
 /* Session-replaced notice (reuses the confirm dialog shell) */
 .cav-confirm-icon-info{background:#eaf3ff;color:#1769e0}
 .cav-confirm-eyebrow-info{color:#1769e0}
