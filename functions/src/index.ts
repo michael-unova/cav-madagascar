@@ -6,7 +6,10 @@ import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https'
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { defineSecret, defineString } from 'firebase-functions/params'
+import nodemailer from 'nodemailer'
 import { assertCanManageTarget, isAuthUserNotFound } from './userAdmin.js'
+import { SITE_URL, buildActionUrl, decideThrottle, renderPasswordResetEmail, throttleKey } from './passwordResetEmail.js'
 
 initializeApp()
 const db: Firestore = getFirestore()
@@ -1120,3 +1123,65 @@ export const adminGetGoogleBillingSummary = onCall({ region: 'africa-south1', ti
     throw new HttpsError('failed-precondition', 'Les données de facturation ne sont pas accessibles. Vérifiez l’export BigQuery et les autorisations du compte de service.')
   }
 })
+
+
+// ---- Password reset e-mail (sent through Brevo SMTP, branded template) ----
+// Setup: see docs/EMAIL-BREVO.md
+const BREVO_SMTP_KEY = defineSecret('BREVO_SMTP_KEY')
+const BREVO_SMTP_LOGIN = defineString('BREVO_SMTP_LOGIN')
+const MAIL_FROM = defineString('MAIL_FROM', { default: 'CAV Madagascar <no-reply@cav.mg>' })
+
+async function consumeThrottle(key: string, maxPerHour: number) {
+  const ref = db.doc(`passwordResetThrottle/${key}`)
+  return db.runTransaction(async tx => {
+    const snap = await tx.get(ref)
+    const history = (snap.data()?.history as number[] | undefined) ?? []
+    const decision = decideThrottle(history, Date.now(), maxPerHour)
+    tx.set(ref, { history: decision.history, updatedAt: FieldValue.serverTimestamp() })
+    return decision.allowed
+  })
+}
+
+export const sendPasswordResetEmail = onCall(
+  { region: 'africa-south1', secrets: [BREVO_SMTP_KEY], maxInstances: 5 },
+  async request => {
+    const email = String((request.data as { email?: unknown } | undefined)?.email ?? '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      throw new HttpsError('invalid-argument', 'Adresse e-mail invalide.')
+    }
+
+    // Same answer whether or not the account exists, so the form cannot be used to discover accounts.
+    const ip = request.rawRequest?.ip ?? 'unknown'
+    const [emailOk, ipOk] = await Promise.all([
+      consumeThrottle(throttleKey('email', email), 5),
+      consumeThrottle(throttleKey('ip', ip), 20),
+    ])
+    if (!emailOk || !ipOk) {
+      throw new HttpsError('resource-exhausted', 'Trop de demandes. Réessayez dans quelques minutes.')
+    }
+
+    let link: string
+    try {
+      link = await getAuth().generatePasswordResetLink(email, { url: `${SITE_URL}/?auth=login`, handleCodeInApp: true })
+    } catch (error) {
+      if (isAuthUserNotFound(error)) return { ok: true }
+      console.error('generatePasswordResetLink failed', error)
+      throw new HttpsError('internal', 'Impossible d’envoyer l’e-mail pour le moment.')
+    }
+
+    const message = renderPasswordResetEmail(buildActionUrl(link))
+    const transporter = nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
+      auth: { user: BREVO_SMTP_LOGIN.value(), pass: BREVO_SMTP_KEY.value() },
+    })
+    try {
+      await transporter.sendMail({ from: MAIL_FROM.value(), to: email, subject: message.subject, text: message.text, html: message.html })
+    } catch (error) {
+      console.error('Brevo SMTP send failed', error)
+      throw new HttpsError('internal', 'Impossible d’envoyer l’e-mail pour le moment.')
+    }
+    return { ok: true }
+  },
+)
