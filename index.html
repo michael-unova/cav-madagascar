@@ -16,7 +16,12 @@
       .boot i::after{content:"";position:absolute;inset:0;width:40%;border-radius:4px;background:#1769bf;animation:boot 1.1s ease-in-out infinite}
       @keyframes boot{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
       @media(prefers-reduced-motion:reduce){.boot i::after{animation:none;width:100%}}
+      /* Repeat visit (see src/lib/recentVisit.ts): no splash flash, just the plain background. */
+      .cav-quiet-boot .boot{visibility:hidden}
     </style>
+    <script>
+      try{var t=Number(localStorage.getItem('cav_last_visit_at'));if(t>0&&Date.now()-t<1800000)document.documentElement.className='cav-quiet-boot'}catch(e){}
+    </script>
   </head>
   <body>
     <div id="root"><div class="boot" role="status" aria-live="polite"><b>CAV</b><i></i><small>Chargement…</small></div></div>

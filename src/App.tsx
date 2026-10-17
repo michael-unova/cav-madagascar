@@ -116,6 +116,7 @@ import type {
   QuestionType,
 } from "./types/question";
 import { confirmAction } from "./components/ConfirmDialog";
+import { isRecentVisit, markVisit } from "./lib/recentVisit";
 import { callableErrorMessage } from "./lib/firebase/callableError";
 
 type Role = "visitor" | "student" | "admin" | "teacher";
@@ -5519,6 +5520,10 @@ function AppContent() {
   const [navigationLoading, setNavigationLoading] = useState(false);
   const historyIndexRef = useRef(0);
   const historyInitializedRef = useRef(false);
+  // Branded loading screen on the first visit only; repeat visits (new tabs, reloads) get a small spinner.
+  const [quietLoading] = useState(() => isRecentVisit());
+  useEffect(() => { markVisit(); }, []);
+  useEffect(() => { if (initialDataReady) markVisit(); }, [initialDataReady]);
   const role: Role = !user
     ? "visitor"
     : profile?.role === "super_admin"
@@ -5777,6 +5782,7 @@ function AppContent() {
     setPublicPage(p);
     pushHistoryState({ publicPage: p });
   };
+  if ((loading || !initialDataReady) && quietLoading) return <LightweightLoader label="Chargement…" />;
   if (loading || !initialDataReady)
     return (
       <div className="loading-screen" role="status" aria-live="polite" aria-label="Chargement de votre espace">
