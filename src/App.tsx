@@ -116,6 +116,7 @@ import type {
   QuestionType,
 } from "./types/question";
 import { confirmAction } from "./components/ConfirmDialog";
+import { ContentEditIcon, EyeIcon, PencilIcon } from "./components/ActionIcons";
 import { sortAlphabetically, sortNewestFirst } from "./features/admin/userSorting";
 import { isRecentVisit, markVisit } from "./lib/recentVisit";
 import { callableErrorMessage } from "./lib/firebase/callableError";
@@ -2539,7 +2540,7 @@ function CoursePage({
                               <button className="lesson-row" key={lesson.id} onClick={() => void openLesson(lesson)}>
                                 <div className="lesson-number">{String.fromCharCode(97 + index)})</div>
                                 <div><strong>{lesson.title}</strong><span>Leçon · Lecture A4</span></div>
-                                <span className="lesson-action">Lire →</span>
+                                <span className="lesson-head-btn">Lire →</span>
                               </button>
                             ))}
                           </div>
@@ -2554,7 +2555,7 @@ function CoursePage({
                             <button className="lesson-row" key={lesson.id} onClick={() => void openLesson(lesson)}>
                               <div className="lesson-number">{index + 1}</div>
                               <div><strong>{lesson.title}</strong><span>Leçon · Lecture A4</span></div>
-                              <span className="lesson-action">Lire →</span>
+                              <span className="lesson-head-btn">Lire →</span>
                             </button>
                           ))}
                         </div>
@@ -4371,7 +4372,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
       <div className="editor panel">
         {showNodeForm && <div className="compact-create-form"><div className="lesson-workspace-head"><div><span className="pill">{editingNodeKey ? (parentId ? "MODIFIER LA LEÇON" : "MODIFIER LE THÈME") : parentId ? "NOUVELLE LEÇON" : "NOUVEAU THÈME"}</span><h2>{editingNodeKey ? (parentId ? "Modifier la leçon" : "Modifier le thème") : parentId ? "Ajouter une leçon" : "Créer un thème"}</h2></div></div><div className="form-grid"><label>Titre<input className="fake-input" autoFocus value={nodeTitle} onChange={e=>setNodeTitle(e.target.value)} placeholder={parentId ? "Ex. Divisibilité" : "Ex. Théorie des nombres"} /></label><label>Description <span className="optional-label">(facultative)</span><input className="fake-input" value={nodeDescription} onChange={e=>setNodeDescription(e.target.value)} placeholder="Une courte description" /></label></div>{!parentId && <div className="topic-illustration-editor"><div><label>Illustration du thème <span className="optional-label">(facultative)</span></label><label className="topic-upload-box"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>handleNodeImageChange(e.target.files?.[0] ?? null)} /><span>☁️ Cliquez pour ajouter une image</span><small>JPG, PNG ou WebP · recommandé : 1600 × 900 px<br/>Carré, paysage ou portrait acceptés · 8 Mo max.</small></label></div><div className="topic-image-settings">{nodeImagePreview ? <div className="topic-image-preview" style={{backgroundImage:`url(${nodeImagePreview})`,backgroundPosition:nodeImagePosition}} /> : <div className="topic-image-preview topic-image-preview-empty">Aperçu</div>}<label>Position de l’image<select className="fake-input" value={nodeImagePosition} onChange={e=>setNodeImagePosition(e.target.value as NonNullable<ContentNode["imagePosition"]>)}><option value="center">Centre</option><option value="top">Haut</option><option value="bottom">Bas</option><option value="left">Gauche</option><option value="right">Droite</option></select></label></div></div>}<div className="editor-actions"><button className="primary" disabled={saving || !nodeTitle.trim()} onClick={()=>void saveNode()}>{saving ? "Enregistrement..." : editingNodeKey ? "Enregistrer" : "Créer"}</button><button className="outline" onClick={resetNode}>Annuler</button></div></div>}
         {!subjectId ? <div className="empty-state"><h3>Sélectionnez une matière</h3><p>Commencez ensuite par créer un thème.</p></div> : showNodeForm ? null : !selectedNode ? <div className="empty-state"><h3>Votre matière est prête.</h3><p>Créez un thème à gauche, puis ajoutez ses leçons.</p></div> : selectedNode.parentId ? <>
-          <div className="lesson-workspace-head"><div><span className="pill">LEÇON</span><h2>{selectedNode.title}</h2><small>{selectedTopic?.title} · {selectedNode.status === "published" ? "Publié" : "Brouillon"}</small></div><div className="lesson-workspace-actions"><button className="outline small-btn" onClick={()=>{setBlockHtml(String(blocks[0]?.content.html ?? blockHtml));setEditingBlockKey(blocks[0]?.sharedKey ?? null);setPreview(false);}}>Modifier</button><button className="outline small-btn" onClick={()=>setPreview(!preview)}>{preview?"Modifier":"Aperçu"}</button>{selectedNode.status === "published" ? <button className="outline small-btn" onClick={()=>void unpublishLesson()}>Dépublier</button> : <button className="primary small-btn" onClick={()=>void publishLesson()}>Publier</button>}</div></div>
+          <div className="lesson-workspace-head"><div><span className="pill">LEÇON</span><h2>{selectedNode.title}</h2><small>{selectedTopic?.title} · {selectedNode.status === "published" ? "Publié" : "Brouillon"}</small></div><div className="lesson-workspace-actions"><button className="outline small-btn lesson-head-btn lesson-head-title" onClick={()=>editNodeDetails(selectedNode)}><PencilIcon />Modifier le titre</button><button className={`small-btn lesson-head-btn lesson-head-content${preview ? " is-edit" : ""}`} onClick={()=>{ if (preview) setEditingBlockKey(blocks[0]?.sharedKey ?? null); setPreview(!preview); }}>{preview ? <><ContentEditIcon />Éditer le contenu</> : <><EyeIcon />Aperçu</>}</button>{selectedNode.status === "published" ? <button className="outline small-btn lesson-head-btn" onClick={()=>void unpublishLesson()}>Dépublier</button> : <button className="primary small-btn lesson-head-btn" onClick={()=>void publishLesson()}>Publier</button>}</div></div>
           {preview ? <LessonContentReader html={String(blocks[0]?.content.html ?? blockHtml)} /> : <>
             <RichLessonEditor value={blockHtml || String(blocks[0]?.content.html ?? "")} onChange={setBlockHtml} storageFolder={`content-subjects/${subjectId}/${selectedNode.id}`} />
             <div className="lesson-save-bar"><button className="primary" disabled={saving || !blockHtml.trim()} onClick={()=>void saveLesson()}>{saving?"Enregistrement...":"Enregistrer"}</button><span>Le brouillon peut être enregistré à tout moment. L’aperçu n’est pas une publication.</span></div>

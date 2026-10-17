@@ -4174,3 +4174,13 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
    :where() keeps specificity at zero, like the global button rules, so class styles still win. */
 :where(a.nav-item, a.student-topnav-item, .mobile-bottom-nav a){font:inherit;cursor:pointer;max-width:100%;line-height:1.35;text-align:center;text-decoration:none;text-rendering:auto;touch-action:manipulation;-webkit-user-select:none;user-select:none;transition:color .2s,background-color .2s,border-color .2s,box-shadow .2s,transform .2s}
 :where(a.nav-item){text-align:left}
+
+/* Lesson header actions: each button looks different so its job is clear */
+.lesson-workspace-actions button.lesson-head-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 14px;border-radius:12px;font-size:15px;font-weight:750;white-space:nowrap;margin-top:0}
+.lesson-workspace-actions button.lesson-head-btn svg{flex:none}
+.lesson-workspace-actions button.lesson-head-title{background:#fff;color:var(--navy);border:1px solid #cfdbe7}
+.lesson-workspace-actions button.lesson-head-title:hover{border-color:#1769bf;color:#1769bf}
+.lesson-workspace-actions button.lesson-head-content{background:#eaf2fd;color:#1556a8;border:1px solid #c5daf6}
+.lesson-workspace-actions button.lesson-head-content:hover{background:#dce9fb}
+.lesson-workspace-actions button.lesson-head-content.is-edit{background:#d9e8fb;color:#0f4c96;border-color:#1769bf}
+.lesson-workspace-actions button.lesson-head-content.is-edit:hover{background:#cadff8}
