@@ -12,7 +12,9 @@ import {
   type User as FirebaseUser,
 } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '../../lib/firebase/config'
+import { getFirebaseFunctions } from '../../lib/firebase/functions'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import { getFirebaseAuth } from './firebaseAuth'
 import { getPublicSiteUrl } from '../../lib/siteUrl'
@@ -175,16 +177,23 @@ export async function logoutUser(): Promise<void> {
   await signOut(auth)
 }
 
+// If the e-mail function is down, students can still get Firebase's standard reset e-mail.
+const RESET_FALLBACK_CODES = new Set(['functions/internal', 'functions/unavailable', 'functions/not-found', 'functions/deadline-exceeded'])
+
 export async function resetPassword(email: string): Promise<void> {
-  // The link in the email is built by Firebase from the "Action URL" configured in
-  // Firebase Console > Authentication > Templates (set it to https://cav.mg/auth/action).
-  // `url` is the continue URL shown after the reset; keep it on the official domain.
-  const continueUrl = `${getPublicSiteUrl()}/?auth=login`
-  auth.languageCode = 'fr'
-  await sendPasswordResetEmail(auth, email.trim(), {
-    url: continueUrl,
-    handleCodeInApp: true,
-  })
+  const address = email.trim()
+  try {
+    // Branded e-mail sent by the Cloud Function through Brevo (docs/EMAIL-BREVO.md).
+    // The link it contains opens https://cav.mg/auth/action.
+    await httpsCallable(getFirebaseFunctions(), 'sendPasswordResetEmail')({ email: address })
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code ?? ''
+    if (!RESET_FALLBACK_CODES.has(code)) throw error
+    console.error('sendPasswordResetEmail unavailable, using the Firebase default e-mail', error)
+    // The link in the default e-mail is built from the "Action URL" in Firebase Console > Authentication > Templates.
+    auth.languageCode = 'fr'
+    await sendPasswordResetEmail(auth, address, { url: `${getPublicSiteUrl()}/?auth=login`, handleCodeInApp: true })
+  }
 }
 
 export async function getUserProfile(uid: string) {

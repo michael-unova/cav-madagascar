@@ -16,6 +16,10 @@ export function getAuthErrorMessage(error: unknown): string {
       return 'Adresse e-mail ou mot de passe incorrect.'
     case 'auth/account-suspended':
       return 'Ce compte est suspendu. Contactez l’administration.'
+    case 'functions/resource-exhausted':
+      return 'Trop de demandes. Réessayez dans quelques minutes.'
+    case 'functions/invalid-argument':
+      return 'Adresse e-mail invalide.'
     case 'auth/too-many-requests':
       return 'Trop de tentatives. Veuillez réessayer plus tard.'
     case 'auth/network-request-failed':

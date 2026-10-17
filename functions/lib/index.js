@@ -1110,7 +1110,7 @@ export const adminGetGoogleBillingSummary = onCall({ region: 'africa-south1', ti
 // Setup: see docs/EMAIL-BREVO.md
 const BREVO_SMTP_KEY = defineSecret('BREVO_SMTP_KEY');
 const BREVO_SMTP_LOGIN = defineString('BREVO_SMTP_LOGIN');
-const MAIL_FROM = defineString('MAIL_FROM', { default: 'CAV Madagascar <no-reply@cav.mg>' });
+const MAIL_FROM = defineString('MAIL_FROM', { default: 'CAV Madagascar <ne-pas-repondre@cav.mg>' });
 async function consumeThrottle(key, maxPerHour) {
     const ref = db.doc(`passwordResetThrottle/${key}`);
     return db.runTransaction(async (tx) => {

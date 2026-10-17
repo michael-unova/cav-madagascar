@@ -744,7 +744,7 @@ function AuthPage({
     setResetting(true);
     try {
       await resetPassword(email);
-      setNotice("Un lien de réinitialisation vient d’être envoyé à votre adresse e-mail.");
+      setNotice("Si un compte correspond à cette adresse, un e-mail de réinitialisation vient d’être envoyé. Pensez à vérifier vos courriers indésirables.");
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {
