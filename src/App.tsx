@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useAuth } from "./features/auth";
 import { updateUserProfile } from "./features/auth";
 import {
@@ -119,6 +119,19 @@ import { confirmAction } from "./components/ConfirmDialog";
 import { callableErrorMessage } from "./lib/firebase/callableError";
 
 type Role = "visitor" | "student" | "admin" | "teacher";
+
+// Menu items are real links (/?page=<id>) so "Open in new tab" works. A plain click keeps the
+// in-app navigation; Ctrl/Cmd/Shift/middle-click and the right-click menu use the link.
+const NAV_PAGE_PARAM = "page";
+const navPageHref = (id: string) => `/?${NAV_PAGE_PARAM}=${encodeURIComponent(id)}`;
+function onNavLinkClick(event: ReactMouseEvent<HTMLAnchorElement>, go: () => void) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  go();
+}
+// Pages that can be opened directly from a link, per role.
+const STUDENT_LINK_PAGES = ["dashboard", "concours", "catalog", "results", "library", "profile"];
+const ADMIN_LINK_PAGES = ["overview", "courses", "subjects", "enrollments", "users", "studentQuestions", "broadcasts", "library", "psychotechnical", "stats", "messages", "billing", "profile"];
 type StudentPage =
   | "dashboard"
   | "concours"
@@ -1425,18 +1438,20 @@ function Sidebar({
         {items.map(([id, label, icon]) => {
           const badge = badgeFor(id);
           return (
-            <button
+            <a
               key={id}
+              href={navPageHref(id)}
+              aria-current={page === id ? "page" : undefined}
               className={`nav-item nav-icon-${icon} ${page === id ? "active" : ""}`.trim()}
-              onClick={() => {
+              onClick={(event) => onNavLinkClick(event, () => {
                 if (id === "users") markUsersSeen();
                 setPage(id);
-              }}
+              })}
             >
               <Icon name={icon} />
               <span>{label}</span>
               {badge > 0 && <span className="nav-badge" aria-label={`${badge} nouveau${id === "messages" ? " message" : id === "studentQuestions" ? " question étudiant" : id === "users" ? " utilisateur" : " inscription"}${badge > 1 ? "s" : ""}`}>{badge > 99 ? "99+" : badge}</span>}
-            </button>
+            </a>
           );
         })}
       </nav>
@@ -1479,15 +1494,16 @@ function MobileNav({
   return (
     <nav className="mobile-bottom-nav" aria-label="Navigation mobile">
       {items.map(([id, label, icon]) => (
-        <button
+        <a
           key={id}
+          href={navPageHref(id)}
+          aria-current={page === id ? "page" : undefined}
           className={page === id ? "is-active" : ""}
-          onClick={() => setPage(id)}
-          type="button"
+          onClick={(event) => onNavLinkClick(event, () => setPage(id))}
         >
           <Icon name={icon} />
           <span>{label}</span>
-        </button>
+        </a>
       ))}
     </nav>
   );
@@ -1569,9 +1585,9 @@ function Topbar({
               ["results", "Résultats", "chart"],
               ["library", "Bibliothèque", "book"],
             ].map(([id, text, icon]) => (
-              <button key={id} type="button" className={`student-topnav-item ${currentPage === id ? "is-active" : ""}`} onClick={() => onNavigate?.(id as StudentPage)}>
+              <a key={id} href={navPageHref(id)} aria-current={currentPage === id ? "page" : undefined} className={`student-topnav-item ${currentPage === id ? "is-active" : ""}`} onClick={(event) => onNavLinkClick(event, () => onNavigate?.(id as StudentPage))}>
                 <Icon name={icon} /> <span>{text}</span>
-              </button>
+              </a>
             ))}
           </nav>
           <form className="student-top-search" onSubmit={(event) => { event.preventDefault(); const value = searchQuery.trim(); if (value) localStorage.setItem("cav_student_catalog_search", value); onNavigate?.("catalog"); }}><button type="submit" aria-label="Rechercher"><Icon name="search" /></button><input aria-label="Rechercher" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Rechercher un concours, une matière..." /></form>
@@ -5669,6 +5685,23 @@ function AppContent() {
     }
     historyInitializedRef.current = true;
   }, [loading, role]);
+
+  // Opened from a menu link in a new tab (/?page=<id>): go to that page once signed in, then clean the URL.
+  const deepLinkPageRef = useRef<string | null>(new URLSearchParams(window.location.search).get(NAV_PAGE_PARAM));
+  useEffect(() => {
+    const wanted = deepLinkPageRef.current;
+    if (!wanted || loading || role === "visitor" || !historyInitializedRef.current) return;
+    deepLinkPageRef.current = null;
+    if (role === "student") {
+      if (STUDENT_LINK_PAGES.includes(wanted)) { setStudentPage(wanted as StudentPage); replaceHistoryState({ studentPage: wanted as StudentPage }); }
+    } else if (ADMIN_LINK_PAGES.includes(wanted) && !(wanted === "stats" && role !== "admin")) {
+      setAdminPage(wanted as AdminPage);
+      replaceHistoryState({ adminPage: wanted as AdminPage });
+    }
+    const cleaned = new URL(window.location.href);
+    cleaned.searchParams.delete(NAV_PAGE_PARAM);
+    window.history.replaceState(window.history.state, "", cleaned.pathname + cleaned.search + cleaned.hash);
+  }, [loading, role, replaceHistoryState]);
 
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {

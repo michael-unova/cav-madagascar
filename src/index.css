@@ -335,7 +335,7 @@ button, input, select, textarea { max-width:100%; }
     backdrop-filter:blur(18px);
     -webkit-backdrop-filter:blur(18px);
   }
-  .mobile-bottom-nav button {
+  .mobile-bottom-nav button, .mobile-bottom-nav a{
     min-width:0;
     min-height:58px;
     border:0;
@@ -353,9 +353,9 @@ button, input, select, textarea { max-width:100%; }
     white-space:nowrap;
     overflow:hidden;
   }
-  .mobile-bottom-nav button svg { width:19px; height:19px; flex:0 0 auto; }
-  .mobile-bottom-nav button span { overflow:hidden; text-overflow:ellipsis; max-width:100%; }
-  .mobile-bottom-nav button.is-active {
+  .mobile-bottom-nav button svg, .mobile-bottom-nav a svg{ width:19px; height:19px; flex:0 0 auto; }
+  .mobile-bottom-nav button span, .mobile-bottom-nav a span{ overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .mobile-bottom-nav button.is-active, .mobile-bottom-nav a.is-active{
     color:var(--cav-blue);
     background:linear-gradient(135deg,#edf5ff,#e6f0ff);
     box-shadow:inset 0 0 0 1px rgba(23,105,224,.06);
@@ -467,8 +467,8 @@ button, input, select, textarea { max-width:100%; }
   .mobile-logo .brand-logo img { width:112px; }
   .page { padding-left:11px; padding-right:11px; }
   .mobile-bottom-nav { left:6px; right:6px; bottom:6px; padding:5px; border-radius:16px; }
-  .mobile-bottom-nav button { min-height:55px; font-size:8px; }
-  .mobile-bottom-nav button svg { width:17px; height:17px; }
+  .mobile-bottom-nav button, .mobile-bottom-nav a{ min-height:55px; font-size:8px; }
+  .mobile-bottom-nav button svg, .mobile-bottom-nav a svg{ width:17px; height:17px; }
   .hero, .dashboard-header, .course-hero, .enroll-hero { padding:19px 15px !important; }
   .hero h1, .page-title h1 { font-size:27px; }
   .premium-course-card .course-cover { height:138px; }
@@ -485,7 +485,7 @@ button, input, select, textarea { max-width:100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mobile-bottom-nav button, .premium-course-card, .primary, .ui-button-primary { transition:none !important; }
+  .mobile-bottom-nav button, .premium-course-card, .primary, .ui-button-primary, .mobile-bottom-nav a{ transition:none !important; }
 }
 
 

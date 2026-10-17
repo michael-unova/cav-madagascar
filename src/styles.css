@@ -821,12 +821,7 @@ textarea {
   touch-action: manipulation;
 }
 
-button,
-.ui-button,
-.primary,
-.outline,
-.nav-item,
-.mobile-bottom-nav button {
+button, .ui-button, .primary, .outline, .nav-item, .mobile-bottom-nav button, .mobile-bottom-nav a{
   -webkit-user-select: none;
   user-select: none;
 }
@@ -996,7 +991,7 @@ textarea:focus-visible {
 
   .mobile-bottom-nav::-webkit-scrollbar { display: none; }
 
-  .mobile-bottom-nav button {
+  .mobile-bottom-nav button, .mobile-bottom-nav a{
     flex: 0 0 68px;
     width: 68px;
     min-height: 54px;
@@ -1454,7 +1449,7 @@ textarea:focus-visible {
 
 /* Narrowest Android / iPhone SE / small devices. */
 @media (max-width: 380px) {
-  .mobile-bottom-nav button {
+  .mobile-bottom-nav button, .mobile-bottom-nav a{
     flex-basis: 62px;
     width: 62px;
     min-width: 62px;
@@ -1480,7 +1475,7 @@ textarea:focus-visible {
 @media (max-width: 900px) and (orientation: landscape) {
   body { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
   .topbar { height: calc(56px + env(safe-area-inset-top)); }
-  .mobile-bottom-nav button { min-height: 48px; }
+  .mobile-bottom-nav button, .mobile-bottom-nav a{ min-height: 48px; }
   .mobile-bottom-nav { padding: 4px; }
   .learning-sidebar { max-height: 48dvh; }
   .auth-brand { min-height: 150px; }
@@ -2385,7 +2380,7 @@ textarea:focus-visible {
   .modern-course-card{grid-template-columns:1fr;min-height:0}.modern-course-image{height:145px;min-height:145px}.modern-course-content{padding:17px}.modern-course-title-row h3{font-size:21px}
   .modern-course-meta{gap:8px}.modern-course-benefits{margin-bottom:13px}
   .student-app .mobile-bottom-nav{display:flex;position:fixed;z-index:120;left:12px;right:12px;bottom:12px;height:64px;padding:6px;border:1px solid #e0e8f1;border-radius:18px;background:rgba(255,255,255,.96);box-shadow:0 14px 35px rgba(18,49,83,.16);backdrop-filter:blur(18px)}
-  .student-app .mobile-bottom-nav button{flex:1;border:0;background:transparent;color:#718298;border-radius:12px;font-size:9px;font-weight:800;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer}.student-app .mobile-bottom-nav button svg{width:18px;height:18px}.student-app .mobile-bottom-nav button.is-active{color:#1769e0;background:#edf5ff}
+  .student-app .mobile-bottom-nav button, .student-app .mobile-bottom-nav a{flex:1;border:0;background:transparent;color:#718298;border-radius:12px;font-size:9px;font-weight:800;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer}.student-app .mobile-bottom-nav button svg, .student-app .mobile-bottom-nav a svg{width:18px;height:18px}.student-app .mobile-bottom-nav button.is-active, .student-app .mobile-bottom-nav a.is-active{color:#1769e0;background:#edf5ff}
 }
 
 /* ================================================================
@@ -3999,7 +3994,7 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 
   .mobile-bottom-nav::-webkit-scrollbar { display: none !important; }
 
-  .mobile-bottom-nav button {
+  .mobile-bottom-nav button, .mobile-bottom-nav a{
     display: flex !important;
     flex: 0 0 64px !important;
     width: 64px !important;
@@ -4017,7 +4012,7 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
     border-radius: 12px !important;
   }
 
-  .mobile-bottom-nav button span {
+  .mobile-bottom-nav button span, .mobile-bottom-nav a span{
     display: block !important;
     max-width: 100% !important;
     overflow: hidden !important;
@@ -4039,7 +4034,7 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
     justify-content: space-between !important;
     gap: 2px !important;
   }
-  .student-app .mobile-bottom-nav button {
+  .student-app .mobile-bottom-nav button, .student-app .mobile-bottom-nav a{
     flex: 1 1 0 !important;
     width: 0 !important;
     min-width: 0 !important;
@@ -4048,7 +4043,7 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
     padding-right: 1px !important;
     text-align: center !important;
   }
-  .student-app .mobile-bottom-nav button span {
+  .student-app .mobile-bottom-nav button span, .student-app .mobile-bottom-nav a span{
     max-width: 100% !important;
     font-size: clamp(7px, 2.15vw, 9px) !important;
     letter-spacing: -.15px;
@@ -4174,3 +4169,8 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 .privacy-content{max-width:860px;margin:48px auto 0;background:#fff;border:1px solid #e2eaf2;border-radius:22px;padding:clamp(24px,5vw,58px);box-shadow:0 18px 55px rgba(25,60,95,.07)}
 .privacy-eyebrow{font-size:10px;letter-spacing:.15em;font-weight:800;color:#237e8a}.privacy-content h1{font:800 clamp(30px,5vw,43px)/1.15 Manrope,sans-serif;color:#14395d;margin:14px 0 12px;letter-spacing:-.035em}.privacy-updated{font-size:12px!important;color:#7c8b9b!important;margin-bottom:30px!important}.privacy-content p,.privacy-content li{font-size:14px;line-height:1.85;color:#526477}.privacy-content p{margin:0 0 15px}.privacy-content a{color:#1769bf;overflow-wrap:anywhere}.privacy-content section{padding-top:25px;margin-top:25px;border-top:1px solid #e9eef4}.privacy-content h2{font:750 19px/1.35 Manrope,sans-serif;color:#173f65;margin:0 0 13px}.privacy-content ul{padding-left:22px;margin:8px 0 16px}.privacy-content li{padding-left:4px;margin:7px 0}.privacy-content strong{color:#2b4158}.privacy-content code{font-size:.9em;background:#f0f5f9;border-radius:5px;padding:2px 5px;color:#174c7b}.privacy-bottom{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:36px;padding-top:22px;border-top:1px solid #e9eef4}.privacy-bottom span{font-size:11px;color:#8291a1}.cav-footer-privacy{display:inline-flex;align-items:center;color:inherit;font-size:12px;text-decoration:none;margin-top:8px}.cav-footer-privacy:hover{text-decoration:underline}
 @media(max-width:600px){.privacy-page{padding:0 12px 24px}.privacy-header{min-height:76px}.privacy-brand img{width:39px;height:39px}.privacy-brand strong{font-size:14px}.privacy-brand small{font-size:10px}.privacy-home-link{font-size:12px}.privacy-content{margin-top:22px;padding:24px 19px;border-radius:15px}.privacy-content p,.privacy-content li{font-size:13px}.privacy-content h2{font-size:17px}.privacy-content section{padding-top:21px;margin-top:21px}}
+
+/* Menu items are links (so "Open in new tab" works): make them render like the buttons they replaced.
+   :where() keeps specificity at zero, like the global button rules, so class styles still win. */
+:where(a.nav-item, a.student-topnav-item, .mobile-bottom-nav a){font:inherit;cursor:pointer;max-width:100%;line-height:1.35;text-align:center;text-decoration:none;text-rendering:auto;touch-action:manipulation;-webkit-user-select:none;user-select:none;transition:color .2s,background-color .2s,border-color .2s,box-shadow .2s,transform .2s}
+:where(a.nav-item){text-align:left}
