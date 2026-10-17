@@ -116,6 +116,7 @@ import type {
   QuestionType,
 } from "./types/question";
 import { confirmAction } from "./components/ConfirmDialog";
+import { sortAlphabetically, sortNewestFirst } from "./features/admin/userSorting";
 import { isRecentVisit, markVisit } from "./lib/recentVisit";
 import { callableErrorMessage } from "./lib/firebase/callableError";
 
@@ -4918,9 +4919,8 @@ function AdminUsers() {
           courseNames: (namesByUser.get(item.id) ?? []).sort((a, b) => a.localeCompare(b, "fr")),
           courseIds: courseIdsByUser.get(item.id) ?? [],
           courseHistoryNames: (historyNamesByUser.get(item.id) ?? []).sort((a, b) => a.localeCompare(b, "fr")),
-        }))
-        .sort((a, b) => a.displayName.localeCompare(b.displayName, "fr", { sensitivity: "base" }));
-      setUsers(rows);
+        }));
+      setUsers(sortNewestFirst(rows));
       setLoading(false);
     };
 
@@ -5005,9 +5005,11 @@ function AdminUsers() {
     try {
       // Export formats are used only on demand; load their implementation when requested.
       const exports = await import("./lib/export/userExports");
-      if (kind === "excel") await exports.exportStudentsToExcel(filtered);
-      if (kind === "word") await exports.exportStudentsToWord(filtered);
-      if (kind === "pdf") await exports.exportStudentsToPdf(filtered);
+      // The screen shows newest accounts first; exports are always alphabetical.
+      const ordered = sortAlphabetically(filtered);
+      if (kind === "excel") await exports.exportStudentsToExcel(ordered);
+      if (kind === "word") await exports.exportStudentsToWord(ordered);
+      if (kind === "pdf") await exports.exportStudentsToPdf(ordered);
     } catch (e) {
       console.error(e);
       setError("Impossible de générer l’export. Veuillez réessayer.");
