@@ -537,7 +537,7 @@ export function CourseLearningPage() {
               ) : block.type === 'file' && block.media?.url ? (
                 <a className="text-link" href={block.media.url} target="_blank" rel="noreferrer">Ouvrir le document</a>
               ) : (
-                <div className="lesson-preview lesson-editor-surface lesson-document learning-text" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(String(block.content.html ?? block.content.text ?? '')) }} />
+                <div className="lesson-preview lesson-editor-surface learning-text" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(String(block.content.html ?? block.content.text ?? '')) }} />
               )}
             </Card>
           ))}

@@ -1,4 +1,4 @@
-﻿
+
 /* Professional course editor */
 .lesson-editor-pro{border:1px solid #dce6f0;border-radius:20px;background:#fff;overflow:visible;box-shadow:0 14px 38px rgba(21,55,91,.07)}
 .lesson-editor-header{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:24px 26px 18px;background:#fff}
@@ -4184,3 +4184,629 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 .lesson-workspace-actions button.lesson-head-content:hover{background:#dce9fb}
 .lesson-workspace-actions button.lesson-head-content.is-edit{background:#d9e8fb;color:#0f4c96;border-color:#1769bf}
 .lesson-workspace-actions button.lesson-head-content.is-edit:hover{background:#cadff8}
+
+/* CAV lesson-authoring workspace v1 — scoped to the text/content editor only. */
+.lesson-editor-pro{background:#f6f8fb!important;border:1px solid #dce5ef!important;border-radius:14px!important;overflow:visible!important;box-shadow:0 8px 28px rgba(17,43,74,.08)!important;color:#172b45}
+.lesson-editor-pro .lesson-editor-header-minimal{background:#fff!important;border-bottom:1px solid #e3eaf2!important;padding:10px 14px!important;min-height:48px;box-sizing:border-box}
+.lesson-editor-pro .lesson-editor-page-status{display:flex;align-items:center;gap:12px;color:#30465e;font-size:12px}
+.lesson-editor-pro .lesson-editor-page-status strong{font-size:12px;color:#1a3555}
+.lesson-editor-pro .lesson-import-button{border-radius:7px!important;padding:8px 12px!important;background:#f7fbff!important}
+.lesson-ribbon-tabs{display:flex;align-items:center;gap:4px;padding:0 12px;background:#fff;border-bottom:1px solid #dfe7f0;min-height:39px;overflow-x:auto}
+.lesson-ribbon-tabs button{flex:0 0 auto;border:0;border-radius:7px 7px 0 0;background:transparent;color:#40546b;padding:10px 13px;font-size:12px;cursor:pointer}
+.lesson-ribbon-tabs button.active{color:#145ec5;font-weight:750;box-shadow:inset 0 -2px #1769e0}
+.lesson-ribbon-tabs button:hover{background:#f3f7fc}
+.lesson-ribbon-tabs .ribbon-saved{margin-left:auto;white-space:nowrap;color:#567166;font-size:11px;padding:0 6px}
+.lesson-editor-pro .lesson-editor-toolbar{position:relative!important;top:auto!important;margin:0!important;border:0!important;border-bottom:1px solid #dfe7f0!important;border-radius:0!important;background:#f9fbfe!important;box-shadow:none!important;padding:9px 12px!important;gap:9px!important;display:flex;align-items:stretch;flex-wrap:wrap}
+.lesson-editor-pro .ribbon-group{display:flex;align-items:center;align-content:center;gap:3px;padding:0 8px 0 0;border-right:1px solid #dce4ee;min-height:45px;flex-wrap:wrap}
+.lesson-editor-pro .ribbon-group:last-of-type{border-right:0}
+.lesson-editor-pro .ribbon-group button,.lesson-editor-pro .ribbon-group select{height:30px;min-width:30px;padding:0 7px;background:#fff;border:1px solid #e0e7ef;border-radius:5px;color:#263d56;font-size:11px}
+.lesson-editor-pro .ribbon-group button:hover{background:#eaf3ff;border-color:#b8d3f5}
+.lesson-editor-pro .ribbon-fonts select{max-width:145px}
+.lesson-editor-pro .ribbon-color{height:30px;display:flex;align-items:center;gap:4px;padding:0 5px;border:1px solid #e0e7ef;border-radius:5px;background:#fff;color:#334b65;font-weight:800;font-size:13px;cursor:pointer}
+.lesson-editor-pro .ribbon-color input{width:17px;height:19px;padding:0;border:0;background:transparent;cursor:pointer}
+.lesson-editor-pro .toolbar-preview{margin-left:auto!important;align-self:center;white-space:nowrap;border:1px solid #c6d8ed!important;border-radius:6px!important;background:#fff!important;padding:0 10px!important;height:32px!important}
+.lesson-editor-workspace{display:grid;grid-template-columns:205px minmax(360px,1fr) 238px;gap:0;align-items:stretch;min-height:700px;background:#f0f3f7}
+.lesson-outline-panel,.lesson-properties-panel{background:#fff;min-width:0;color:#233a55;font-size:12px}
+.lesson-outline-panel{border-right:1px solid #dfe6ef;padding:13px 10px;overflow:hidden}
+.lesson-panel-heading{display:flex;align-items:center;justify-content:space-between;margin:0 2px 12px;font-size:12px;color:#1d3552}
+.lesson-panel-heading span{font-size:10px;color:#8090a2}
+.lesson-outline-panel>input{box-sizing:border-box;width:100%;height:31px;border:1px solid #dce5ef;border-radius:6px;padding:0 8px;font-size:11px;outline:none}
+.lesson-outline-panel nav{display:flex;flex-direction:column;gap:3px;margin-top:12px;max-height:630px;overflow:auto}
+.lesson-outline-panel .outline-item{border:0;background:transparent;text-align:left;padding:8px 7px;border-radius:5px;color:#334b66;font-size:11px;line-height:1.4;cursor:pointer;overflow-wrap:anywhere}
+.lesson-outline-panel .outline-item:hover{background:#f0f6ff;color:#155cc1}
+.lesson-outline-panel .outline-level-1{font-weight:750}
+.lesson-outline-panel .outline-level-2{padding-left:14px}
+.lesson-outline-panel .outline-level-3{padding-left:22px;color:#62758a}
+.lesson-outline-panel .outline-empty{font-size:11px;color:#8190a1;line-height:1.6;padding:4px}
+.lesson-editor-canvas{min-width:0;overflow:auto;padding:16px 12px 28px;display:flex;align-items:flex-start;justify-content:center;background:#eef2f6}
+.lesson-editor-pro .a4-document{flex:0 0 auto;width:794px;max-width:none!important;min-height:1122px!important;margin:0!important;padding:65px 58px!important;box-sizing:border-box;border:1px solid #e0e6ed!important;border-radius:2px!important;background:#fff!important;box-shadow:0 2px 9px rgba(24,46,70,.10)!important;line-height:1.65!important;color:#172b45!important;font-family:"Times New Roman",serif;font-size:12pt;overflow:visible!important}
+.lesson-editor-pro .lesson-preview.a4-document{white-space:normal}
+.lesson-properties-panel{border-left:1px solid #dfe6ef;overflow:hidden}
+.lesson-properties-tabs{display:flex;border-bottom:1px solid #e1e8f0;padding:0 8px;gap:2px}
+.lesson-properties-tabs button{flex:1;border:0;background:transparent;padding:12px 4px;color:#607187;font-size:11px;cursor:pointer}
+.lesson-properties-tabs button.active{color:#145ec5;font-weight:800;box-shadow:inset 0 -2px #1769e0}
+.lesson-properties-body{display:flex;flex-direction:column;gap:11px;padding:14px 12px}
+.lesson-properties-body>strong{font-size:11px;color:#203a58}
+.lesson-properties-body>label{display:flex;flex-direction:column;gap:5px;color:#5d7187;font-size:10px;font-weight:650}
+.lesson-properties-body select,.lesson-properties-body input:not([type=color]),.lesson-properties-body textarea{box-sizing:border-box;width:100%;min-width:0;border:1px solid #d8e2ed;border-radius:5px;padding:7px;background:#fff;color:#263e58;font:inherit}
+.lesson-properties-body input[type=color]{width:100%;height:29px;border:1px solid #d8e2ed;border-radius:5px;padding:3px;background:#fff}
+.lesson-property-buttons{display:flex;gap:4px;flex-wrap:wrap}
+.lesson-property-buttons button{border:1px solid #dce5ef;background:#fff;border-radius:5px;min-height:29px;padding:4px 8px;color:#29425d;font-size:11px;cursor:pointer}
+.lesson-property-buttons button:hover{background:#eef5ff}
+.lesson-properties-note{font-size:10px;line-height:1.55;color:#8190a1;margin:2px 0}
+.lesson-equation-panel .equation-template-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.lesson-equation-panel .equation-template-grid button{min-width:0;min-height:53px;border:1px solid #dfe7f0;border-radius:5px;background:#fff;color:#52677d;font-size:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer}
+.lesson-equation-panel .equation-template-grid button span{font-family:"Times New Roman",serif;font-size:20px;color:#172b45}
+.lesson-equation-panel .equation-template-grid button:hover{border-color:#9fc3f1;background:#f5f9ff}
+.lesson-equation-panel textarea{resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;font-size:10px!important;line-height:1.5}
+.lesson-equation-panel .equation-source-preview{min-height:46px;padding:9px;border:1px solid #e0e7ef;border-radius:5px;background:#f8fafc;color:#263b55;font-family:"Times New Roman",serif;font-size:14px;overflow-wrap:anywhere}
+.lesson-equation-panel .equation-insert-button{border:0;border-radius:6px;background:#1769e0;color:#fff;padding:9px 10px;font-size:11px;font-weight:750;cursor:pointer}
+.lesson-document .lesson-equation-source{display:inline;vertical-align:baseline;padding:0;margin:0;border:0;border-radius:0;background:transparent;color:inherit;font-family:"Cambria Math","Times New Roman",serif;white-space:normal;box-shadow:none;cursor:text}
+.lesson-document .lesson-equation-source math{display:inline math;font-size:1em;vertical-align:middle}
+.lesson-document .lesson-equation-source:hover{outline:1px dashed #b8cbe2;outline-offset:2px}
+.lesson-document .lesson-equation-source:focus{outline:1px solid #8db7ee;outline-offset:2px}
+.lesson-editor-pro .lesson-add-tools{background:#fff;padding:12px 16px;border-top:1px solid #e1e8f0}
+.lesson-editor-pro .lesson-editor-status{background:#fff;padding:8px 16px 12px}
+@media(max-width:1250px){.lesson-editor-workspace{grid-template-columns:170px minmax(340px,1fr)}.lesson-properties-panel{grid-column:1/-1;border-left:0;border-top:1px solid #dfe6ef;display:grid;grid-template-columns:160px minmax(0,1fr)}.lesson-properties-tabs{flex-direction:column;border-bottom:0;border-right:1px solid #e1e8f0}.lesson-properties-tabs button{flex:0 0 auto}.lesson-properties-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start}.lesson-equation-panel .equation-template-grid{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media(max-width:760px){.lesson-editor-workspace{grid-template-columns:minmax(0,1fr)}.lesson-outline-panel{border-right:0;border-bottom:1px solid #dfe6ef}.lesson-outline-panel nav{max-height:150px}.lesson-editor-canvas{padding:10px 6px;justify-content:flex-start}.lesson-editor-pro .a4-document{width:794px;max-width:none!important}.lesson-properties-panel{display:block}.lesson-properties-tabs{flex-direction:row;border-right:0}.lesson-properties-body{display:flex}.lesson-ribbon-tabs .ribbon-saved{display:none}.lesson-editor-pro .lesson-editor-toolbar{position:relative!important}}
+
+
+/* CAV lesson editor refinement: isolated to the lesson authoring component */
+.lesson-editor-pro{
+  container-type:inline-size;
+  border:1px solid #d7e1ec;
+  border-radius:12px;
+  overflow:hidden;
+  background:#fff;
+  box-shadow:0 10px 28px rgba(22,48,78,.07);
+}
+.lesson-editor-pro .lesson-editor-header-minimal{
+  min-height:48px;
+  box-sizing:border-box;
+  padding:8px 12px;
+  justify-content:space-between;
+  gap:10px;
+  background:#fff;
+}
+.lesson-editor-pro .lesson-editor-page-status{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:#52677f;
+  font-size:12px;
+}
+.lesson-editor-pro .lesson-editor-page-status strong{
+  color:#29425f;
+  font-size:12px;
+}
+.lesson-editor-pro .lesson-editor-page-status span{
+  border:1px solid #dce6f0;
+  border-radius:999px;
+  background:#f7f9fc;
+  padding:5px 9px;
+}
+.lesson-editor-pro .lesson-editor-source{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.lesson-editor-pro .lesson-expand-button{
+  border:1px solid #cfdeed;
+  background:#fff;
+  color:#24527e;
+  border-radius:8px;
+  padding:9px 12px;
+  font-size:12px;
+  font-weight:750;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.lesson-editor-pro .lesson-expand-button:hover{background:#f2f7fd;border-color:#a9c5e5}
+.lesson-editor-pro .lesson-import-button{padding:9px 12px;font-size:12px;border-radius:8px}
+.lesson-editor-pro .lesson-ribbon-tabs{
+  display:flex;
+  align-items:stretch;
+  gap:2px;
+  min-height:38px;
+  padding:0 8px;
+  border-bottom:1px solid #dce5ef;
+  background:linear-gradient(#fff,#f8fafc);
+  overflow-x:auto;
+}
+.lesson-editor-pro .lesson-ribbon-tabs>button{
+  flex:0 0 auto;
+  border:0;
+  border-bottom:2px solid transparent;
+  background:transparent;
+  color:#42566f;
+  padding:9px 13px 7px;
+  font-size:12px;
+  cursor:pointer;
+}
+.lesson-editor-pro .lesson-ribbon-tabs>button.active,
+.lesson-editor-pro .lesson-ribbon-tabs>button:first-child{
+  color:#155fc7;
+  border-bottom-color:#1769e0;
+  font-weight:750;
+}
+.lesson-editor-pro .lesson-ribbon-tabs .ribbon-saved{
+  margin-left:auto;
+  align-self:center;
+  padding:0 8px;
+  color:#71849a;
+  font-size:11px;
+  white-space:nowrap;
+}
+.lesson-editor-pro .lesson-editor-toolbar{
+  position:relative;
+  top:auto;
+  display:flex;
+  align-items:stretch;
+  gap:0;
+  margin:0;
+  padding:7px 8px 5px;
+  border:0;
+  border-bottom:1px solid #dce5ef;
+  border-radius:0;
+  box-shadow:none;
+  background:#f8fafc;
+  flex-wrap:wrap;
+}
+.lesson-editor-pro .lesson-editor-toolbar .ribbon-group{
+  position:relative;
+  display:flex;
+  align-items:center;
+  align-content:center;
+  gap:3px;
+  min-height:57px;
+  padding:3px 9px 15px;
+  border-right:1px solid #dce5ef;
+}
+.lesson-editor-pro .lesson-editor-toolbar .ribbon-group:after{
+  position:absolute;
+  bottom:1px;
+  left:0;
+  right:0;
+  text-align:center;
+  color:#72839a;
+  font-size:9px;
+  line-height:12px;
+  pointer-events:none;
+}
+.lesson-editor-pro .lesson-editor-toolbar .ribbon-fonts:after{content:"Police"}
+.lesson-editor-pro .lesson-editor-toolbar:not(.lesson-layout-ribbon):not(.lesson-view-ribbon):not(.lesson-insert-ribbon) .ribbon-group:nth-child(2):after{content:"Caractère"}
+.lesson-editor-pro .lesson-editor-toolbar:not(.lesson-layout-ribbon):not(.lesson-view-ribbon):not(.lesson-insert-ribbon) .ribbon-group:nth-child(3):after{content:"Paragraphe"}
+.lesson-editor-pro .lesson-editor-toolbar .ribbon-insert:after{content:"Insérer"}
+.lesson-editor-pro .lesson-editor-toolbar button,
+.lesson-editor-pro .lesson-editor-toolbar select{
+  box-sizing:border-box;
+  min-height:31px;
+  height:31px;
+  border:1px solid #dce5ef;
+  border-radius:6px;
+  background:#fff;
+  color:#2f4763;
+  padding:0 8px;
+  font-size:11px;
+}
+.lesson-editor-pro .lesson-editor-toolbar .ribbon-fonts select:first-of-type{width:145px;max-width:100%}
+.lesson-editor-pro .lesson-editor-toolbar .ribbon-fonts select:last-of-type{width:64px}
+.lesson-editor-pro .lesson-editor-toolbar .ribbon-color{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  position:relative;
+  width:29px;
+  height:30px;
+  border:1px solid #dce5ef;
+  border-radius:6px;
+  background:#fff;
+  color:#23415f;
+  font-weight:800;
+  cursor:pointer;
+}
+.lesson-editor-pro .lesson-editor-toolbar .ribbon-color input{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  cursor:pointer;
+}
+.lesson-editor-pro .lesson-editor-toolbar .toolbar-preview{margin-left:auto}
+.lesson-editor-pro .lesson-editor-workspace{
+  grid-template-columns:220px minmax(0,1fr) 275px;
+  min-height:720px;
+  background:#eef2f6;
+}
+.lesson-editor-pro .lesson-outline-panel{
+  padding:14px 11px;
+  border-right:1px solid #dce5ef;
+}
+.lesson-editor-pro .lesson-panel-heading{font-size:13px;margin-bottom:12px}
+.lesson-editor-pro .lesson-outline-panel>input{height:34px;font-size:12px}
+.lesson-editor-pro .lesson-outline-panel nav{max-height:calc(100vh - 300px)}
+.lesson-editor-pro .lesson-outline-panel .outline-item{font-size:12px;padding:8px 7px}
+.lesson-editor-pro .lesson-editor-canvas{
+  min-width:0;
+  padding:18px 12px 30px;
+  overflow:auto;
+  align-items:flex-start;
+  justify-content:center;
+  background:#edf1f5;
+}
+.lesson-editor-pro .a4-document{
+  width:794px;
+  min-height:1123px!important;
+  padding:58px 58px!important;
+  margin:0!important;
+  box-sizing:border-box;
+  border:1px solid #d9e1ea!important;
+  border-radius:2px!important;
+  background:#fff!important;
+  box-shadow:0 2px 12px rgba(22,44,69,.12)!important;
+  color:#172b45!important;
+  font-family:"Times New Roman",serif;
+  font-size:12pt;
+  line-height:1.65!important;
+}
+.lesson-editor-pro .lesson-properties-panel{background:#fff}
+.lesson-editor-pro .lesson-properties-tabs button{font-size:12px;padding:13px 5px}
+.lesson-editor-pro .lesson-properties-body{padding:15px 13px;gap:12px}
+.lesson-editor-pro .lesson-properties-body>strong{font-size:12px}
+.lesson-editor-pro .lesson-properties-body>label{font-size:11px}
+.lesson-editor-pro .lesson-properties-body select{min-height:34px;font-size:12px}
+.lesson-editor-pro .lesson-equation-panel .equation-template-grid button{font-size:10px;min-height:60px}
+.lesson-editor-pro .lesson-equation-panel .equation-template-grid button span{font-size:21px}
+.lesson-editor-pro .lesson-add-tools,.lesson-editor-pro .lesson-editor-status{padding-left:14px;padding-right:14px}
+
+/* Expanded workspace matches the approved three-panel reference without changing the page around it. */
+.lesson-editor-pro.lesson-editor-expanded{
+  position:fixed!important;
+  inset:8px!important;
+  z-index:9999!important;
+  display:flex!important;
+  flex-direction:column!important;
+  width:auto!important;
+  height:auto!important;
+  max-width:none!important;
+  max-height:none!important;
+  margin:0!important;
+  border:1px solid #ccd8e6!important;
+  border-radius:10px!important;
+  overflow:hidden!important;
+  background:#fff!important;
+  box-shadow:0 18px 60px rgba(12,32,58,.28)!important;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-header-minimal{flex:0 0 auto}
+.lesson-editor-pro.lesson-editor-expanded .lesson-ribbon-tabs{flex:0 0 auto}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-toolbar{flex:0 0 auto}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:hidden;
+  grid-template-columns:250px minmax(420px,1fr) 320px;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-outline-panel,
+.lesson-editor-pro.lesson-editor-expanded .lesson-properties-panel{min-height:0;overflow:auto}
+.lesson-editor-pro.lesson-editor-expanded .lesson-outline-panel nav{max-height:calc(100vh - 230px)}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-canvas{min-height:0;overflow:auto;padding:24px}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-toolbar .toolbar-preview{margin-left:8px}
+@container (max-width: 1050px){
+  .lesson-editor-pro .lesson-editor-workspace{grid-template-columns:190px minmax(0,1fr)}
+  .lesson-editor-pro .lesson-properties-panel{grid-column:1/-1;border-left:0;border-top:1px solid #dce5ef;display:grid;grid-template-columns:130px minmax(0,1fr)}
+  .lesson-editor-pro .lesson-properties-tabs{flex-direction:column;border-bottom:0;border-right:1px solid #dce5ef}
+  .lesson-editor-pro .lesson-properties-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start}
+}
+@media(max-width:760px){
+  .lesson-editor-pro .lesson-editor-source{flex-wrap:wrap;justify-content:flex-end}
+  .lesson-editor-pro .lesson-editor-header-minimal{align-items:flex-start}
+  .lesson-editor-pro .lesson-editor-toolbar{max-width:none;overflow:visible;flex-wrap:wrap}
+  .lesson-editor-pro .lesson-editor-toolbar .ribbon-group{padding-left:5px;padding-right:5px}
+  .lesson-editor-pro .lesson-editor-workspace{grid-template-columns:minmax(0,1fr)}
+  .lesson-editor-pro .lesson-outline-panel{border-right:0;border-bottom:1px solid #dce5ef}
+  .lesson-editor-pro .lesson-outline-panel nav{max-height:150px}
+  .lesson-editor-pro .lesson-editor-canvas{justify-content:flex-start;padding:10px 6px}
+  .lesson-editor-pro .lesson-properties-panel{display:block}
+  .lesson-editor-pro .lesson-properties-tabs{flex-direction:row;border-right:0}
+  .lesson-editor-pro .lesson-properties-body{display:flex}
+  .lesson-editor-pro.lesson-editor-expanded{inset:0!important;border-radius:0!important}
+  .lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace{overflow:auto}
+}
+
+/* Dedicated lesson-editing mode: replace the cramped embedded card with a focused workspace. */
+.lesson-editor-pro.lesson-editor-expanded {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483000 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #f3f6fa !important;
+  color: #162b49;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-header-minimal {
+  min-height: 68px;
+  padding: 10px 22px;
+  gap: 18px;
+  background: #fff;
+  border-bottom: 1px solid #dbe4ef;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-page-status {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace-title > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace-title strong {
+  overflow: hidden;
+  max-width: min(48vw, 620px);
+  color: #142d50;
+  font-size: 15px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace-title span:not(.lesson-editor-brand-mark) {
+  color: #75849a;
+  font-size: 11px;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 10px;
+  background: #e9f1ff;
+  color: #155bd5;
+  font-size: 21px;
+  font-weight: 800;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-page-status > span {
+  padding: 6px 10px;
+  border: 1px solid #e0e7f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #5f7189;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-source {
+  gap: 9px;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-workspace-save {
+  min-height: 38px;
+  padding: 0 17px;
+  border: 1px solid #155bd5;
+  border-radius: 8px;
+  background: #155bd5;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-workspace-save:disabled {
+  border-color: #cbd5e1;
+  background: #e2e8f0;
+  color: #718096;
+  cursor: not-allowed;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-expand-button {
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 8px;
+  background: #fff;
+  color: #23466f;
+  font-weight: 650;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-ribbon-tabs button {
+  appearance: none;
+  border: 0;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+  color: #40546b;
+  padding: 11px 15px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-ribbon-tabs button.active {
+  color: #145ec5;
+  font-weight: 750;
+  box-shadow: inset 0 -2px #1769e0;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-ribbon-tabs button:hover {
+  background: #f3f7fc;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-ribbon-tabs {
+  padding: 0 18px;
+  background: #fff;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-toolbar {
+  padding: 10px 16px;
+  gap: 10px;
+  background: #fff;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-columns: 245px minmax(480px, 1fr) 300px;
+  gap: 0;
+  background: #f3f6fa;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-outline-panel,
+.lesson-editor-pro.lesson-editor-expanded .lesson-properties-panel {
+  border-color: #dce4ee;
+  background: #fff;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-editor-canvas {
+  align-items: flex-start;
+  padding: 28px clamp(18px, 3vw, 48px);
+  background: #edf1f6;
+}
+.lesson-editor-pro.lesson-editor-expanded .lesson-document {
+  margin: 0 auto;
+  box-shadow: 0 3px 16px rgba(23, 43, 69, .12);
+}
+@media (max-width: 1100px) {
+  .lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+  .lesson-editor-pro.lesson-editor-expanded .lesson-properties-panel {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .lesson-editor-pro.lesson-editor-expanded .lesson-editor-header-minimal {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+  .lesson-editor-pro.lesson-editor-expanded .lesson-editor-source {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .lesson-editor-pro.lesson-editor-expanded .lesson-editor-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+  .lesson-editor-pro.lesson-editor-expanded .lesson-outline-panel {
+    max-height: 170px;
+    border-right: 0;
+    border-bottom: 1px solid #dce4ee;
+  }
+  .lesson-editor-pro.lesson-editor-expanded .lesson-editor-canvas {
+    padding: 12px 6px;
+  }
+}
+
+
+/* Focused lesson-editor fix: real tab switching and visible page-boundary guides. */
+.lesson-editor-pro .lesson-ribbon-tabs > button {
+  border-bottom: 2px solid transparent;
+  color: #52657b;
+  background: transparent;
+  cursor: pointer;
+}
+.lesson-editor-pro .lesson-ribbon-tabs > button.active {
+  color: #155fc7;
+  border-bottom-color: #1769e0;
+  font-weight: 750;
+}
+.lesson-editor-pro .lesson-insert-ribbon,
+.lesson-editor-pro .lesson-layout-ribbon,
+.lesson-editor-pro .lesson-view-ribbon {
+  min-height: 64px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #f8fafc;
+}
+.lesson-editor-pro .lesson-insert-ribbon .ribbon-group,
+.lesson-editor-pro .lesson-layout-ribbon .ribbon-group,
+.lesson-editor-pro .lesson-view-ribbon .ribbon-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  min-height: 42px;
+  border-right: 1px solid #dce5ef;
+}
+.lesson-editor-pro .lesson-layout-ribbon .ribbon-group,
+.lesson-editor-pro .lesson-view-ribbon .ribbon-group {
+  flex-wrap: wrap;
+}
+.lesson-editor-pro .ribbon-help {
+  color: #72839a;
+  font-size: 11px;
+}
+.lesson-editor-pro .lesson-editor-canvas .a4-document {
+  zoom: var(--lesson-zoom, 1);
+  /* Thin page-end guides make A4 boundaries visible without clipping the editable flow. */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    #fff 0,
+    #fff 1119px,
+    #d8e0e9 1119px,
+    #d8e0e9 1123px
+  ) !important;
+}
+.lesson-editor-pro .lesson-document .lesson-word-page-break {
+  display: block;
+  height: 24px;
+  box-sizing: border-box;
+  margin: 0 -12px;
+  border-top: 2px dashed #8ba5c3;
+  position: relative;
+  break-after: page;
+  page-break-after: always;
+  background: transparent;
+}
+.lesson-editor-pro .lesson-document .lesson-word-page-break::after {
+  content: 'Saut de page';
+  position: absolute;
+  top: -11px;
+  right: 8px;
+  padding: 2px 8px;
+  border: 1px solid #d5e0ec;
+  border-radius: 10px;
+  background: #fff;
+  color: #49627e;
+  font: 11px/1.5 system-ui, sans-serif;
+}
+.lesson-editor-pro .lesson-document .lesson-page-break-continuation { margin-top: 0 !important; }
+.lesson-editor-pro .lesson-document .lesson-equation-source { display: inline; align-items: initial; vertical-align: baseline; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; white-space: normal; box-shadow: none; }
+.lesson-editor-pro .lesson-equation-panel .equation-source-preview { display: flex; align-items: center; justify-content: center; overflow-x: auto; }
+.lesson-editor-pro .lesson-equation-panel .equation-source-preview math { font-size: 1.35em; }
+.lesson-editor-pro .lesson-document .lesson-equation-source math { display: inline math; font-size: 1em; vertical-align: middle; }
+.lesson-preview .lesson-equation-source, .lesson-content-reader .lesson-equation-source { display: inline; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; color: inherit; box-shadow: none; white-space: normal; }
+.lesson-preview .lesson-equation-source math, .lesson-content-reader .lesson-equation-source math { display: inline math; vertical-align: middle; font-size: 1em; }
+/* The reader is a flowing lesson view, not the editor's paginated canvas. */
+.lesson-preview .lesson-word-page-break, .lesson-content-reader .lesson-word-page-break { height: 0 !important; min-height: 0 !important; margin: 16px 0 !important; background: transparent !important; border-top: 1px dashed #c8d5e1 !important; }
+.lesson-preview .lesson-word-page-break::after, .lesson-content-reader .lesson-word-page-break::after { display: none; }
+@media print {
+  .lesson-editor-pro .lesson-document .lesson-word-page-break {
+    height: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+  }
+  .lesson-editor-pro .lesson-document .lesson-word-page-break::after { display: none; }
+}
+
+/* Expanded equation gallery: categorized, searchable and compact in the right inspector. */
+.lesson-equation-panel .equation-gallery-intro{margin:-5px 0 0;font-size:10px;line-height:1.45;color:#73849a}
+.lesson-equation-panel .equation-search{font-size:11px!important;padding:8px 9px!important}
+.lesson-equation-panel .equation-category-tabs{display:flex;flex-wrap:wrap;gap:4px;max-height:94px;overflow:auto;padding:1px 0}
+.lesson-equation-panel .equation-category-tabs button{border:1px solid #dfe7f0;background:#fff;color:#607187;border-radius:14px;padding:5px 7px;font-size:9px;cursor:pointer}
+.lesson-equation-panel .equation-category-tabs button.active{background:#eaf3ff;border-color:#8db8f0;color:#145ec5;font-weight:800}
+.lesson-equation-panel .equation-template-grid{max-height:260px;overflow:auto;padding:1px 2px 4px}
+.lesson-equation-panel .equation-template-grid button{min-height:58px;padding:5px 3px;font-size:9px;line-height:1.25;text-align:center}
+.lesson-equation-panel .equation-template-grid button span{font-size:19px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.lesson-equation-panel .equation-template-grid button:focus-visible,.lesson-equation-panel .equation-category-tabs button:focus-visible{outline:2px solid #1769e0;outline-offset:1px}

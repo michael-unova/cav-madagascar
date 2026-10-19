@@ -215,6 +215,9 @@ export function sanitizeLessonHtml(html: string) {
   })
 
   doc.body.querySelectorAll<HTMLElement>('*').forEach(el => {
+    // MathML elements can expose lowercase tagName values in some DOM implementations.
+    // Normalize the name before checking the allowlist; otherwise <mfrac>, <msqrt>, etc.
+    // are unwrapped into their text children (for example, a/b becomes just ab).
     if (!ALLOWED_TAGS.has(el.tagName.toUpperCase())) {
       el.replaceWith(...Array.from(el.childNodes))
       return
@@ -517,6 +520,56 @@ function renumberFigureCaptions(root: HTMLElement) {
   })
 }
 
+const EQUATION_TEMPLATES: Array<{category:string;label:string;symbol:string;latex:string;keywords:string}> = [
+{category:'Structures',label:'Fraction',symbol:'a⁄b',latex:'\\frac{a}{b}',keywords:'quotient division'},
+{category:'Structures',label:'Fraction complexe',symbol:'(a/b)/(c/d)',latex:'\\frac{\\frac{a}{b}}{\\frac{c}{d}}',keywords:'fraction quotient'},
+{category:'Structures',label:'Racine carrée',symbol:'√x',latex:'\\sqrt{x}',keywords:'racine radical'},
+{category:'Structures',label:'Racine n-ième',symbol:'ⁿ√x',latex:'\\sqrt[n]{x}',keywords:'racine indice'},
+{category:'Structures',label:'Puissance',symbol:'xⁿ',latex:'x^{n}',keywords:'exposant puissance'},
+{category:'Structures',label:'Indice',symbol:'xₙ',latex:'x_{n}',keywords:'indice'},
+{category:'Structures',label:'Valeur absolue',symbol:'|x|',latex:'\\left|x\\right|',keywords:'module'},
+{category:'Structures',label:'Système',symbol:'{ x }',latex:'\\begin{cases}x+y=1\\\\x-y=0\\end{cases}',keywords:'equations cas'},
+{category:'Algèbre',label:'Équation du 2e degré',symbol:'ax²+bx+c',latex:'ax^{2}+bx+c=0',keywords:'polynôme quadratique'},
+{category:'Algèbre',label:'Formule quadratique',symbol:'x = …',latex:'x=\\frac{-b\\pm\\sqrt{b^{2}-4ac}}{2a}',keywords:'discriminant racine'},
+{category:'Algèbre',label:'Identité remarquable',symbol:'(a+b)²',latex:'(a+b)^{2}=a^{2}+2ab+b^{2}',keywords:'développement'},
+{category:'Algèbre',label:'Différence de carrés',symbol:'a²−b²',latex:'a^{2}-b^{2}=(a-b)(a+b)',keywords:'factorisation'},
+{category:'Algèbre',label:'Inégalité',symbol:'a ≤ b',latex:'a\\leq b',keywords:'comparaison relation'},
+{category:'Algèbre',label:'Binôme de Newton',symbol:'(a+b)ⁿ',latex:'(a+b)^{n}=\\sum_{k=0}^{n}\\binom{n}{k}a^{n-k}b^{k}',keywords:'binomial combinaison'},
+{category:'Algèbre',label:'Coefficient binomial',symbol:'(n k)',latex:'\\binom{n}{k}',keywords:'combinaison'},
+{category:'Calcul',label:'Somme',symbol:'∑',latex:'\\sum_{i=1}^{n}x_i',keywords:'sigma série'},
+{category:'Calcul',label:'Produit',symbol:'∏',latex:'\\prod_{i=1}^{n}x_i',keywords:'produit série'},
+{category:'Calcul',label:'Intégrale définie',symbol:'∫',latex:'\\int_{a}^{b}f(x)\\,dx',keywords:'primitive intégration'},
+{category:'Calcul',label:'Intégrale indéfinie',symbol:'∫ f dx',latex:'\\int f(x)\\,dx',keywords:'primitive intégration'},
+{category:'Calcul',label:'Dérivée',symbol:'dy/dx',latex:'\\frac{dy}{dx}',keywords:'différentielle'},
+{category:'Calcul',label:'Dérivée seconde',symbol:'d²y/dx²',latex:'\\frac{d^{2}y}{dx^{2}}',keywords:'seconde différentielle'},
+{category:'Calcul',label:'Limite',symbol:'lim',latex:'\\lim_{x\\to a}f(x)',keywords:'convergence'},
+{category:'Calcul',label:'Limite à l’infini',symbol:'x → ∞',latex:'\\lim_{x\\to\\infty}f(x)',keywords:'infini convergence'},
+{category:'Calcul',label:'Dérivée partielle',symbol:'∂',latex:'\\frac{\\partial f}{\\partial x}',keywords:'partial'},
+{category:'Fonctions',label:'Fonction affine',symbol:'f(x)',latex:'f(x)=ax+b',keywords:'affine fonction'},
+{category:'Fonctions',label:'Exponentielle',symbol:'eˣ',latex:'e^{x}',keywords:'exponentielle'},
+{category:'Fonctions',label:'Logarithme',symbol:'ln x',latex:'\\ln(x)',keywords:'logarithme'},
+{category:'Fonctions',label:'Sinus et cosinus',symbol:'sin cos',latex:'\\sin^{2}(x)+\\cos^{2}(x)=1',keywords:'trigonométrie'},
+{category:'Fonctions',label:'Tangente',symbol:'tan',latex:'\\tan(x)=\\frac{\\sin(x)}{\\cos(x)}',keywords:'trigonométrie'},
+{category:'Fonctions',label:'Série géométrique',symbol:'∑ rᵏ',latex:'\\sum_{k=0}^{n}ar^{k}=a\\frac{1-r^{n+1}}{1-r}',keywords:'suite série'},
+{category:'Symboles',label:'Lettres grecques',symbol:'α β γ',latex:'\\alpha+\\beta+\\gamma',keywords:'grec lettres'},
+{category:'Symboles',label:'Infini',symbol:'∞',latex:'\\infty',keywords:'infini'},
+{category:'Symboles',label:'Environ égal',symbol:'≈',latex:'a\\approx b',keywords:'approximation'},
+{category:'Symboles',label:'Implication',symbol:'⇒',latex:'A\\implies B',keywords:'logique implication'},
+{category:'Symboles',label:'Quantificateurs',symbol:'∀ ∃',latex:'\\forall x\\,\\exists y',keywords:'logique'},
+{category:'Ensembles',label:'Appartenance',symbol:'∈',latex:'x\\in A',keywords:'élément'},
+{category:'Ensembles',label:'Inclusion',symbol:'⊆',latex:'A\\subseteq B',keywords:'sous ensemble'},
+{category:'Ensembles',label:'Union',symbol:'∪',latex:'A\\cup B',keywords:'ensembles'},
+{category:'Ensembles',label:'Intersection',symbol:'∩',latex:'A\\cap B',keywords:'ensembles'},
+{category:'Ensembles',label:'Ensemble des réels',symbol:'ℝ',latex:'\\mathbb{R}',keywords:'nombres réels'},
+{category:'Matrices',label:'Matrice 2×2',symbol:'[a b; c d]',latex:'\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}',keywords:'tableau matrice'},
+{category:'Matrices',label:'Matrice identité',symbol:'I₂',latex:'\\begin{bmatrix}1&0\\\\0&1\\end{bmatrix}',keywords:'identité'},
+{category:'Matrices',label:'Déterminant',symbol:'|A|',latex:'\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}',keywords:'determinant'},
+{category:'Probabilités',label:'Probabilité',symbol:'P(A)',latex:'P(A)',keywords:'événement'},
+{category:'Probabilités',label:'Espérance',symbol:'E(X)',latex:'\\mathbb{E}(X)',keywords:'moyenne'},
+{category:'Probabilités',label:'Loi normale',symbol:'N(μ,σ²)',latex:'X\\sim\\mathcal{N}(\\mu,\\sigma^{2})',keywords:'gaussienne'},
+{category:'Probabilités',label:'Combinaisons',symbol:'C(n,k)',latex:'\\binom{n}{k}=\\frac{n!}{k!(n-k)!}',keywords:'factorielle dénombrement'},
+]
+
 export function RichLessonEditor({ value, onChange, storageFolder, initialExpanded = false, lessonTitle, onExitExpanded, onSave, isSaving = false, canSave = false }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<'edit' | 'preview'>('edit')
@@ -526,6 +579,8 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
   const [pageCount, setPageCount] = useState(1)
   const [isExpanded, setIsExpanded] = useState(initialExpanded)
   const [equationLatex, setEquationLatex] = useState('\\frac{a}{b}')
+  const [equationCategory, setEquationCategory] = useState('Structures')
+  const [equationSearch, setEquationSearch] = useState('')
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'equation'>('properties')
   const [outlineSearch, setOutlineSearch] = useState('')
   const [vimeoDialogOpen, setVimeoDialogOpen] = useState(false)
@@ -662,7 +717,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
     const html = `<span class="lesson-equation-source" data-latex="${escaped}" contenteditable="false">${latexToMathML(latex)}</span>&nbsp;`
     document.execCommand('insertHTML', false, sanitizeLessonHtml(html))
     emit()
-    setPasteStatus('')
+    setPasteStatus('Équation insérée et affichée. La source LaTeX est conservée pour une édition ultérieure; vérifiez les formules complexes dans l’aperçu.')
   }
 
   function insertPageBreak() {
@@ -684,7 +739,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
         pageBreak.setAttribute('contenteditable', 'false')
       }
       emit()
-      setPasteStatus('')
+      setPasteStatus('Saut de page inséré : le contenu suivant commence au début de la page A4 suivante.')
     })
   }
 
@@ -1024,7 +1079,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
       <div className="ribbon-group ribbon-fonts"><label className="sr-only" htmlFor="lesson-font-family">Police</label><select id="lesson-font-family" defaultValue="Times New Roman" onChange={e => applyInlineStyle('fontFamily', e.target.value)} aria-label="Police"><option>Times New Roman</option><option>Arial</option><option>Calibri</option><option>Georgia</option><option>Verdana</option><option>Courier New</option></select><label className="sr-only" htmlFor="lesson-font-size">Taille</label><select id="lesson-font-size" defaultValue="12pt" onChange={e => applyInlineStyle('fontSize', e.target.value)} aria-label="Taille de police"><option>8pt</option><option>9pt</option><option>10pt</option><option>11pt</option><option>12pt</option><option>14pt</option><option>16pt</option><option>18pt</option><option>20pt</option><option>24pt</option><option>28pt</option><option>36pt</option><option>48pt</option></select></div>
       <div className="ribbon-group"><button type="button" onClick={() => command('bold')} title="Gras"><strong>B</strong></button><button type="button" onClick={() => command('italic')} title="Italique"><em>I</em></button><button type="button" onClick={() => command('underline')} title="Souligné"><u>U</u></button><button type="button" onClick={() => command('strikeThrough')} title="Barré"><s>S</s></button><button type="button" onClick={() => command('subscript')} title="Indice">x₂</button><button type="button" onClick={() => command('superscript')} title="Exposant">x²</button><label className="ribbon-color" title="Couleur du texte">A<input type="color" defaultValue="#173f65" aria-label="Couleur du texte" onChange={e => applyInlineStyle('color', e.target.value)} /></label><label className="ribbon-color highlight-color" title="Surlignage">▰<input type="color" defaultValue="#fff176" aria-label="Surlignage" onChange={e => applyInlineStyle('backgroundColor', e.target.value)} /></label></div>
       <div className="ribbon-group"><select defaultValue="p" onChange={e => command('formatBlock', e.target.value)} aria-label="Style de paragraphe"><option value="p">Normal</option><option value="h1">Titre 1</option><option value="h2">Titre 2</option><option value="h3">Titre 3</option><option value="blockquote">Citation</option></select><button type="button" onClick={() => command('insertUnorderedList')} title="Liste à puces">• Liste</button><button type="button" onClick={() => command('insertOrderedList')} title="Liste numérotée">1. Liste</button><button type="button" onClick={() => command('justifyLeft')} title="Aligner à gauche">☰</button><button type="button" onClick={() => command('justifyCenter')} title="Centrer">≡</button><button type="button" onClick={() => command('justifyRight')} title="Aligner à droite">☷</button></div>
-      <div className="ribbon-group ribbon-insert"><button type="button" onClick={insertTable} title="Insérer un tableau">▦ Tableau</button><button type="button" onClick={() => { rememberSelection(); imageInputRef.current?.click() }}>▧ Image</button><button type="button" onClick={openVimeoDialog}>▶ Vidéo</button><button type="button" onClick={() => { const url = window.prompt('URL du lien'); if (url) command('createLink', url) }}>↗ Lien</button><button type="button" onClick={() => { setRightPanelTab('equation'); setPasteStatus('') }}>π Équation</button><button type="button" onClick={() => command('removeFormat')}>Effacer</button></div>
+      <div className="ribbon-group ribbon-insert"><button type="button" onClick={insertTable} title="Insérer un tableau">▦ Tableau</button><button type="button" onClick={() => { rememberSelection(); imageInputRef.current?.click() }}>▧ Image</button><button type="button" onClick={openVimeoDialog}>▶ Vidéo</button><button type="button" onClick={() => { const url = window.prompt('URL du lien'); if (url) command('createLink', url) }}>↗ Lien</button><button type="button" onClick={() => { setRightPanelTab('equation'); setPasteStatus('Saisissez une formule LaTeX dans le panneau Équation à droite.') }}>π Équation</button><button type="button" onClick={() => command('removeFormat')}>Effacer</button></div>
       <button type="button" className="toolbar-preview internal-preview" onClick={() => setMode(mode === 'edit' ? 'preview' : 'edit')}>{mode === 'edit' ? '◉ Aperçu étudiant' : '← Modifier'}</button>
     </div>}
     {activeRibbonTab === 'insert' && <div className="lesson-editor-toolbar lesson-insert-ribbon" role="toolbar" aria-label="Outils d’insertion" onMouseDown={keepEditorSelection}>
@@ -1033,15 +1088,16 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
         <button type="button" onClick={() => { rememberSelection(); imageInputRef.current?.click() }} title="Choisir une image sur votre ordinateur">▧ Image depuis l’ordinateur</button>
         <button type="button" onClick={openVimeoDialog} title="Insérer une vidéo">▶ Vidéo</button>
         <button type="button" onClick={() => { rememberSelection(); const url = window.prompt('Adresse du lien (URL)'); if (url) command('createLink', url) }}>↗ Lien</button>
-        <button type="button" onClick={() => { setRightPanelTab('equation'); setPasteStatus('') }}>π Équation</button>
+        <button type="button" onClick={() => { setRightPanelTab('equation'); setPasteStatus('Saisissez une formule LaTeX dans le panneau Équation à droite.') }}>π Équation</button>
         <button type="button" onClick={() => { rememberSelection(); const symbol = window.prompt('Symbole à insérer', '∞'); if (symbol) command('insertText', symbol) }}>Ω Symbole</button>
         <button type="button" onClick={insertPageBreak} title="Insérer un saut de page explicite">↵ Saut de page</button>
       </div>
     </div>}
     {activeRibbonTab === 'layout' && <div className="lesson-editor-toolbar lesson-layout-ribbon" role="toolbar" aria-label="Mise en page">
-      <div className="ribbon-group layout-paper-group"><div className="layout-control-label">Format du papier</div><span className="layout-value">A4 <span>210 × 297 mm</span></span></div>
-      <div className="ribbon-group layout-margins-group"><div className="layout-control-label">Marges</div><span className="layout-value layout-margin-value">Standard <span>20 mm</span></span></div>
-      <div className="ribbon-group layout-page-break-group"><button type="button" onClick={insertPageBreak}><span aria-hidden="true">↵</span> Insérer un saut de page</button></div>
+      <div className="ribbon-group"><strong>Format du papier</strong><span>A4 · 210 × 297 mm</span></div>
+      <div className="ribbon-group"><strong>Marges</strong><button type="button" onClick={() => setPasteStatus('Marges A4 standard : 20 mm. Le contenu existant est conservé.')}>Standard · 20 mm</button></div>
+      <div className="ribbon-group"><button type="button" onClick={insertPageBreak}>↵ Insérer un saut de page</button></div>
+      <span className="ribbon-help">Les sauts de page sont conservés dans le contenu du cours.</span>
     </div>}
     {activeRibbonTab === 'view' && <div className="lesson-editor-toolbar lesson-view-ribbon" role="toolbar" aria-label="Affichage">
       <div className="ribbon-group"><strong>Zoom</strong><button type="button" onClick={() => setZoom(v => Math.max(50, v - 10))}>−</button><span>{zoom}%</span><button type="button" onClick={() => setZoom(v => Math.min(150, v + 10))}>+</button><button type="button" onClick={() => setZoom(100)}>Réinitialiser</button></div>
@@ -1061,7 +1117,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
     <div className="lesson-editor-workspace">
       <aside className="lesson-outline-panel" aria-label="Plan de la leçon"><div className="lesson-panel-heading"><strong>Plan de la leçon</strong><span>{pageCount} p.</span></div><input value={outlineSearch} onChange={e => setOutlineSearch(e.target.value)} placeholder="Rechercher une section…" aria-label="Rechercher une section" /><nav>{(() => { const doc = new DOMParser().parseFromString(value || '', 'text/html'); const headings = [...doc.body.querySelectorAll('h1,h2,h3')].map((h, i) => ({ text: (h.textContent || '').trim() || `Section ${i + 1}`, level: Number(h.tagName.slice(1)), index: i })); const filtered = headings.filter(h => h.text.toLowerCase().includes(outlineSearch.toLowerCase())); return filtered.length ? filtered.map(h => <button key={`${h.index}-${h.text}`} type="button" className={`outline-item outline-level-${h.level}`} onClick={() => { const editor = ref.current; const target = editor?.querySelectorAll('h1,h2,h3').item(h.index); target?.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (target && editor) { const range = document.createRange(); range.selectNodeContents(target); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); rememberSelection(); editor.focus(); } }}>{h.level === 1 ? '▾ ' : '· '}{h.text}</button>) : <p className="outline-empty">Ajoutez des titres pour créer le plan automatiquement.</p> })()}</nav></aside>
       <main className="lesson-editor-canvas" style={{ "--lesson-zoom": zoom / 100 } as CSSProperties}>{mode === 'edit' ? <div ref={ref} className="lesson-editor-surface lesson-document a4-document" contentEditable suppressContentEditableWarning onInput={() => { setSelectedImage(null); emit() }} onPaste={(event) => void pasteFromWord(event)} onClick={handleEditorClick} onMouseUp={handleEditorMouseUp} onKeyUp={handleEditorKeyUp} onKeyDown={(event) => { if ((event.key === 'Backspace' || event.key === 'Delete') && selectedImage) { event.preventDefault(); removeSelectedImage(); } }} data-placeholder="Commencez à écrire votre cours…" /> : <div className="lesson-preview lesson-editor-surface lesson-document a4-document" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(value) }} />}</main>
-      <aside className="lesson-properties-panel" aria-label="Propriétés de la leçon"><div className="lesson-properties-tabs"><button type="button" className={rightPanelTab === 'properties' ? 'active' : ''} onClick={() => setRightPanelTab('properties')}>Propriétés</button><button type="button" className={rightPanelTab === 'equation' ? 'active' : ''} onClick={() => setRightPanelTab('equation')}>Équation</button></div>{rightPanelTab === 'properties' ? <div className="lesson-properties-body"><strong>Texte</strong><label>Police<select defaultValue="Times New Roman" onChange={e => applyInlineStyle('fontFamily', e.target.value)}><option>Times New Roman</option><option>Arial</option><option>Calibri</option><option>Georgia</option><option>Verdana</option></select></label><label>Taille<select defaultValue="12pt" onChange={e => applyInlineStyle('fontSize', e.target.value)}>{['8pt','9pt','10pt','11pt','12pt','14pt','16pt','18pt','20pt','24pt','28pt','36pt','48pt'].map(size => <option key={size}>{size}</option>)}</select></label><label>Couleur du texte<input type="color" defaultValue="#173f65" onChange={e => applyInlineStyle('color', e.target.value)} /></label><label>Surlignage<input type="color" defaultValue="#fff176" onChange={e => applyInlineStyle('backgroundColor', e.target.value)} /></label><div className="lesson-property-buttons"><button type="button" onClick={() => command('bold')}><b>B</b></button><button type="button" onClick={() => command('italic')}><i>I</i></button><button type="button" onClick={() => command('underline')}><u>U</u></button><button type="button" onClick={() => command('subscript')}>x₂</button><button type="button" onClick={() => command('superscript')}>x²</button></div><strong>Paragraphe</strong><div className="lesson-property-buttons"><button type="button" onClick={() => command('justifyLeft')}>Gauche</button><button type="button" onClick={() => command('justifyCenter')}>Centre</button><button type="button" onClick={() => command('justifyRight')}>Droite</button></div><p className="lesson-properties-note">Les réglages s’appliquent au texte sélectionné. Les marges du document suivent le format A4.</p></div> : <div className="lesson-properties-body lesson-equation-panel"><strong>Éditeur d’équation</strong><div className="equation-template-grid">{[{label:'Fraction',latex:'\\frac{a}{b}'},{label:'Racine',latex:'\\sqrt{x}'},{label:'Puissance',latex:'x^{2}'},{label:'Somme',latex:'\\sum_{i=1}^{n} x_i'},{label:'Intégrale',latex:'\\int_a^b f(x)\,dx'},{label:'Matrice',latex:'\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}'}].map(item => <button key={item.label} type="button" onClick={() => setEquationLatex(item.latex)}><span>{item.label === 'Fraction' ? 'a⁄b' : item.label === 'Racine' ? '√x' : item.label === 'Puissance' ? 'x²' : item.label === 'Somme' ? '∑' : item.label === 'Intégrale' ? '∫' : '[a b]'}</span>{item.label}</button>)}</div><label>Code LaTeX<textarea value={equationLatex} onChange={e => setEquationLatex(e.target.value)} rows={4} spellCheck={false} /></label><div className="equation-source-preview" aria-label="Aperçu mathématique" dangerouslySetInnerHTML={{ __html: latexToMathML(equationLatex) }} /><button type="button" className="equation-insert-button" onClick={insertEquation}>Insérer dans la leçon</button></div>}</aside>
+      <aside className="lesson-properties-panel" aria-label="Propriétés de la leçon"><div className="lesson-properties-tabs"><button type="button" className={rightPanelTab === 'properties' ? 'active' : ''} onClick={() => setRightPanelTab('properties')}>Propriétés</button><button type="button" className={rightPanelTab === 'equation' ? 'active' : ''} onClick={() => setRightPanelTab('equation')}>Équation</button></div>{rightPanelTab === 'properties' ? <div className="lesson-properties-body"><strong>Texte</strong><label>Police<select defaultValue="Times New Roman" onChange={e => applyInlineStyle('fontFamily', e.target.value)}><option>Times New Roman</option><option>Arial</option><option>Calibri</option><option>Georgia</option><option>Verdana</option></select></label><label>Taille<select defaultValue="12pt" onChange={e => applyInlineStyle('fontSize', e.target.value)}>{['8pt','9pt','10pt','11pt','12pt','14pt','16pt','18pt','20pt','24pt','28pt','36pt','48pt'].map(size => <option key={size}>{size}</option>)}</select></label><label>Couleur du texte<input type="color" defaultValue="#173f65" onChange={e => applyInlineStyle('color', e.target.value)} /></label><label>Surlignage<input type="color" defaultValue="#fff176" onChange={e => applyInlineStyle('backgroundColor', e.target.value)} /></label><div className="lesson-property-buttons"><button type="button" onClick={() => command('bold')}><b>B</b></button><button type="button" onClick={() => command('italic')}><i>I</i></button><button type="button" onClick={() => command('underline')}><u>U</u></button><button type="button" onClick={() => command('subscript')}>x₂</button><button type="button" onClick={() => command('superscript')}>x²</button></div><strong>Paragraphe</strong><div className="lesson-property-buttons"><button type="button" onClick={() => command('justifyLeft')}>Gauche</button><button type="button" onClick={() => command('justifyCenter')}>Centre</button><button type="button" onClick={() => command('justifyRight')}>Droite</button></div><p className="lesson-properties-note">Les réglages s’appliquent au texte sélectionné. Les marges du document suivent le format A4.</p></div> : <div className="lesson-properties-body lesson-equation-panel"><strong>Galerie d’équations</strong><p className="equation-gallery-intro">Choisissez une structure, puis adaptez son code LaTeX.</p><input className="equation-search" type="search" placeholder="Rechercher une formule…" value={equationSearch} onChange={e => setEquationSearch(e.target.value)} aria-label="Rechercher une formule" /><div className="equation-category-tabs">{['Structures','Algèbre','Calcul','Fonctions','Symboles','Ensembles','Matrices','Probabilités'].map(category => <button key={category} type="button" className={equationCategory === category ? 'active' : ''} onClick={() => setEquationCategory(category)}>{category}</button>)}</div><div className="equation-template-grid">{EQUATION_TEMPLATES.filter(item => item.category === equationCategory && `${item.label} ${item.latex} ${item.keywords}`.toLowerCase().includes(equationSearch.toLowerCase())).map(item => <button key={item.label} type="button" title={item.latex} onClick={() => setEquationLatex(item.latex)}><span>{item.symbol}</span>{item.label}</button>)}</div>{EQUATION_TEMPLATES.filter(item => item.category === equationCategory && `${item.label} ${item.latex} ${item.keywords}`.toLowerCase().includes(equationSearch.toLowerCase())).length === 0 && <p className="lesson-properties-note">Aucune formule trouvée. Saisissez une expression LaTeX ci-dessous.</p>}<label>Code LaTeX<textarea value={equationLatex} onChange={e => setEquationLatex(e.target.value)} rows={4} spellCheck={false} /></label><div className="equation-source-preview" aria-label="Aperçu mathématique" dangerouslySetInnerHTML={{ __html: latexToMathML(equationLatex) }} /><button type="button" className="equation-insert-button" onClick={insertEquation}>Insérer dans la leçon</button><p className="lesson-properties-note">Structures courantes de mathématiques scolaires. Certaines commandes LaTeX avancées et les équations Word complexes peuvent nécessiter une conversion supplémentaire.</p></div>}</aside>
     </div>
 
     <div className="lesson-add-tools">
