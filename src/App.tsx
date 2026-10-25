@@ -105,9 +105,9 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage
 import { getFirebaseStorage } from "./lib/firebase/storage";
 import { collection, doc, onSnapshot, query, setDoc, Timestamp, where } from "firebase/firestore";
 import { getFirebaseFirestore } from "./lib/firebase/firestore";
-import type { LessonComment } from "./types/lessonComment";
+import type { LessonComment, LessonCommentCategory } from "./types/lessonComment";
 import type { LessonNotification } from "./features/lessonComments/lessonCommentRepository";
-import { collectCommentThreadIds, createLessonComment, deleteLessonComment, deleteLessonCommentThread, subscribeLessonComments, subscribeLessonCommentLoves, toggleLessonCommentLove, updateLessonComment, replyToLessonComment } from "./features/lessonComments";
+import { buildQuestionStatuses, collectCommentThreadIds, createLessonComment, deleteLessonComment, deleteLessonCommentThread, subscribeLessonComments, subscribeLessonCommentLoves, toggleLessonCommentLove, updateLessonComment, replyToLessonComment } from "./features/lessonComments";
 import type {
   PracticeAttempt,
   Question,
@@ -1889,7 +1889,18 @@ function CoursePage({
   const [emojiPickerTarget, setEmojiPickerTarget] = useState<string | null>(null);
   const [commentLoveState, setCommentLoveState] = useState<Record<string, { count: number; loved: boolean }>>({});
   const [commentSaving, setCommentSaving] = useState(false);
+  const [commentCategory, setCommentCategory] = useState<LessonCommentCategory>("course");
   const { profile: studentProfile } = useAuth();
+  const commentStatuses = useMemo(() => buildQuestionStatuses(lessonComments), [lessonComments]);
+  // Technical reports that the team marked as treated disappear for everyone except their author.
+  const visibleLessonComments = useMemo(() => {
+    const hidden = new Set<string>();
+    for (const root of lessonComments) {
+      if (root.parentCommentId || root.category !== "technical" || root.userId === userId) continue;
+      if (commentStatuses[root.id]?.status === "treated") collectCommentThreadIds(root.id, lessonComments).forEach(id => hidden.add(id));
+    }
+    return hidden.size ? lessonComments.filter(comment => !hidden.has(comment.id)) : lessonComments;
+  }, [lessonComments, commentStatuses, userId]);
 
   // Local curriculum views participate in browser history too. This makes
   // browser Back/Forward and native mobile swipe gestures behave like the
@@ -2043,6 +2054,7 @@ function CoursePage({
         studentName: String(studentProfile?.displayName ?? "Étudiant").trim() || "Étudiant",
         authorPhotoURL: String(studentProfile?.photoURL ?? "").trim() || null,
         authorRole: "student",
+        category: commentCategory,
         parentCommentId: null,
         courseId: course.id,
         courseTitle: course.title,
@@ -2055,6 +2067,7 @@ function CoursePage({
         content: commentText.trim(),
       });
       setCommentText("");
+      setCommentCategory("course");
     } catch (error) {
       console.error(error);
       setLessonError("Impossible de publier votre question.");
@@ -2181,7 +2194,7 @@ function CoursePage({
                 <div className="lesson-comment-author">
                   <span className={comment.authorRole === "manager" ? "lesson-comment-avatar manager" : "lesson-comment-avatar"} aria-hidden="true">{commentAvatar(comment)}</span>
                   <div className="lesson-comment-author-copy">
-                    <div className="lesson-comment-author-line"><strong>{comment.studentName}</strong>{comment.authorRole === "manager" && <span className="lesson-comment-role">CAV</span>}</div>
+                    <div className="lesson-comment-author-line"><strong>{comment.studentName}</strong>{comment.authorRole === "manager" && <span className="lesson-comment-role">CAV</span>}{depth === 0 && comment.category === "technical" && <span className="lesson-comment-category is-technical">Problème technique</span>}{depth === 0 && comment.category === "technical" && commentStatuses[comment.id]?.status === "treated" && <span className="lesson-comment-category is-resolved">✓ Résolu</span>}</div>
                     <span>{comment.createdAt ? comment.createdAt.toDate().toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "À l’instant"}</span>
                   </div>
                 </div>
@@ -2194,6 +2207,7 @@ function CoursePage({
                 </div>}
               </header>
               <div className="lesson-comment-body">{comment.content}</div>
+              {depth === 0 && comment.category === "technical" && isOwner && commentStatuses[comment.id]?.status === "treated" && <p className="lesson-comment-resolved-note">Ce problème a été traité par l’équipe CAV. Il n’est plus visible par les autres étudiants.</p>}
               <div className="lesson-comment-actions comment-actions">
                 <button type="button" className={`lesson-comment-action lesson-comment-love ${commentLoveState[comment.id]?.loved ? "is-loved" : ""}`} aria-label={commentLoveState[comment.id]?.loved ? "Retirer l’amour" : "Aimer ce commentaire"} aria-pressed={commentLoveState[comment.id]?.loved ?? false} onClick={() => void toggleCommentLove(comment)}>
                   <span aria-hidden="true">{commentLoveState[comment.id]?.loved ? "♥" : "♡"}</span>
@@ -2406,10 +2420,10 @@ function CoursePage({
           <div className="lesson-comments-compact-bar">
             <div className="lesson-comments-label">
               <span className="lesson-comments-icon">💬</span>
-              <div><strong>Discussion</strong><small>{lessonComments.length ? `${lessonComments.length} commentaire${lessonComments.length === 1 ? "" : "s"}` : "Posez une question sur cette leçon"}</small></div>
+              <div><strong>Discussion</strong><small>{visibleLessonComments.length ? `${visibleLessonComments.length} commentaire${visibleLessonComments.length === 1 ? "" : "s"}` : "Posez une question sur cette leçon"}</small></div>
             </div>
             <div className="lesson-comments-actions">
-              <button type="button" className="lesson-comments-toggle secondary" onClick={() => setCommentsOpen(value => !value)}>{commentsOpen ? "Fermer" : "Voir la discussion"}{lessonComments.length > 0 && <span>{lessonComments.length}</span>}</button>
+              <button type="button" className="lesson-comments-toggle secondary" onClick={() => setCommentsOpen(value => !value)}>{commentsOpen ? "Fermer" : "Voir la discussion"}{visibleLessonComments.length > 0 && <span>{visibleLessonComments.length}</span>}</button>
               <button type="button" className="lesson-comments-toggle" onClick={() => { setCommentsOpen(true); setReplyingToId(null); window.setTimeout(() => document.getElementById("lesson-comment-composer")?.focus(), 0) }}>✏️ Commenter</button>
             </div>
           </div>
@@ -2417,13 +2431,17 @@ function CoursePage({
             <button type="button" className="lesson-comments-backdrop" aria-label="Fermer les commentaires" onClick={() => setCommentsOpen(false)} />
             <div className="lesson-comments-panel">
               <div className="lesson-comments-panel-head">
-                <div><strong>Commentaires</strong><span>{lessonComments.length ? `${lessonComments.length} contribution${lessonComments.length === 1 ? "" : "s"}` : "Soyez le premier à commenter"}</span></div>
+                <div><strong>Commentaires</strong><span>{visibleLessonComments.length ? `${visibleLessonComments.length} contribution${visibleLessonComments.length === 1 ? "" : "s"}` : "Soyez le premier à commenter"}</span></div>
                 <button type="button" className="lesson-comments-close" aria-label="Fermer" onClick={() => setCommentsOpen(false)}>×</button>
               </div>
               <div className="lesson-comment-composer">
+                <div className="lesson-comment-category-picker" role="radiogroup" aria-label="Type de commentaire">
+                  <button type="button" role="radio" aria-checked={commentCategory === "course"} className={commentCategory === "course" ? "active is-course" : ""} onClick={() => setCommentCategory("course")}>📘 Question de cours</button>
+                  <button type="button" role="radio" aria-checked={commentCategory === "technical"} className={commentCategory === "technical" ? "active is-technical" : ""} onClick={() => setCommentCategory("technical")}>🛠️ Problème technique</button>
+                </div>
                 <div className="lesson-comment-composer-row">
                   <span className="lesson-comment-avatar">{studentProfile?.photoURL ? <img src={String(studentProfile.photoURL)} alt="" className="lesson-comment-avatar-image" /> : commentInitials(String(studentProfile?.displayName ?? "Étudiant"))}</span>
-                  <textarea id="lesson-comment-composer" value={commentText} onChange={event => setCommentText(event.target.value)} rows={3} maxLength={3000} placeholder="Écrivez votre commentaire..." aria-label="Votre question sur cette leçon" />
+                  <textarea id="lesson-comment-composer" value={commentText} onChange={event => setCommentText(event.target.value)} rows={3} maxLength={3000} placeholder={commentCategory === "technical" ? "Décrivez le problème rencontré (vidéo, document, affichage...)" : "Écrivez votre question sur le cours..."} aria-label="Votre question sur cette leçon" />
                 </div>
                 <div className="lesson-comment-compose-actions">
                   <div className="lesson-comment-tools"><div className="lesson-comment-emoji-wrap"><button type="button" className="lesson-comment-tool" aria-label="Ajouter un emoji" onClick={() => { setEmojiPickerTarget(value => value === "new" ? null : "new"); setOpenCommentMenuId(null); }}>☺</button>{renderEmojiPicker("new")}</div></div>
@@ -2431,10 +2449,10 @@ function CoursePage({
                 </div>
               </div>
               <div className="lesson-comments-list">
-                {lessonComments.length === 0 ? <p className="page-description">Aucun commentaire pour le moment.</p> : (() => {
+                {visibleLessonComments.length === 0 ? <p className="page-description">Aucun commentaire pour le moment.</p> : (() => {
                   const renderedIds = new Set<string>();
-                  const roots = lessonComments.filter(comment => !comment.parentCommentId);
-                  const orphanReplies = lessonComments.filter(comment => comment.parentCommentId && !lessonComments.some(parent => parent.id === comment.parentCommentId));
+                  const roots = visibleLessonComments.filter(comment => !comment.parentCommentId);
+                  const orphanReplies = visibleLessonComments.filter(comment => comment.parentCommentId && !visibleLessonComments.some(parent => parent.id === comment.parentCommentId));
                   return [...roots, ...orphanReplies].map(comment => renderCommentThread(comment, 0, renderedIds));
                 })()}
               </div>
@@ -5537,7 +5555,7 @@ function AdminLessonPreview({
     const isOwnReply = comment.authorRole === "manager" && comment.userId === user?.uid;
     return <div key={comment.id} className={depth ? "lesson-comment-reply-item" : "lesson-comment-thread"} style={depth ? { marginLeft: Math.min(depth * 22, 80) } : undefined}>
       <article id={`admin-lesson-comment-${comment.id}`} className="lesson-comment-card compact">
-        <header className="lesson-comment-head"><div className="lesson-comment-author"><span className={comment.authorRole === "manager" ? "lesson-comment-avatar manager" : "lesson-comment-avatar"} aria-hidden="true">{comment.authorPhotoURL ? <img src={comment.authorPhotoURL} alt="" className="lesson-comment-avatar-image" /> : initials(comment.studentName)}</span><div className="lesson-comment-author-copy"><div className="lesson-comment-author-line"><strong>{comment.studentName}</strong>{comment.authorRole === "manager" && <span className="lesson-comment-role">CAV</span>}</div><span>{comment.createdAt ? comment.createdAt.toDate().toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "À l’instant"}{comment.updatedAt && comment.createdAt && comment.updatedAt.toMillis() - comment.createdAt.toMillis() > 60000 && comment.authorRole === "manager" ? " · modifié" : ""}</span></div></div>
+        <header className="lesson-comment-head"><div className="lesson-comment-author"><span className={comment.authorRole === "manager" ? "lesson-comment-avatar manager" : "lesson-comment-avatar"} aria-hidden="true">{comment.authorPhotoURL ? <img src={comment.authorPhotoURL} alt="" className="lesson-comment-avatar-image" /> : initials(comment.studentName)}</span><div className="lesson-comment-author-copy"><div className="lesson-comment-author-line"><strong>{comment.studentName}</strong>{comment.authorRole === "manager" && <span className="lesson-comment-role">CAV</span>}{depth === 0 && comment.category === "technical" && <span className="lesson-comment-category is-technical">Problème technique</span>}</div><span>{comment.createdAt ? comment.createdAt.toDate().toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "À l’instant"}{comment.updatedAt && comment.createdAt && comment.updatedAt.toMillis() - comment.createdAt.toMillis() > 60000 && comment.authorRole === "manager" ? " · modifié" : ""}</span></div></div>
           {editingCommentId !== comment.id && <div className="lesson-comment-menu-wrap">
             <button type="button" className="lesson-comment-menu-trigger" aria-label="Options du commentaire" aria-haspopup="menu" aria-expanded={openMenuId === comment.id} onClick={() => setOpenMenuId(value => value === comment.id ? null : comment.id)}>⋯</button>
             {openMenuId === comment.id && <div className="lesson-comment-menu" role="menu">

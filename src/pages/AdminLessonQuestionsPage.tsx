@@ -15,6 +15,12 @@ function StatusBadge({ status }: { status: QuestionStatus }) {
   return <span className={`question-status-badge is-${status}`}>{QUESTION_STATUS_LABELS[status]}</span>
 }
 
+function CategoryBadge({ category }: { category?: LessonComment['category'] }) {
+  return category === 'technical'
+    ? <span className="question-category-badge is-technical">🛠️ Problème technique</span>
+    : <span className="question-category-badge is-course">📘 Question de cours</span>
+}
+
 function seenLabel(names: string[]) {
   return names.length ? `Vu par ${names.join(', ')}` : ''
 }
@@ -33,6 +39,7 @@ export function AdminLessonQuestionsPage({ onOpenLesson }: { onOpenLesson?: (cou
   const [editSaving, setEditSaving] = useState(false)
   const [statusSaving, setStatusSaving] = useState(false)
   const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'course' | 'technical'>('all')
   const canManage = profile?.role === 'super_admin' || profile?.role === 'content_manager'
 
   useEffect(() => {
@@ -46,7 +53,11 @@ export function AdminLessonQuestionsPage({ onOpenLesson }: { onOpenLesson?: (cou
   const statuses = useMemo(() => buildQuestionStatuses(items), [items])
   const todoCount = roots.filter(item => statuses[item.id]?.status !== 'treated').length
   const doneCount = roots.length - todoCount
-  const visibleRoots = roots.filter(item => filter === 'all' || (filter === 'done' ? statuses[item.id]?.status === 'treated' : statuses[item.id]?.status !== 'treated'))
+  const courseCount = roots.filter(item => item.category !== 'technical').length
+  const technicalCount = roots.length - courseCount
+  const visibleRoots = roots
+    .filter(item => typeFilter === 'all' || (typeFilter === 'technical' ? item.category === 'technical' : item.category !== 'technical'))
+    .filter(item => filter === 'all' || (filter === 'done' ? statuses[item.id]?.status === 'treated' : statuses[item.id]?.status !== 'treated'))
   const adminName = String(profile?.displayName ?? user?.displayName ?? 'Administrateur').trim() || 'Administrateur'
   const repliesFor = (id: string) => items.filter(item => item.parentCommentId === id).sort((a,b)=>(a.createdAt?.toMillis?.() ?? 0)-(b.createdAt?.toMillis?.() ?? 0))
 
@@ -154,13 +165,19 @@ export function AdminLessonQuestionsPage({ onOpenLesson }: { onOpenLesson?: (cou
             <button type="button" className={filter === 'todo' ? 'active' : ''} aria-pressed={filter === 'todo'} onClick={() => setFilter('todo')}>À traiter <b>{todoCount}</b></button>
             <button type="button" className={filter === 'done' ? 'active' : ''} aria-pressed={filter === 'done'} onClick={() => setFilter('done')}>Traitées <b>{doneCount}</b></button>
           </div>
-          {visibleRoots.length === 0 ? <Card className="catalogue-empty"><p>{filter === 'todo' ? 'Aucune question à traiter. Bon travail !' : 'Aucune question traitée pour le moment.'}</p></Card> : visibleRoots.map(item => { const info = statuses[item.id] ?? { status: 'seen' as QuestionStatus, seenNames: [] }; return <button key={item.id} type="button" className={`message-row ${info.status === 'new' ? 'is-unread' : ''} ${selected?.id === item.id ? 'is-selected' : ''}`} onClick={() => void openComment(item)}><span className={`message-status-dot is-${info.status}`} aria-hidden="true" /><span className="message-row-main"><strong>{item.studentName}</strong><b>{item.lessonTitle}</b><small>{item.courseTitle} · {item.subjectTitle} · {formatDate(item.createdAt)}</small>{seenLabel(info.seenNames) && <small className="question-seen-line">{seenLabel(info.seenNames)}</small>}</span><StatusBadge status={info.status} /></button> })}
+          <div className="question-filter question-type-filter" role="group" aria-label="Filtrer par type">
+            <button type="button" className={typeFilter === 'all' ? 'active' : ''} aria-pressed={typeFilter === 'all'} onClick={() => setTypeFilter('all')}>Tous types <b>{roots.length}</b></button>
+            <button type="button" className={typeFilter === 'course' ? 'active' : ''} aria-pressed={typeFilter === 'course'} onClick={() => setTypeFilter('course')}>Cours <b>{courseCount}</b></button>
+            <button type="button" className={typeFilter === 'technical' ? 'active' : ''} aria-pressed={typeFilter === 'technical'} onClick={() => setTypeFilter('technical')}>Technique <b>{technicalCount}</b></button>
+          </div>
+          {visibleRoots.length === 0 ? <Card className="catalogue-empty"><p>{filter === 'todo' ? 'Aucune question à traiter. Bon travail !' : filter === 'done' ? 'Aucune question traitée pour le moment.' : 'Aucune question dans cette catégorie.'}</p></Card> : visibleRoots.map(item => { const info = statuses[item.id] ?? { status: 'seen' as QuestionStatus, seenNames: [] }; return <button key={item.id} type="button" className={`message-row ${info.status === 'new' ? 'is-unread' : ''} ${selected?.id === item.id ? 'is-selected' : ''}`} onClick={() => void openComment(item)}><span className={`message-status-dot is-${info.status}`} aria-hidden="true" /><span className="message-row-main"><strong>{item.studentName}</strong><b>{item.lessonTitle}</b><CategoryBadge category={item.category} /><small>{item.courseTitle} · {item.subjectTitle} · {formatDate(item.createdAt)}</small>{seenLabel(info.seenNames) && <small className="question-seen-line">{seenLabel(info.seenNames)}</small>}</span><StatusBadge status={info.status} /></button> })}
         </>}
       </section>
       <section className="message-detail">
         {selected ? <Card><div className="message-detail-head"><div><p className="eyebrow">{selected.unreadForAdmin ? 'NOUVELLE QUESTION' : 'DISCUSSION'}</p><h2>{selected.lessonTitle}</h2></div><div className="message-detail-head-actions"><span className="course-parent-badge">{selected.subjectTitle}</span><button type="button" className="ui-button ui-button-primary" disabled={!selected.subjectId || !selected.lessonId || !onOpenLesson} onClick={() => onOpenLesson?.(selected.courseId, selected.subjectId, selected.lessonId, selected.id)}>↗ Voir dans la leçon</button></div></div><div className="message-sender"><strong>{selected.studentName}</strong><span>{formatDate(selected.createdAt)}</span></div><div className="question-status-panel">
           <div className="question-status-info">
             <StatusBadge status={statuses[selected.id]?.status ?? 'seen'} />
+            <CategoryBadge category={selected.category} />
             {seenLabel(statuses[selected.id]?.seenNames ?? []) && <span>{seenLabel(statuses[selected.id]?.seenNames ?? [])}</span>}
             {statuses[selected.id]?.status === 'treated' && selected.treatedByName && <span>Traité par {selected.treatedByName}{selected.treatedAt ? ` · ${formatDate(selected.treatedAt)}` : ''}</span>}
           </div>
@@ -168,7 +185,7 @@ export function AdminLessonQuestionsPage({ onOpenLesson }: { onOpenLesson?: (cou
             <button type="button" className={statuses[selected.id]?.status !== 'treated' ? 'active is-seen' : ''} aria-pressed={statuses[selected.id]?.status !== 'treated'} disabled={statusSaving} onClick={() => { if (statuses[selected.id]?.status === 'treated') void changeTreated(selected, false) }}>Vu</button>
             <button type="button" className={statuses[selected.id]?.status === 'treated' ? 'active is-treated' : ''} aria-pressed={statuses[selected.id]?.status === 'treated'} disabled={statusSaving} onClick={() => { if (statuses[selected.id]?.status !== 'treated') void changeTreated(selected, true) }}>✓ Traité</button>
           </div>
-        </div><div className="message-meta"><span>Concours : {selected.courseTitle}</span><span>Matière : {selected.subjectTitle}</span>{selected.topicTitle && <span>Topic : {selected.topicTitle}</span>}<span>Leçon : {selected.lessonTitle}</span></div><div className="message-body">{selected.content}</div><div className="question-moderation"><p>Cette question sera retirée de la leçon pour tous les étudiants.</p><button type="button" className="question-delete-btn" onClick={() => void removeComment(selected)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg> Supprimer la question</button></div><div className="admin-thread-replies">{repliesFor(selected.id).map(replyItem => renderThread(replyItem, 1))}</div><div className="lesson-comment-admin-reply"><p className="eyebrow">RÉPONDRE</p><textarea value={reply} onChange={event => setReply(event.target.value)} rows={4} placeholder="Écrivez une réponse à l’étudiant..."/><div className="message-actions"><button type="button" className="ui-button ui-button-primary" disabled={saving || !reply.trim()} onClick={() => void saveReply()}>{saving ? 'Envoi...' : 'Répondre à l’étudiant'}</button></div></div></Card> : <Card className="catalogue-empty"><p>Sélectionnez une question pour consulter la discussion.</p></Card>}
+        </div>{selected.category === 'technical' && <p className="question-status-hint">{statuses[selected.id]?.status === 'treated' ? 'Ce problème technique est masqué pour les autres étudiants. Son auteur le voit comme résolu.' : 'Ce problème technique reste visible par les étudiants jusqu’à ce qu’il soit marqué comme traité.'}</p>}<div className="message-meta"><span>Concours : {selected.courseTitle}</span><span>Matière : {selected.subjectTitle}</span>{selected.topicTitle && <span>Topic : {selected.topicTitle}</span>}<span>Leçon : {selected.lessonTitle}</span></div><div className="message-body">{selected.content}</div><div className="question-moderation"><p>Cette question sera retirée de la leçon pour tous les étudiants.</p><button type="button" className="question-delete-btn" onClick={() => void removeComment(selected)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg> Supprimer la question</button></div><div className="admin-thread-replies">{repliesFor(selected.id).map(replyItem => renderThread(replyItem, 1))}</div><div className="lesson-comment-admin-reply"><p className="eyebrow">RÉPONDRE</p><textarea value={reply} onChange={event => setReply(event.target.value)} rows={4} placeholder="Écrivez une réponse à l’étudiant..."/><div className="message-actions"><button type="button" className="ui-button ui-button-primary" disabled={saving || !reply.trim()} onClick={() => void saveReply()}>{saving ? 'Envoi...' : 'Répondre à l’étudiant'}</button></div></div></Card> : <Card className="catalogue-empty"><p>Sélectionnez une question pour consulter la discussion.</p></Card>}
       </section>
     </div>
   </Container>

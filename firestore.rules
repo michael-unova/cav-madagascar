@@ -163,6 +163,12 @@ service cloud.firestore {
         && request.resource.data.studentName is string
         && request.resource.data.studentName.size() > 0
         && request.resource.data.studentName.size() <= 160
+        && request.resource.data.get('category', 'course') in ['course', 'technical']
+        && !('seenBy' in request.resource.data)
+        && !('treated' in request.resource.data)
+        && !('treatedById' in request.resource.data)
+        && !('treatedByName' in request.resource.data)
+        && !('treatedAt' in request.resource.data)
         && request.resource.data.courseId is string
         && request.resource.data.courseId.size() > 0
         && request.resource.data.courseTitle is string

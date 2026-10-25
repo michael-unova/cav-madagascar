@@ -13,6 +13,7 @@ function mapComment(id: string, data: Record<string, unknown>): LessonComment {
     studentName: String(data.studentName ?? 'Étudiant'),
     authorPhotoURL: typeof data.authorPhotoURL === 'string' ? data.authorPhotoURL : null,
     authorRole: data.authorRole === 'manager' ? 'manager' : 'student',
+    category: data.category === 'technical' ? 'technical' : 'course',
     parentCommentId: typeof data.parentCommentId === 'string' ? data.parentCommentId : null,
     courseId: String(data.courseId ?? ''),
     courseTitle: String(data.courseTitle ?? ''),
@@ -87,6 +88,7 @@ export async function createLessonComment(input: Omit<LessonComment, 'id' | 'cre
   return addDoc(collection(db, COLLECTION), {
     ...input,
     authorRole: input.authorRole ?? 'student',
+    category: input.category === 'technical' ? 'technical' : 'course',
     parentCommentId: input.parentCommentId ?? null,
     content: input.content.trim(),
     createdAt: serverTimestamp(),
@@ -168,6 +170,7 @@ export async function replyToLessonComment(input: {
     studentName: input.authorName,
     authorPhotoURL: input.authorPhotoURL ?? null,
     authorRole: input.authorRole,
+    category: input.parent.category ?? 'course',
     parentCommentId: input.parent.id,
     courseId: input.parent.courseId,
     courseTitle: input.parent.courseTitle,

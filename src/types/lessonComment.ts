@@ -2,12 +2,16 @@ import type { Timestamp } from 'firebase/firestore'
 
 export type LessonCommentAuthorRole = 'student' | 'manager'
 
+/** 'course' = question about the lesson, 'technical' = problem report (hidden from other students once treated). */
+export type LessonCommentCategory = 'course' | 'technical'
+
 export interface LessonComment {
   id: string
   userId: string
   studentName: string
   authorPhotoURL?: string | null
   authorRole: LessonCommentAuthorRole
+  category?: LessonCommentCategory
   parentCommentId?: string | null
   courseId: string
   courseTitle: string
