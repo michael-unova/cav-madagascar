@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
@@ -64,14 +65,37 @@ function chunk(items, size) {
         chunks.push(items.slice(i, i + size));
     return chunks;
 }
+const BROADCAST_CATEGORIES = ['bienvenue', 'actualite', 'annonce', 'rappel', 'evenement', 'maintenance'];
+// One-time types: a user receives at most one announcement of this type, whatever the wording.
+const ONE_TIME_BROADCAST_CATEGORIES = ['bienvenue'];
+function computeBroadcastDedupKey(category, title, message) {
+    if (ONE_TIME_BROADCAST_CATEGORIES.includes(category))
+        return { key: `type_${category}`, mode: 'type' };
+    const hash = createHash('sha256').update(`${normalizeText(title)}\n${normalizeText(message)}`).digest('hex').slice(0, 32);
+    return { key: `h_${hash}`, mode: 'content' };
+}
+function broadcastDeliveryRef(dedupKey, userId) {
+    return db.doc(`broadcastDeliveries/${dedupKey}__${userId}`);
+}
+async function findAlreadyReceivedIds(dedupKey, userIds) {
+    const received = new Set();
+    for (const ids of chunk(userIds, 300)) {
+        if (!ids.length)
+            continue;
+        const snaps = await db.getAll(...ids.map(id => broadcastDeliveryRef(dedupKey, id)));
+        snaps.forEach((snap, index) => { if (snap.exists)
+            received.add(ids[index]); });
+    }
+    return received;
+}
 async function deliverBroadcast(broadcastId) {
     const ref = db.doc(`broadcastMessages/${broadcastId}`);
     const snapshot = await ref.get();
     if (!snapshot.exists)
-        return { recipientCount: 0 };
+        return { recipientCount: 0, skippedCount: 0 };
     const broadcast = snapshot.data() ?? {};
     if (broadcast.status === 'sent')
-        return { recipientCount: Number(broadcast.recipientCount ?? 0) };
+        return { recipientCount: Number(broadcast.recipientCount ?? 0), skippedCount: Number(broadcast.skippedCount ?? 0) };
     const audienceType = String(broadcast.audienceType ?? 'all');
     let recipients = [];
     let studentNames = new Map();
@@ -114,10 +138,22 @@ async function deliverBroadcast(broadcastId) {
         recipients = studentsSnapshot.docs.map(item => item.id);
         studentNames = new Map(studentsSnapshot.docs.map(item => [item.id, String(item.data().displayName ?? 'Étudiant').trim() || 'Étudiant']));
     }
-    const batches = chunk(recipients, 450);
+    const category = String(broadcast.category ?? 'annonce');
+    const storedKey = typeof broadcast.dedupKey === 'string' && broadcast.dedupKey ? broadcast.dedupKey : '';
+    const dedupKey = storedKey || computeBroadcastDedupKey(category, String(broadcast.title ?? ''), String(broadcast.message ?? '')).key;
+    const skipAlreadyReceived = broadcast.skipAlreadyReceived !== false;
+    let skippedCount = 0;
+    if (skipAlreadyReceived && recipients.length) {
+        const alreadyReceived = await findAlreadyReceivedIds(dedupKey, recipients);
+        skippedCount = alreadyReceived.size;
+        recipients = recipients.filter(id => !alreadyReceived.has(id));
+    }
+    // Each recipient needs two writes (notification + delivery log), keep under the 500 writes batch limit.
+    const batches = chunk(recipients, 200);
     for (const ids of batches) {
         const batch = db.batch();
         ids.forEach(userId => {
+            batch.set(broadcastDeliveryRef(dedupKey, userId), { userId, dedupKey, broadcastId, category, deliveredAt: new Date() });
             const notificationRef = db.collection(`notifications`).doc();
             batch.set(notificationRef, {
                 userId,
@@ -136,22 +172,59 @@ async function deliverBroadcast(broadcastId) {
         if (ids.length)
             await batch.commit();
     }
-    await ref.update({ status: 'sent', recipientCount: recipients.length, sentAt: new Date(), updatedAt: new Date() });
-    return { recipientCount: recipients.length };
+    await ref.update({ status: 'sent', recipientCount: recipients.length, skippedCount, dedupKey, sentAt: new Date(), updatedAt: new Date() });
+    return { recipientCount: recipients.length, skippedCount };
 }
 export const adminListBroadcastTargets = onCall({ region: 'africa-south1' }, async (request) => {
     const uid = request.auth?.uid;
     if (!uid)
         throw new HttpsError('unauthenticated', 'Connexion requise.');
     await requireBroadcastManager(uid);
-    const [studentsSnapshot, coursesSnapshot] = await Promise.all([
+    const [studentsSnapshot, coursesSnapshot, enrollmentsSnapshot] = await Promise.all([
         db.collection('users').where('role', '==', 'student').where('status', '==', 'active').limit(1000).get(),
         db.collection('courses').where('status', '==', 'published').get(),
+        db.collection('enrollments').where('status', '==', 'active').get(),
     ]);
+    const courses = coursesSnapshot.docs.map(item => ({ id: item.id, title: String(item.data().title ?? 'Concours') })).sort((a, b) => a.title.localeCompare(b.title, 'fr'));
+    const courseIds = new Set(courses.map(course => course.id));
+    const courseIdsByUser = new Map();
+    enrollmentsSnapshot.docs.forEach(item => {
+        const data = item.data();
+        if (!isEnrollmentActive(data))
+            return;
+        const userId = String(data.userId ?? '');
+        const courseId = String(data.courseId ?? '');
+        if (!userId || !courseIds.has(courseId))
+            return;
+        if (!courseIdsByUser.has(userId))
+            courseIdsByUser.set(userId, new Set());
+        courseIdsByUser.get(userId)?.add(courseId);
+    });
+    const toIso = (value) => value && typeof value.toDate === 'function' ? value.toDate().toISOString() : undefined;
     return {
-        students: studentsSnapshot.docs.map(item => ({ id: item.id, displayName: String(item.data().displayName ?? 'Étudiant'), email: String(item.data().email ?? '') })).sort((a, b) => a.displayName.localeCompare(b.displayName, 'fr')),
-        courses: coursesSnapshot.docs.map(item => ({ id: item.id, title: String(item.data().title ?? 'Concours') })).sort((a, b) => a.title.localeCompare(b.title, 'fr')),
+        students: studentsSnapshot.docs.map(item => ({
+            id: item.id,
+            displayName: String(item.data().displayName ?? 'Étudiant'),
+            email: String(item.data().email ?? ''),
+            createdAt: toIso(item.data().createdAt),
+            courseIds: [...(courseIdsByUser.get(item.id) ?? [])],
+        })).sort((a, b) => a.displayName.localeCompare(b.displayName, 'fr')),
+        courses,
     };
+});
+export const adminGetBroadcastRecipientStatus = onCall({ region: 'africa-south1' }, async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid)
+        throw new HttpsError('unauthenticated', 'Connexion requise.');
+    await requireBroadcastManager(uid);
+    const category = BROADCAST_CATEGORIES.includes(String(request.data?.category ?? '')) ? String(request.data?.category) : 'annonce';
+    const title = String(request.data?.title ?? '').trim();
+    const message = String(request.data?.message ?? '').trim();
+    const { key, mode } = computeBroadcastDedupKey(category, title, message);
+    if (mode === 'content' && (!title || !message))
+        return { dedupKey: key, mode, receivedUserIds: [] };
+    const snapshot = await db.collection('broadcastDeliveries').where('dedupKey', '==', key).get();
+    return { dedupKey: key, mode, receivedUserIds: snapshot.docs.map(item => String(item.data().userId ?? '')).filter(Boolean) };
 });
 export const adminSendBroadcast = onCall({ region: 'africa-south1', timeoutSeconds: 540 }, async (request) => {
     const uid = request.auth?.uid;
@@ -160,7 +233,9 @@ export const adminSendBroadcast = onCall({ region: 'africa-south1', timeoutSecon
     const profile = await requireBroadcastManager(uid);
     const title = String(request.data?.title ?? '').trim();
     const message = String(request.data?.message ?? '').trim();
-    const category = String(request.data?.category ?? 'annonce').trim();
+    const requestedCategory = String(request.data?.category ?? 'annonce').trim();
+    const category = BROADCAST_CATEGORIES.includes(requestedCategory) ? requestedCategory : 'annonce';
+    const skipAlreadyReceived = request.data?.skipAlreadyReceived !== false;
     const audienceType = ['all', 'course', 'student'].includes(String(request.data?.audienceType ?? 'all'))
         ? String(request.data?.audienceType ?? 'all')
         : 'all';
@@ -192,15 +267,15 @@ export const adminSendBroadcast = onCall({ region: 'africa-south1', timeoutSecon
             throw new HttpsError('failed-precondition', 'L’étudiant cible est introuvable ou inactif.');
     }
     const ref = await db.collection('broadcastMessages').add({
-        title, message, category, audienceType, targetCourseId: audienceType === 'course' ? targetCourseId : null, targetUserId: audienceType === 'student' ? targetUserId : null, status: scheduled ? 'scheduled' : 'sending',
+        title, message, category, dedupKey: computeBroadcastDedupKey(category, title, message).key, skipAlreadyReceived, audienceType, targetCourseId: audienceType === 'course' ? targetCourseId : null, targetUserId: audienceType === 'student' ? targetUserId : null, status: scheduled ? 'scheduled' : 'sending',
         sendAt, createdAt: new Date(), updatedAt: new Date(),
         createdByUid: uid, createdByName: String(profile.displayName ?? 'Équipe CAV Madagascar'),
-        senderName: 'CAV Madagascar', recipientCount: 0,
+        senderName: 'CAV Madagascar', recipientCount: 0, skippedCount: 0,
     });
     if (scheduled)
         return { success: true, status: 'scheduled', broadcastId: ref.id };
     const result = await deliverBroadcast(ref.id);
-    return { success: true, status: 'sent', broadcastId: ref.id, recipientCount: result.recipientCount };
+    return { success: true, status: 'sent', broadcastId: ref.id, recipientCount: result.recipientCount, skippedCount: result.skippedCount };
 });
 export const adminGetBroadcastReadStatus = onCall({ region: 'africa-south1' }, async (request) => {
     const uid = request.auth?.uid;
@@ -266,7 +341,7 @@ export const adminListBroadcasts = onCall({ region: 'africa-south1' }, async (re
     return { items: snapshot.docs.map(item => {
             const data = item.data();
             const iso = (value) => value && typeof value.toDate === 'function' ? value.toDate().toISOString() : value instanceof Date ? value.toISOString() : undefined;
-            return { id: item.id, title: String(data.title ?? ''), message: String(data.message ?? ''), category: String(data.category ?? 'annonce'), audienceType: String(data.audienceType ?? 'all'), targetCourseId: typeof data.targetCourseId === 'string' ? data.targetCourseId : undefined, targetUserId: typeof data.targetUserId === 'string' ? data.targetUserId : undefined, status: String(data.status ?? 'sent'), sendAt: iso(data.sendAt), createdAt: iso(data.createdAt), recipientCount: Number(data.recipientCount ?? 0), createdByName: String(data.createdByName ?? '') };
+            return { id: item.id, title: String(data.title ?? ''), message: String(data.message ?? ''), category: String(data.category ?? 'annonce'), audienceType: String(data.audienceType ?? 'all'), targetCourseId: typeof data.targetCourseId === 'string' ? data.targetCourseId : undefined, targetUserId: typeof data.targetUserId === 'string' ? data.targetUserId : undefined, status: String(data.status ?? 'sent'), sendAt: iso(data.sendAt), createdAt: iso(data.createdAt), recipientCount: Number(data.recipientCount ?? 0), skippedCount: Number(data.skippedCount ?? 0), skipAlreadyReceived: data.skipAlreadyReceived !== false, createdByName: String(data.createdByName ?? ''), createdByUid: String(data.createdByUid ?? '') };
         }) };
 });
 export const processScheduledBroadcasts = onSchedule({ region: 'europe-west1', schedule: 'every 5 minutes', timeZone: 'Indian/Antananarivo' }, async () => {
