@@ -32,6 +32,8 @@ import {
   deleteCourseGroup,
   createSubject,
   deleteSubject,
+  duplicateSubject,
+  uniqueCopyMatricule,
   getSubjectDependencies,
   listAdminSubjects,
   updateSubject,
@@ -3332,6 +3334,8 @@ function AdminSubjects({
   const [showCreate, setShowCreate] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [subjectSearch, setSubjectSearch] = useState("");
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
 
   async function refresh() {
     setSubjects(await listAdminSubjects());
@@ -3430,6 +3434,37 @@ function AdminSubjects({
     }
   }
 
+  async function duplicate(subject: Subject) {
+    if (duplicatingId) return;
+    document.querySelectorAll(".subject-card details.course-actions-menu[open]").forEach((menu) => menu.removeAttribute("open"));
+    setError("");
+    setNotice("");
+    try {
+      const newName = `${subject.name} (copie)`;
+      const newMatricule = uniqueCopyMatricule(subject.matricule || "MAT", subjects.map((item) => item.matricule));
+      const confirmed = await confirmAction({
+        title: "Dupliquer cette matière ?",
+        eyebrow: "DUPLICATION",
+        tone: "info",
+        confirmLabel: "Dupliquer",
+        description: <>Une copie indépendante de <strong>« {subject.name} »</strong> sera créée sous le nom <strong>« {newName} »</strong> (matricule {newMatricule}).</>,
+        hint: "Chapitres, leçons, images, fichiers, quiz et questions sont copiés. La copie est un brouillon, non rattaché à un concours, et la modifier ne change pas l’original.",
+      });
+      if (!confirmed) return;
+      setDuplicatingId(subject.id);
+      const result = await duplicateSubject(subject.id, { name: newName, matricule: newMatricule, userId });
+      await refresh();
+      setNotice(`Copie créée : « ${newName} » (${result.nodes} thème(s)/leçon(s), ${result.blocks} contenu(s), ${result.questions} question(s)). Vous pouvez maintenant la modifier librement.`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      console.error(error);
+      setError(error instanceof Error ? error.message : "Impossible de dupliquer la matière.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setDuplicatingId(null);
+    }
+  }
+
   async function remove(subject: Subject) {
     if (removingId) return;
     document.querySelectorAll(".subject-card details.course-actions-menu[open]").forEach((menu) => menu.removeAttribute("open"));
@@ -3483,6 +3518,7 @@ function AdminSubjects({
         </button>
       </div>
       {error && <div className="form-error">{error}</div>}
+      {notice && <div className="form-success" role="status">{notice}</div>}
       {showCreate && (
         <div className="panel compact-create-panel">
           <div className="create-head">
@@ -3532,6 +3568,7 @@ function AdminSubjects({
                 <button className="primary small-btn" onClick={() => onOpenSubject(subject.id)}>Ouvrir <Icon name="arrow" /></button>
                 <details className="course-actions-menu"><summary aria-label="Autres actions" title="Autres actions">•••</summary><div className="course-actions-popover" role="menu">
                   <button type="button" role="menuitem" onClick={() => edit(subject)}>Modifier</button>
+                  <button type="button" role="menuitem" disabled={duplicatingId !== null} onClick={() => void duplicate(subject)}>{duplicatingId === subject.id ? "Duplication…" : "Dupliquer"}</button>
                   <button type="button" role="menuitem" onClick={() => void toggle(subject)}>{subject.status === "published" ? "Dépublier" : "Publier"}</button>
                   <button type="button" role="menuitem" className="danger" disabled={removingId === subject.id} onClick={() => void remove(subject)}>{removingId === subject.id ? "Suppression…" : "Supprimer"}</button>
                 </div></details>
