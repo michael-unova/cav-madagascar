@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { confirmAction } from '../components/ConfirmDialog'
 import { Card } from '../components/ui/Card'
 import { Container } from '../components/ui/Container'
 import { useAuth } from '../features/auth'
-import { markLessonCommentsRead, replyToLessonComment, subscribeAdminLessonComments } from '../features/lessonComments'
+import { collectCommentThreadIds, deleteLessonCommentThread, markLessonCommentsRead, replyToLessonComment, subscribeAdminLessonComments, updateLessonComment } from '../features/lessonComments'
 import type { LessonComment } from '../types/lessonComment'
 
 function formatDate(value: LessonComment['createdAt']) {
@@ -19,6 +20,9 @@ export function AdminLessonQuestionsPage({ onOpenLesson }: { onOpenLesson?: (cou
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingText, setEditingText] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
   const canManage = profile?.role === 'super_admin' || profile?.role === 'content_manager'
 
   useEffect(() => {
@@ -38,7 +42,19 @@ export function AdminLessonQuestionsPage({ onOpenLesson }: { onOpenLesson?: (cou
     return <div className="admin-thread-reply" key={comment.id} style={{ marginLeft: depth ? Math.min(depth * 20, 80) : 0 }}>
       <strong>{comment.studentName}{comment.authorRole === 'manager' && <span className="lesson-comment-role">CAV</span>}</strong>
       <span>{formatDate(comment.createdAt)}</span>
-      <p>{comment.content}</p>
+      {editingId === comment.id ? <div className="lesson-comment-edit">
+        <textarea value={editingText} onChange={event => setEditingText(event.target.value)} rows={3} maxLength={3000} aria-label="Modifier la réponse" />
+        <div className="lesson-comment-edit-footer"><span>{editingText.length}/3000</span><div className="lesson-comment-actions">
+          <button type="button" className="ui-button ui-button-primary" disabled={editSaving || !editingText.trim() || editingText.trim() === comment.content} onClick={() => void saveEdit(comment)}>{editSaving ? 'Enregistrement...' : 'Enregistrer'}</button>
+          <button type="button" className="ui-button" disabled={editSaving} onClick={() => { setEditingId(null); setEditingText('') }}>Annuler</button>
+        </div></div>
+      </div> : <>
+        <p>{comment.content}</p>
+        <div className="lesson-comment-actions">
+          {comment.authorRole === 'manager' && comment.userId === user?.uid && <button type="button" className="lesson-comment-action" onClick={() => { setEditingId(comment.id); setEditingText(comment.content) }}>✎ Modifier</button>}
+          <button type="button" className="lesson-comment-action" onClick={() => void removeComment(comment)}>⌫ Supprimer</button>
+        </div>
+      </>}
       {children.map(child => renderThread(child, depth + 1, rendered))}
     </div>
   }
@@ -59,6 +75,35 @@ export function AdminLessonQuestionsPage({ onOpenLesson }: { onOpenLesson?: (cou
     }
   }
 
+  async function saveEdit(comment: LessonComment) {
+    const content = editingText.trim()
+    if (!content) return
+    setEditSaving(true); setError(''); setSuccess('')
+    try {
+      await updateLessonComment(comment.id, content, 'manager')
+      setEditingId(null); setEditingText(''); setSuccess('Réponse modifiée.')
+    } catch (err) { console.error(err); setError('Impossible de modifier cette réponse.') } finally { setEditSaving(false) }
+  }
+
+  async function removeComment(comment: LessonComment) {
+    const threadIds = collectCommentThreadIds(comment.id, items)
+    const replyCount = threadIds.length - 1
+    const isStudentQuestion = comment.authorRole !== 'manager'
+    const confirmed = await confirmAction({
+      title: isStudentQuestion ? 'Supprimer cette question ?' : 'Supprimer cette réponse ?',
+      description: isStudentQuestion ? <>La question de <strong>{comment.studentName}</strong> sera supprimée définitivement.</> : 'Cette réponse sera supprimée définitivement.',
+      hint: replyCount > 0 ? `${replyCount} réponse${replyCount > 1 ? 's' : ''} associée${replyCount > 1 ? 's' : ''} ser${replyCount > 1 ? 'ont' : 'a'} également supprimée${replyCount > 1 ? 's' : ''}.` : undefined,
+    })
+    if (!confirmed) return
+    setError(''); setSuccess('')
+    try {
+      await deleteLessonCommentThread(threadIds)
+      if (selected && threadIds.includes(selected.id)) setSelected(null)
+      if (editingId && threadIds.includes(editingId)) { setEditingId(null); setEditingText('') }
+      setSuccess(isStudentQuestion ? 'Question supprimée.' : 'Réponse supprimée.')
+    } catch (err) { console.error(err); setError(isStudentQuestion ? 'Impossible de supprimer cette question.' : 'Impossible de supprimer cette réponse.') }
+  }
+
   async function saveReply() {
     if (!selected || !reply.trim() || !profile) return
     setSaving(true); setError(''); setSuccess('')
@@ -76,7 +121,7 @@ export function AdminLessonQuestionsPage({ onOpenLesson }: { onOpenLesson?: (cou
         {loading ? <Card><p>Chargement des questions...</p></Card> : roots.length === 0 ? <Card className="catalogue-empty"><p>Aucune question d’étudiant pour le moment.</p></Card> : roots.map(item => <button key={item.id} type="button" className={`message-row ${item.unreadForAdmin ? 'is-unread' : ''}`} onClick={() => void openComment(item)}><span className="message-status-dot" aria-hidden="true" /><span className="message-row-main"><strong>{item.studentName}</strong><b>{item.lessonTitle}</b><small>{item.courseTitle} · {item.subjectTitle} · {formatDate(item.createdAt)}</small></span><span className="message-row-status">{item.unreadForAdmin ? 'Nouveau' : 'Lu'}</span></button>)}
       </section>
       <section className="message-detail">
-        {selected ? <Card><div className="message-detail-head"><div><p className="eyebrow">{selected.unreadForAdmin ? 'NOUVELLE QUESTION' : 'DISCUSSION'}</p><h2>{selected.lessonTitle}</h2></div><div className="message-detail-head-actions"><span className="course-parent-badge">{selected.subjectTitle}</span><button type="button" className="ui-button ui-button-primary" disabled={!selected.subjectId || !selected.lessonId || !onOpenLesson} onClick={() => onOpenLesson?.(selected.courseId, selected.subjectId, selected.lessonId, selected.id)}>↗ Voir dans la leçon</button></div></div><div className="message-sender"><strong>{selected.studentName}</strong><span>{formatDate(selected.createdAt)}</span></div><div className="message-meta"><span>Concours : {selected.courseTitle}</span><span>Matière : {selected.subjectTitle}</span>{selected.topicTitle && <span>Topic : {selected.topicTitle}</span>}<span>Leçon : {selected.lessonTitle}</span></div><div className="message-body">{selected.content}</div><div className="admin-thread-replies">{repliesFor(selected.id).map(replyItem => renderThread(replyItem, 1))}</div><div className="lesson-comment-admin-reply"><p className="eyebrow">RÉPONDRE</p><textarea value={reply} onChange={event => setReply(event.target.value)} rows={4} placeholder="Écrivez une réponse à l’étudiant..."/><div className="message-actions"><button type="button" className="ui-button ui-button-primary" disabled={saving || !reply.trim()} onClick={() => void saveReply()}>{saving ? 'Envoi...' : 'Répondre à l’étudiant'}</button></div></div></Card> : <Card className="catalogue-empty"><p>Sélectionnez une question pour consulter la discussion.</p></Card>}
+        {selected ? <Card><div className="message-detail-head"><div><p className="eyebrow">{selected.unreadForAdmin ? 'NOUVELLE QUESTION' : 'DISCUSSION'}</p><h2>{selected.lessonTitle}</h2></div><div className="message-detail-head-actions"><span className="course-parent-badge">{selected.subjectTitle}</span><button type="button" className="ui-button ui-button-primary" disabled={!selected.subjectId || !selected.lessonId || !onOpenLesson} onClick={() => onOpenLesson?.(selected.courseId, selected.subjectId, selected.lessonId, selected.id)}>↗ Voir dans la leçon</button></div></div><div className="message-sender"><strong>{selected.studentName}</strong><span>{formatDate(selected.createdAt)}</span></div><div className="message-meta"><span>Concours : {selected.courseTitle}</span><span>Matière : {selected.subjectTitle}</span>{selected.topicTitle && <span>Topic : {selected.topicTitle}</span>}<span>Leçon : {selected.lessonTitle}</span></div><div className="message-body">{selected.content}</div><div className="message-actions"><button type="button" className="ui-button" onClick={() => void removeComment(selected)}>⌫ Supprimer la question</button></div><div className="admin-thread-replies">{repliesFor(selected.id).map(replyItem => renderThread(replyItem, 1))}</div><div className="lesson-comment-admin-reply"><p className="eyebrow">RÉPONDRE</p><textarea value={reply} onChange={event => setReply(event.target.value)} rows={4} placeholder="Écrivez une réponse à l’étudiant..."/><div className="message-actions"><button type="button" className="ui-button ui-button-primary" disabled={saving || !reply.trim()} onClick={() => void saveReply()}>{saving ? 'Envoi...' : 'Répondre à l’étudiant'}</button></div></div></Card> : <Card className="catalogue-empty"><p>Sélectionnez une question pour consulter la discussion.</p></Card>}
       </section>
     </div>
   </Container>

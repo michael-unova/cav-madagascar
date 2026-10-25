@@ -230,8 +230,34 @@ service cloud.firestore {
           && request.resource.data.unreadForAdmin == false
           && request.resource.data.adminReply == resource.data.adminReply
           && request.resource.data.adminReplyBy == resource.data.adminReplyBy
+          && request.resource.data.adminReplyAt == resource.data.adminReplyAt)
+        // A manager may edit the text of their own reply (never a student's comment).
+        || (manager()
+          && resource.data.userId == request.auth.uid
+          && resource.data.authorRole == 'manager'
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.studentName == resource.data.studentName
+          && request.resource.data.authorRole == resource.data.authorRole
+          && request.resource.data.parentCommentId == resource.data.parentCommentId
+          && request.resource.data.courseId == resource.data.courseId
+          && request.resource.data.courseTitle == resource.data.courseTitle
+          && request.resource.data.subjectId == resource.data.subjectId
+          && request.resource.data.subjectTitle == resource.data.subjectTitle
+          && request.resource.data.topicId == resource.data.topicId
+          && request.resource.data.topicTitle == resource.data.topicTitle
+          && request.resource.data.lessonId == resource.data.lessonId
+          && request.resource.data.lessonTitle == resource.data.lessonTitle
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0
+          && request.resource.data.content.size() <= 3000
+          && request.resource.data.unreadForAdmin == false
+          && request.resource.data.adminReply == resource.data.adminReply
+          && request.resource.data.adminReplyBy == resource.data.adminReplyBy
           && request.resource.data.adminReplyAt == resource.data.adminReplyAt);
-      allow delete: if (activeUser() && resource.data.userId == request.auth.uid) || admin();
+      // Authors delete their own comment; admins and content managers can moderate (delete) any comment.
+      allow delete: if (activeUser() && resource.data.userId == request.auth.uid) || manager();
 
       match /loves/{uid} {
         allow read: if manager() || (activeUser() && activeEnrollment(get(/databases/$(database)/documents/lessonComments/$(id)).data.courseId));

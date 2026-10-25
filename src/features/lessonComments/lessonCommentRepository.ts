@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, type Unsubscribe } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch, type Unsubscribe } from 'firebase/firestore'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import type { LessonComment, LessonCommentAuthorRole } from '../../types/lessonComment'
 
@@ -82,12 +82,39 @@ export async function createLessonComment(input: Omit<LessonComment, 'id' | 'cre
   })
 }
 
-export async function updateLessonComment(commentId: string, content: string) {
-  await updateDoc(doc(db, COLLECTION, commentId), { content: content.trim(), updatedAt: serverTimestamp(), unreadForAdmin: true })
+export async function updateLessonComment(commentId: string, content: string, authorRole: LessonCommentAuthorRole = 'student') {
+  // A student edit goes back to the admin inbox; an edit of an admin reply never does.
+  await updateDoc(doc(db, COLLECTION, commentId), { content: content.trim(), updatedAt: serverTimestamp(), unreadForAdmin: authorRole === 'student' })
 }
 
 export async function deleteLessonComment(commentId: string) {
   await deleteDoc(doc(db, COLLECTION, commentId))
+}
+
+/** Collects a comment and all of its descendants (replies, replies to replies). */
+export function collectCommentThreadIds(rootId: string, all: LessonComment[]): string[] {
+  const ids = new Set<string>([rootId])
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const item of all) {
+      if (item.parentCommentId && ids.has(item.parentCommentId) && !ids.has(item.id)) {
+        ids.add(item.id)
+        grew = true
+      }
+    }
+  }
+  return Array.from(ids)
+}
+
+/** Moderation delete: removes a comment together with every reply under it, so no orphan replies remain. */
+export async function deleteLessonCommentThread(commentIds: string[]) {
+  const ids = Array.from(new Set(commentIds.filter(Boolean)))
+  for (let start = 0; start < ids.length; start += 400) {
+    const batch = writeBatch(db)
+    ids.slice(start, start + 400).forEach(id => batch.delete(doc(db, COLLECTION, id)))
+    await batch.commit()
+  }
 }
 
 export async function markLessonCommentRead(commentId: string) {

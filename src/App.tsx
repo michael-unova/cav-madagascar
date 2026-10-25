@@ -107,7 +107,7 @@ import { collection, doc, onSnapshot, query, setDoc, Timestamp, where } from "fi
 import { getFirebaseFirestore } from "./lib/firebase/firestore";
 import type { LessonComment } from "./types/lessonComment";
 import type { LessonNotification } from "./features/lessonComments/lessonCommentRepository";
-import { createLessonComment, deleteLessonComment, subscribeLessonComments, subscribeLessonCommentLoves, toggleLessonCommentLove, updateLessonComment, replyToLessonComment } from "./features/lessonComments";
+import { collectCommentThreadIds, createLessonComment, deleteLessonComment, deleteLessonCommentThread, subscribeLessonComments, subscribeLessonCommentLoves, toggleLessonCommentLove, updateLessonComment, replyToLessonComment } from "./features/lessonComments";
 import type {
   PracticeAttempt,
   Question,
@@ -3311,6 +3311,7 @@ function AdminSubjects({
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [subjectSearch, setSubjectSearch] = useState("");
 
   async function refresh() {
     setSubjects(await listAdminSubjects());
@@ -3324,6 +3325,15 @@ function AdminSubjects({
       ),
     );
   }, []);
+
+  const normalizeSubjectSearch = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  const subjectSearchTerms = normalizeSubjectSearch(subjectSearch).split(" ").filter(Boolean);
+  const visibleSubjects = subjectSearchTerms.length
+    ? subjects.filter((subject) => {
+        const haystack = normalizeSubjectSearch([subject.name, subject.matricule, subject.niveau, subject.description, subject.status === "published" ? "publie" : "brouillon"].filter(Boolean).join(" "));
+        return subjectSearchTerms.every((term) => haystack.includes(term));
+      })
+    : subjects;
 
   function reset() {
     setEditingId(null);
@@ -3477,11 +3487,22 @@ function AdminSubjects({
         </div>
       )}
       <div className="section-head course-admin-head">
-        <div><div className="eyebrow">VOTRE BIBLIOTHÈQUE</div><h2>{subjects.length ? `${subjects.length} matière${subjects.length > 1 ? "s" : ""}` : "Aucune matière"}</h2></div>
+        <div><div className="eyebrow">VOTRE BIBLIOTHÈQUE</div><h2>{subjects.length ? (subjectSearchTerms.length ? `${visibleSubjects.length} résultat${visibleSubjects.length > 1 ? "s" : ""} sur ${subjects.length} matière${subjects.length > 1 ? "s" : ""}` : `${subjects.length} matière${subjects.length > 1 ? "s" : ""}`) : "Aucune matière"}</h2></div>
       </div>
-      {subjects.length ? (
+      {subjects.length > 0 && (
+        <div className="catalog-toolbar subject-search-toolbar" role="search">
+          <div className="catalog-search">
+            <Icon name="search" />
+            <input type="search" value={subjectSearch} onChange={e => setSubjectSearch(e.target.value)} onKeyDown={e => { if (e.key === "Escape") setSubjectSearch(""); }} placeholder="Rechercher une matière, un code ou un niveau…" aria-label="Rechercher une matière" />
+            {subjectSearch && <button type="button" className="subject-search-clear" aria-label="Effacer la recherche" onClick={() => setSubjectSearch("")}>×</button>}
+          </div>
+        </div>
+      )}
+      {subjects.length && !visibleSubjects.length ? (
+        <div className="panel empty-state"><h3>Aucune matière trouvée.</h3><p>Aucun résultat pour « {subjectSearch.trim()} ». Vérifiez l’orthographe ou essayez un autre mot-clé.</p><button type="button" className="outline" onClick={() => setSubjectSearch("")}>Effacer la recherche</button></div>
+      ) : subjects.length ? (
         <div className="subject-card-list">
-          {subjects.map(subject => (
+          {visibleSubjects.map(subject => (
             <article className="panel subject-card" key={subject.id}>
               <div className="subject-card-main">
                 <div className="subject-icon"><Icon name="book" /></div>
@@ -5377,6 +5398,10 @@ function AdminLessonPreview({
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [replySaving, setReplySaving] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const selectedNode = nodes.find(node => node.id === lessonId);
   const selectedSubject = subjects.find(subject => subject.subjectId === subjectId || subject.id === selectedNode?.courseSubjectId);
   const topic = selectedNode?.parentId ? nodes.find(node => node.id === selectedNode.parentId) : undefined;
@@ -5430,7 +5455,56 @@ function AdminLessonPreview({
     return () => window.clearTimeout(timer);
   }, [loading, selectedNode, comments.length, commentId]);
 
+  useEffect(() => {
+    if (!openMenuId) return;
+    const close = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement | null)?.closest?.(".lesson-comment-menu-wrap")) setOpenMenuId(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpenMenuId(null); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", closeOnEscape); };
+  }, [openMenuId]);
+
   function initials(name: string) { return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase() ?? "").join("") || "É"; }
+
+  async function saveEditedAdminComment(commentId: string) {
+    const content = editingCommentText.trim();
+    if (!content) return;
+    setEditSaving(true);
+    setError("");
+    try {
+      await updateLessonComment(commentId, content, "manager");
+      setEditingCommentId(null);
+      setEditingCommentText("");
+    } catch (err) {
+      console.error(err);
+      setError("Impossible de modifier cette réponse.");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function removeAdminComment(comment: LessonComment) {
+    const threadIds = collectCommentThreadIds(comment.id, comments);
+    const replyCount = threadIds.length - 1;
+    const isStudentQuestion = comment.authorRole !== "manager";
+    const confirmed = await confirmAction({
+      title: isStudentQuestion ? "Supprimer cette question ?" : "Supprimer cette réponse ?",
+      description: isStudentQuestion ? <>La question de <strong>{comment.studentName}</strong> sera supprimée définitivement.</> : "Cette réponse sera supprimée définitivement.",
+      hint: replyCount > 0 ? `${replyCount} réponse${replyCount > 1 ? "s" : ""} associée${replyCount > 1 ? "s" : ""} ser${replyCount > 1 ? "ont" : "a"} également supprimée${replyCount > 1 ? "s" : ""}.` : undefined,
+    });
+    if (!confirmed) return;
+    setError("");
+    try {
+      await deleteLessonCommentThread(threadIds);
+      if (editingCommentId && threadIds.includes(editingCommentId)) { setEditingCommentId(null); setEditingCommentText(""); }
+      if (replyingToId && threadIds.includes(replyingToId)) { setReplyingToId(null); setReplyText(""); }
+    } catch (err) {
+      console.error(err);
+      setError(isStudentQuestion ? "Impossible de supprimer cette question." : "Impossible de supprimer cette réponse.");
+    }
+  }
 
   async function submitAdminReply(parent: LessonComment) {
     if (!user?.uid || !profile || !replyText.trim()) return;
@@ -5460,14 +5534,31 @@ function AdminLessonPreview({
     seen.add(comment.id);
     const replies = comments.filter(item => item.parentCommentId === comment.id).sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
     const love = loveState[comment.id];
+    const isOwnReply = comment.authorRole === "manager" && comment.userId === user?.uid;
     return <div key={comment.id} className={depth ? "lesson-comment-reply-item" : "lesson-comment-thread"} style={depth ? { marginLeft: Math.min(depth * 22, 80) } : undefined}>
       <article id={`admin-lesson-comment-${comment.id}`} className="lesson-comment-card compact">
-        <header className="lesson-comment-head"><div className="lesson-comment-author"><span className={comment.authorRole === "manager" ? "lesson-comment-avatar manager" : "lesson-comment-avatar"} aria-hidden="true">{comment.authorPhotoURL ? <img src={comment.authorPhotoURL} alt="" className="lesson-comment-avatar-image" /> : initials(comment.studentName)}</span><div className="lesson-comment-author-copy"><div className="lesson-comment-author-line"><strong>{comment.studentName}</strong>{comment.authorRole === "manager" && <span className="lesson-comment-role">CAV</span>}</div><span>{comment.createdAt ? comment.createdAt.toDate().toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "À l’instant"}</span></div></div></header>
-        <div className="lesson-comment-body">{comment.content}</div>
-        <div className="lesson-comment-actions comment-actions">
+        <header className="lesson-comment-head"><div className="lesson-comment-author"><span className={comment.authorRole === "manager" ? "lesson-comment-avatar manager" : "lesson-comment-avatar"} aria-hidden="true">{comment.authorPhotoURL ? <img src={comment.authorPhotoURL} alt="" className="lesson-comment-avatar-image" /> : initials(comment.studentName)}</span><div className="lesson-comment-author-copy"><div className="lesson-comment-author-line"><strong>{comment.studentName}</strong>{comment.authorRole === "manager" && <span className="lesson-comment-role">CAV</span>}</div><span>{comment.createdAt ? comment.createdAt.toDate().toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "À l’instant"}{comment.updatedAt && comment.createdAt && comment.updatedAt.toMillis() - comment.createdAt.toMillis() > 60000 && comment.authorRole === "manager" ? " · modifié" : ""}</span></div></div>
+          {editingCommentId !== comment.id && <div className="lesson-comment-menu-wrap">
+            <button type="button" className="lesson-comment-menu-trigger" aria-label="Options du commentaire" aria-haspopup="menu" aria-expanded={openMenuId === comment.id} onClick={() => setOpenMenuId(value => value === comment.id ? null : comment.id)}>⋯</button>
+            {openMenuId === comment.id && <div className="lesson-comment-menu" role="menu">
+              {isOwnReply && <button type="button" role="menuitem" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.content); setReplyingToId(null); setOpenMenuId(null); }}>✎ <span>Modifier</span></button>}
+              <button type="button" role="menuitem" className="danger" onClick={() => { setOpenMenuId(null); void removeAdminComment(comment); }}>⌫ <span>Supprimer</span></button>
+            </div>}
+          </div>}
+        </header>
+        {editingCommentId === comment.id ? (
+          <div className="lesson-comment-edit">
+            <textarea value={editingCommentText} onChange={event => setEditingCommentText(event.target.value)} rows={3} maxLength={3000} aria-label="Modifier la réponse" autoFocus />
+            <div className="lesson-comment-edit-footer"><span>{editingCommentText.length}/3000</span><div className="lesson-comment-actions">
+              <button type="button" className="primary" disabled={editSaving || !editingCommentText.trim() || editingCommentText.trim() === comment.content} onClick={() => void saveEditedAdminComment(comment.id)}>{editSaving ? "Enregistrement..." : "Enregistrer"}</button>
+              <button type="button" className="outline" disabled={editSaving} onClick={() => { setEditingCommentId(null); setEditingCommentText(""); }}>Annuler</button>
+            </div></div>
+          </div>
+        ) : <div className="lesson-comment-body">{comment.content}</div>}
+        {editingCommentId !== comment.id && <div className="lesson-comment-actions comment-actions">
           <button type="button" className="lesson-comment-action" onClick={() => { setReplyingToId(comment.id); setReplyText(""); }}><span aria-hidden="true">↩</span> Répondre</button>
           <span className={`lesson-comment-action lesson-comment-love ${love?.loved ? "is-loved" : ""}`} aria-label="Réactions amour"><span aria-hidden="true">{love?.loved ? "♥" : "♡"}</span>{(love?.count ?? 0) > 0 && <b>{love.count}</b>}</span>
-        </div>
+        </div>}
         {replyingToId === comment.id && (
           <div className="lesson-comment-reply-composer">
             <div className="lesson-comment-reply-row">

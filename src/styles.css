@@ -4810,3 +4810,10 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 .lesson-equation-panel .equation-template-grid button{min-height:58px;padding:5px 3px;font-size:9px;line-height:1.25;text-align:center}
 .lesson-equation-panel .equation-template-grid button span{font-size:19px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .lesson-equation-panel .equation-template-grid button:focus-visible,.lesson-equation-panel .equation-category-tabs button:focus-visible{outline:2px solid #1769e0;outline-offset:1px}
+
+/* Matières: admin search bar */
+.subject-search-toolbar { margin: 0 0 16px; }
+.subject-search-toolbar .catalog-search { width: min(100%, 520px); }
+.subject-search-toolbar .catalog-search input[type="search"]::-webkit-search-cancel-button { display: none; }
+.subject-search-clear { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 50%; background: #eef3f8; color: #61758c; font-size: 18px; line-height: 1; cursor: pointer; }
+.subject-search-clear:hover { background: #dde8f3; color: #18304b; }
