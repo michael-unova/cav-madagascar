@@ -4441,6 +4441,26 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
 }
 
 function LessonContentReader({ html }: { html: string }) {
+  const pageRef = useRef<HTMLDivElement>(null)
+  // On phones, tell students when a table is wider than the screen so they know to swipe it sideways.
+  useEffect(() => {
+    const root = pageRef.current
+    if (!root) return
+    const update = () => {
+      root.querySelectorAll('.lesson-table-hint').forEach(node => node.remove())
+      root.querySelectorAll('table').forEach(table => {
+        if (table.scrollWidth > table.clientWidth + 2) {
+          const hint = document.createElement('p')
+          hint.className = 'lesson-table-hint'
+          hint.textContent = 'Faites glisser le tableau vers la gauche pour voir la suite →'
+          table.parentNode?.insertBefore(hint, table)
+        }
+      })
+    }
+    update()
+    window.addEventListener('resize', update)
+    return () => { window.removeEventListener('resize', update); root.querySelectorAll('.lesson-table-hint').forEach(node => node.remove()) }
+  }, [html])
   return (
     <article className="lesson-reader-preview lesson-content-reader">
       <div className="lesson-reader-toolbar">
@@ -4451,7 +4471,7 @@ function LessonContentReader({ html }: { html: string }) {
         <span className="lesson-reader-hint">Contenu adapté à votre écran</span>
       </div>
       <div className="lesson-reader-page">
-        <div className="lesson-reader-page-inner" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(html) }} />
+        <div ref={pageRef} className="lesson-reader-page-inner" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(html) }} />
       </div>
     </article>
   )

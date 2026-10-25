@@ -4877,3 +4877,47 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 /* Edit mode: let clicks reach the video figure so it can be selected, replaced or deleted. */
 .lesson-editor-surface[contenteditable="true"] figure.lesson-video{cursor:pointer}
 .lesson-editor-surface[contenteditable="true"] figure.lesson-video iframe{pointer-events:none}
+
+/* ---- Student lesson tables on phones -------------------------------------
+   Wrap cell text instead of forcing one long line, shrink the type a little,
+   and keep sideways scrolling only as a fallback (with edge shadows so the
+   student can see there is more to swipe). */
+@media (max-width: 767px) {
+  .lesson-content-reader .lesson-reader-page-inner table,
+  .learning-text table {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: normal !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    border-collapse: collapse;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .lesson-content-reader .lesson-reader-page-inner table th,
+  .lesson-content-reader .lesson-reader-page-inner table td,
+  .learning-text table th,
+  .learning-text table td {
+    width: auto !important;
+    min-width: 5.5rem;
+    padding: 7px 8px;
+    white-space: normal !important;
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
+    vertical-align: top;
+  }
+  .lesson-content-reader .lesson-reader-page-inner table p,
+  .learning-text table p { margin: 0 0 4px; }
+  .lesson-content-reader .lesson-reader-page-inner table p:last-child,
+  .learning-text table p:last-child { margin-bottom: 0; }
+}
+
+/* Hint shown above a table that is wider than the phone screen. */
+.lesson-table-hint { display:none; margin:14px 0 4px; color:#6a7f94; font-size:12px; font-weight:700; line-height:1.3; }
+@media (max-width: 767px) {
+  .lesson-table-hint { display:block; }
+  .lesson-content-reader .lesson-reader-page-inner table { border-radius:8px; }
+}
