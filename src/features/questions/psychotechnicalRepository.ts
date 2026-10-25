@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import type { PsychotechnicalAttempt, PsychotechnicalDomain, PsychotechnicalQuestion, PsychotechnicalQuestionSnapshot, PsychotechnicalTest, PsychotechnicalTestSettings } from '../../types/psychotechnical'
 
@@ -16,6 +16,9 @@ const mapQuestion = (id: string, d: Record<string, unknown>): PsychotechnicalQue
 })
 const mapTest = (id: string, d: Record<string, unknown>): PsychotechnicalTest => ({
   id, title: String(d.title ?? ''), description: String(d.description ?? ''), courseIds: Array.isArray(d.courseIds) ? d.courseIds.map(String) : [],
+  subjectId: typeof d.subjectId === 'string' && d.subjectId ? d.subjectId : undefined,
+  contentNodeId: typeof d.contentNodeId === 'string' && d.contentNodeId ? d.contentNodeId : undefined,
+  contentOrder: typeof d.contentOrder === 'number' ? d.contentOrder : undefined,
   distributions: Array.isArray(d.distributions) ? d.distributions as PsychotechnicalTest['distributions'] : [], questionIds: Array.isArray(d.questionIds) ? d.questionIds.map(String) : [],
   questions: Array.isArray(d.questions) ? d.questions as PsychotechnicalQuestionSnapshot[] : [],
   settings: (d.settings ?? { durationMinutes: 30, questionCount: 20, randomizeQuestions: true, randomizeOptions: true, showCorrections: true }) as PsychotechnicalTestSettings,
@@ -42,12 +45,26 @@ export async function listPublishedPsychotechnicalTestsForCourse(courseId: strin
   return snap.docs.map(d => mapTest(d.id, d.data())).sort((a, b) => a.title.localeCompare(b.title, 'fr'))
 }
 export async function getPsychotechnicalTest(id: string) { const snap = await getDoc(doc(db, 'psychotechnicalTests', id)); return snap.exists() ? mapTest(snap.id, snap.data()) : null }
-export async function createPsychotechnicalTest(input: { title: string; description: string; courseIds: string[]; distributions: PsychotechnicalTest['distributions']; questionIds: string[]; settings: PsychotechnicalTestSettings; userId: string }) {
+export async function createPsychotechnicalTest(input: { title: string; description: string; courseIds: string[]; distributions: PsychotechnicalTest['distributions']; questionIds: string[]; settings: PsychotechnicalTestSettings; userId: string; subjectId?: string; contentNodeId?: string; contentOrder?: number }) {
   const questions = await Promise.all(input.questionIds.map(id => getDoc(doc(db, 'psychotechnicalQuestions', id))))
   const snapshots = questions.filter(s => s.exists() && s.data()?.status === 'published').map(s => { const q = mapQuestion(s.id, s.data()!); return ({ id:q.id, domain:q.domain, type:q.type, prompt:q.prompt, ...(q.imageUrl ? {imageUrl:q.imageUrl}:{ }), ...(q.options ? {options:q.options}:{}), ...(q.explanation ? {explanation:q.explanation}:{}), points:q.points }) })
   if (!snapshots.length) throw new Error('Ajoutez au moins une question psychotechnique publiée.')
-  const ref = await addDoc(collection(db, 'psychotechnicalTests'), { title:input.title.trim(), description:input.description.trim(), courseIds:input.courseIds, distributions:input.distributions, questionIds:snapshots.map(q=>q.id), questions:snapshots, settings:input.settings, status:'draft', createdBy:input.userId, updatedAt:serverTimestamp() })
+  const ref = await addDoc(collection(db, 'psychotechnicalTests'), { title:input.title.trim(), description:input.description.trim(), courseIds:input.courseIds, ...(input.contentNodeId ? { subjectId:input.subjectId ?? '', contentNodeId:input.contentNodeId, contentOrder:input.contentOrder ?? 0 } : {}), distributions:input.distributions, questionIds:snapshots.map(q=>q.id), questions:snapshots, settings:input.settings, status:'draft', createdBy:input.userId, updatedAt:serverTimestamp() })
   return ref.id
+}
+/** Places a test in a chapter (or removes it from one with `null`) without touching the test itself. */
+export async function updatePsychotechnicalTestPlacement(id: string, placement: { subjectId?: string; contentNodeId?: string | null; contentOrder?: number }) {
+  const data: Record<string, unknown> = { updatedAt: serverTimestamp() }
+  if (placement.contentNodeId === null) { data.contentNodeId = deleteField(); data.contentOrder = deleteField(); data.subjectId = deleteField() }
+  else {
+    if (placement.contentNodeId) data.contentNodeId = placement.contentNodeId
+    if (placement.subjectId) data.subjectId = placement.subjectId
+    if (typeof placement.contentOrder === 'number') data.contentOrder = placement.contentOrder
+  }
+  await updateDoc(doc(db, 'psychotechnicalTests', id), data)
+}
+export async function updatePsychotechnicalTestDetails(id: string, input: { title: string; description: string }) {
+  await updateDoc(doc(db, 'psychotechnicalTests', id), { title: input.title.trim(), description: input.description.trim(), updatedAt: serverTimestamp() })
 }
 export async function updatePsychotechnicalTestStatus(id: string, status: PsychotechnicalTest['status']) { await updateDoc(doc(db, 'psychotechnicalTests', id), { status, updatedAt:serverTimestamp() }) }
 export async function deletePsychotechnicalTest(id: string) { await deleteDoc(doc(db, 'psychotechnicalTests', id)) }

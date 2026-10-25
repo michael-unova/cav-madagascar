@@ -48,6 +48,11 @@ export interface PsychotechnicalTest {
   title: string
   description: string
   courseIds: string[]
+  /** Matière and chapter (topic node) the test was created in. Optional: older tests have none. */
+  subjectId?: string
+  contentNodeId?: string
+  /** Position inside the chapter's unified content list (shared numeric space with lessons and quizzes). */
+  contentOrder?: number
   distributions: PsychotechnicalDistribution[]
   questionIds: string[]
   questions: PsychotechnicalQuestionSnapshot[]

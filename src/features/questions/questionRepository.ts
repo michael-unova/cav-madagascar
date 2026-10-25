@@ -1,6 +1,4 @@
-import {
-  addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where,
-} from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import type { PracticeAttempt, PracticeQuestionSnapshot, Question, QuestionSet, QuestionSetType, QuestionType, QuestionDifficulty } from '../../types/question'
 
@@ -40,6 +38,8 @@ function mapQuestionSet(id: string, data: Record<string, unknown>): QuestionSet 
     courseId: typeof data.courseId === 'string' ? data.courseId : undefined,
     courseSubjectId: typeof data.courseSubjectId === 'string' ? data.courseSubjectId : undefined,
     subjectId: String(data.subjectId ?? ''),
+    contentNodeId: typeof data.contentNodeId === 'string' && data.contentNodeId ? data.contentNodeId : undefined,
+    contentOrder: typeof data.contentOrder === 'number' ? data.contentOrder : undefined,
     type: (data.type ?? 'practice') as QuestionSetType,
     settings: data.settings && typeof data.settings === 'object' ? data.settings as QuestionSet['settings'] : undefined,
     status: (data.status ?? 'draft') as QuestionSet['status'],
@@ -126,7 +126,7 @@ export async function getPublishedPracticeSet(setId: string): Promise<QuestionSe
   return set.status === 'published' && ['practice', 'exercise', 'quiz'].includes(set.type) ? set : null
 }
 
-export async function createQuestionSet(input: { title: string; description: string; subjectId: string; questionIds: string[]; type: QuestionSetType; settings?: QuestionSet['settings']; userId: string }): Promise<string> {
+export async function createQuestionSet(input: { title: string; description: string; subjectId: string; questionIds: string[]; type: QuestionSetType; settings?: QuestionSet['settings']; userId: string; contentNodeId?: string; contentOrder?: number }): Promise<string> {
   const questions = await Promise.all(input.questionIds.map(id => getQuestion(id)))
   const snapshots: PracticeQuestionSnapshot[] = questions
     .filter((q): q is Question => Boolean(q && q.status === 'published' && q.subjectId === input.subjectId))
@@ -139,7 +139,7 @@ export async function createQuestionSet(input: { title: string; description: str
       points: q.points,
     }))
   if (snapshots.length === 0) throw new Error('Sélectionnez au moins une question publiée de cette matière.')
-  const ref = await addDoc(collection(db, 'questionSets'), { title: input.title.trim(), description: input.description.trim(), subjectId: input.subjectId, questionIds: snapshots.map(q => q.id), questions: snapshots, type: input.type, ...(input.settings ? { settings: input.settings } : {}), status: 'draft', createdBy: input.userId, updatedAt: serverTimestamp() })
+  const ref = await addDoc(collection(db, 'questionSets'), { title: input.title.trim(), description: input.description.trim(), subjectId: input.subjectId, questionIds: snapshots.map(q => q.id), questions: snapshots, type: input.type, ...(input.contentNodeId ? { contentNodeId: input.contentNodeId, contentOrder: input.contentOrder ?? 0 } : {}), ...(input.settings ? { settings: input.settings } : {}), status: 'draft', createdBy: input.userId, updatedAt: serverTimestamp() })
   return ref.id
 }
 
@@ -152,6 +152,19 @@ export async function createPracticeSet(input: { title: string; description: str
 }
 
 export async function updateQuestionSetStatus(setId: string, status: QuestionSet['status']): Promise<void> { await updateDoc(doc(db, 'questionSets', setId), { status, updatedAt: serverTimestamp() }) }
+/** Places a quiz/exercise in a chapter (or removes it from one with `null`) without touching the set itself. */
+export async function updateQuestionSetPlacement(setId: string, placement: { contentNodeId?: string | null; contentOrder?: number }): Promise<void> {
+  const data: Record<string, unknown> = { updatedAt: serverTimestamp() }
+  if (placement.contentNodeId === null) { data.contentNodeId = deleteField(); data.contentOrder = deleteField() }
+  else {
+    if (placement.contentNodeId) data.contentNodeId = placement.contentNodeId
+    if (typeof placement.contentOrder === 'number') data.contentOrder = placement.contentOrder
+  }
+  await updateDoc(doc(db, 'questionSets', setId), data)
+}
+export async function updateQuestionSetDetails(setId: string, input: { title: string; description: string }): Promise<void> {
+  await updateDoc(doc(db, 'questionSets', setId), { title: input.title.trim(), description: input.description.trim(), updatedAt: serverTimestamp() })
+}
 export async function deleteQuestionSet(setId: string): Promise<void> { await deleteDoc(doc(db, 'questionSets', setId)) }
 
 export async function listMyPracticeAttempts(userId: string): Promise<PracticeAttempt[]> {

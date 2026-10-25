@@ -4973,3 +4973,59 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 .pay-method-single .pay-method-info strong{display:block;font-size:18px;color:var(--navy);margin-top:2px}
 .pay-method-single .pay-method-info span{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 .pay-method-single>b{font-size:18px;color:var(--teal);margin:0;white-space:nowrap}
+
+/* Chapter content: one unified, sortable list (lessons, quizzes, exercises, psychotechnical tests) */
+.chapter-add { position:relative; display:inline-block; }
+.chapter-add.is-block { display:block; margin-top:10px; }
+.chapter-add.is-block .chapter-add-trigger { width:100%; }
+.chapter-add-pop { position:absolute; z-index:60; top:calc(100% + 8px); right:0; width:min(340px, calc(100vw - 32px)); padding:8px; border:1px solid #dce5ef; border-radius:16px; background:#fff; box-shadow:0 22px 50px rgba(16,42,76,.2); display:grid; gap:4px; }
+.chapter-add.is-block .chapter-add-pop { left:0; right:0; width:auto; }
+.chapter-add-pop button { display:flex; align-items:center; gap:12px; width:100%; padding:11px 12px; border:0; border-radius:12px; background:transparent; text-align:left; cursor:pointer; font-family:inherit; color:#18304b; }
+.chapter-add-pop button:hover, .chapter-add-pop button:focus-visible { background:#eef5ff; outline:none; }
+.chapter-add-pop strong { display:block; font-size:.88rem; font-weight:800; }
+.chapter-add-pop small { display:block; margin-top:2px; color:#6a7f95; font-size:.74rem; font-weight:600; line-height:1.35; }
+.chapter-add-icon { flex:0 0 auto; width:38px; height:38px; display:grid; place-items:center; border-radius:11px; background:#eef3f9; font-size:1.1rem; }
+.chapter-empty { margin-top:16px; padding:28px 20px; border:1.5px dashed #cfdceb; border-radius:16px; background:#f9fbfe; text-align:center; color:#5d7288; }
+.chapter-empty strong { display:block; color:#18304b; font-size:1rem; }
+.chapter-empty p { margin:6px auto 0; max-width:420px; font-size:.86rem; line-height:1.5; }
+.chapter-content-list { display:grid; gap:10px; margin-top:16px; }
+.chapter-item { position:relative; display:flex; align-items:center; gap:10px; padding:10px 10px 10px 8px; border:1px solid #e1e9f2; border-left:4px solid #b9c8d9; border-radius:14px; background:#fff; box-shadow:0 4px 14px rgba(16,42,76,.05); transition:box-shadow .16s ease, border-color .16s ease, transform .16s ease, opacity .16s ease; }
+.chapter-item:hover { box-shadow:0 10px 24px rgba(16,42,76,.1); }
+.chapter-item.kind-lesson { border-left-color:#1769e0; }
+.chapter-item.kind-quiz { border-left-color:#7c5cdb; }
+.chapter-item.kind-exercise { border-left-color:#e0881b; }
+.chapter-item.kind-test { border-left-color:#12a07a; }
+.chapter-item.is-dragging { opacity:.45; transform:scale(.99); }
+.chapter-item.is-drop-target { border-color:#1769e0; box-shadow:0 0 0 3px rgba(23,105,224,.18); }
+.chapter-item-grip { flex:0 0 auto; width:18px; color:#a3b3c4; font-size:1rem; letter-spacing:-3px; cursor:grab; user-select:none; text-align:center; }
+.chapter-item-number { flex:0 0 auto; min-width:34px; padding:6px 8px; border-radius:10px; background:#eef3f9; color:#31506f; font-weight:800; font-size:.8rem; text-align:center; }
+.chapter-item-main { flex:1 1 auto; min-width:0; display:grid; gap:6px; padding:2px 4px; border:0; background:transparent; text-align:left; cursor:pointer; font-family:inherit; color:inherit; }
+.chapter-item-main strong { color:#18304b; font-size:.95rem; line-height:1.3; overflow-wrap:anywhere; }
+.chapter-item-meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px 8px; }
+.chapter-item-meta small { color:#7a8aa0; font-weight:700; font-size:.72rem; }
+.chapter-kind-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:.68rem; font-weight:800; line-height:1.3; }
+.chapter-kind-chip.kind-lesson { background:#e8f1ff; color:#1769e0; }
+.chapter-kind-chip.kind-quiz { background:#f0ebff; color:#6a45cf; }
+.chapter-kind-chip.kind-exercise { background:#fff1e1; color:#b8620a; }
+.chapter-kind-chip.kind-test { background:#e3f6ef; color:#0d7f61; }
+.chapter-item-controls { flex:0 0 auto; display:flex; align-items:center; gap:6px; }
+.chapter-move { width:36px; height:36px; display:grid; place-items:center; border:1px solid #d9e3ee; border-radius:10px; background:#fff; color:#31506f; font-size:1rem; font-weight:800; cursor:pointer; transition:background .16s ease, border-color .16s ease; }
+.chapter-move:hover:not(:disabled) { background:#eef5ff; border-color:#b7cde3; }
+.chapter-move:disabled { opacity:.35; cursor:not-allowed; }
+.chapter-item-menu-wrap { position:relative; }
+.chapter-item-menu-wrap .node-menu-trigger { width:36px; height:36px; }
+.chapter-item-menu { right:0; left:auto; min-width:210px; z-index:50; }
+.chapter-rename-dialog { display:grid; gap:12px; text-align:left; }
+.chapter-rename-dialog label { display:grid; gap:6px; font-weight:700; color:#18304b; font-size:.84rem; }
+.chapter-rename-dialog .cav-confirm-actions { margin-top:6px; }
+@media (max-width: 760px) {
+  .chapter-add { display:block; width:100%; }
+  .chapter-add .chapter-add-trigger { width:100%; min-height:44px; }
+  .chapter-add-pop { left:0; right:0; width:auto; }
+  .chapter-item { flex-wrap:wrap; padding:10px; gap:8px; }
+  .chapter-item-grip { display:none; }
+  .chapter-item-main { flex:1 1 calc(100% - 60px); }
+  .chapter-item-controls { width:100%; justify-content:flex-end; padding-top:6px; border-top:1px solid #edf2f7; }
+  .chapter-move, .chapter-item-menu-wrap .node-menu-trigger { width:44px; height:44px; }
+  .chapter-item-menu { right:0; min-width:min(240px, calc(100vw - 48px)); }
+}

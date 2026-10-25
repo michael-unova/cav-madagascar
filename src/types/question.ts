@@ -53,6 +53,10 @@ export interface QuestionSet {
   courseId?: string
   courseSubjectId?: string
   subjectId: string
+  /** Chapter (topic node) this quiz or exercise is placed in. Optional: older sets have none. */
+  contentNodeId?: string
+  /** Position inside the chapter's unified content list (shared numeric space with lessons and tests). */
+  contentOrder?: number
   type: QuestionSetType
   settings?: QuestionSetSettings
   status: 'draft' | 'published' | 'archived'

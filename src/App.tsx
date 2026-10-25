@@ -74,6 +74,13 @@ import {
   listMyPracticeAttempts,
   updateQuestion,
   updateQuestionSetStatus,
+  updateQuestionSetPlacement,
+  updateQuestionSetDetails,
+  listAdminPsychotechnicalTests,
+  updatePsychotechnicalTestPlacement,
+  updatePsychotechnicalTestDetails,
+  updatePsychotechnicalTestStatus,
+  deletePsychotechnicalTest,
 } from "./features/questions";
 import { getCourseProgressSummary, getNodeProgress, listMyProgress, saveNodeProgress } from "./features/progress";
 import { createContactMessage } from "./features/contact";
@@ -117,6 +124,8 @@ import type {
   QuestionSet,
   QuestionType,
 } from "./types/question";
+import type { PsychotechnicalTest } from "./types/psychotechnical";
+import { ChapterAddMenu, ChapterContentList, type ChapterAddKind, type ChapterItem, type ChapterItemAction } from "./components/ChapterContentList";
 import { confirmAction } from "./components/ConfirmDialog";
 import { ContentEditIcon, EyeIcon, PencilIcon } from "./components/ActionIcons";
 import { sortAlphabetically, sortNewestFirst } from "./features/admin/userSorting";
@@ -4100,15 +4109,10 @@ function AdminCourses({
   );
 }
 function SubjectWorkspace({ subjectId, initialNodeId = "", onBack }: { subjectId: string; initialNodeId?: string; onBack: () => void }) {
-  const [tab, setTab] = useState<"content" | "assessments">("content");
   return (
     <div className="subject-workspace-shell">
       <button className="back subject-workspace-back" onClick={onBack}>← Retour aux matières</button>
-      <div className="subject-workspace-tabs">
-        <button className={tab === "content" ? "active" : ""} onClick={() => setTab("content")}>Chapitres & leçons</button>
-        <button className={tab === "assessments" ? "active" : ""} onClick={() => setTab("assessments")}>Quiz & exercices</button>
-      </div>
-      {tab === "content" ? <ContentAdmin initialSubjectId={subjectId} initialNodeId={initialNodeId} initialPreview={Boolean(initialNodeId)} onBack={onBack} /> : <QuestionAdmin initialSubjectId={subjectId} onBack={onBack} />}
+      <ContentAdmin initialSubjectId={subjectId} initialNodeId={initialNodeId} initialPreview={Boolean(initialNodeId)} onBack={onBack} />
     </div>
   );
 }
@@ -4153,6 +4157,13 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const [draggedChapterKey, setDraggedChapterKey] = useState<string | null>(null);
+  const [chapterSets, setChapterSets] = useState<QuestionSet[]>([]);
+  const [chapterTests, setChapterTests] = useState<PsychotechnicalTest[]>([]);
+  const [chapterFlow, setChapterFlow] = useState<{ kind: "quiz" | "exercise" | "test"; topicId: string } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<ChapterItem | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [renameDescription, setRenameDescription] = useState("");
 
   function formatNodeNumber(index: number, style: ContentNumberingStyle = "alpha", parentIndex?: number) {
     const n = index + 1;
@@ -4191,6 +4202,77 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
     finally { setSaving(false); setDraggedNodeId(null); }
   }
 
+  async function refreshChapterExtras(id = subjectId) {
+    if (!id) { setChapterSets([]); setChapterTests([]); return; }
+    const [sets, tests] = await Promise.all([listAdminQuestionSets(id), listAdminPsychotechnicalTests()]);
+    setChapterSets(sets);
+    setChapterTests(tests);
+  }
+
+  // One ordered list per chapter: lessons, quizzes, exercises and psychotechnical tests share the same order values.
+  function buildTopicItems(topicId: string) {
+    const rows: Array<{ item: ChapterItem; order: number; rank: number }> = [];
+    const unplaced = Number.MAX_SAFE_INTEGER / 2;
+    for (const node of nodes) if (node.parentId === topicId) rows.push({ item: { key: `lesson:${node.id}`, kind: "lesson", id: node.id, title: node.title, status: node.status }, order: node.order, rank: 0 });
+    for (const set of chapterSets) {
+      if (set.contentNodeId !== topicId) continue;
+      const kind = set.type === "exercise" ? "exercise" : "quiz";
+      rows.push({ item: { key: `${kind}:${set.id}`, kind, id: set.id, title: set.title, status: set.status, detail: `${set.questions.length} question${set.questions.length > 1 ? "s" : ""}` }, order: set.contentOrder ?? unplaced, rank: kind === "quiz" ? 1 : 2 });
+    }
+    for (const test of chapterTests) {
+      if (test.contentNodeId !== topicId) continue;
+      rows.push({ item: { key: `test:${test.id}`, kind: "test", id: test.id, title: test.title, status: test.status, detail: `${test.questions.length} questions · ${test.settings.durationMinutes} min` }, order: test.contentOrder ?? unplaced, rank: 3 });
+    }
+    rows.sort((a, b) => a.order - b.order || a.rank - b.rank || a.item.title.localeCompare(b.item.title, "fr"));
+    const placed = rows.map(row => row.order).filter(order => order < unplaced);
+    return { items: rows.map(row => row.item), nextOrder: placed.length ? Math.max(...placed) + 1 : 0 };
+  }
+
+  async function applyChapterOrder(ordered: ChapterItem[]) {
+    if (!user) return;
+    setNodes(current => current.map(node => { const index = ordered.findIndex(item => item.kind === "lesson" && item.id === node.id); return index < 0 ? node : { ...node, order: index }; }));
+    setChapterSets(current => current.map(set => { const index = ordered.findIndex(item => (item.kind === "quiz" || item.kind === "exercise") && item.id === set.id); return index < 0 ? set : { ...set, contentOrder: index }; }));
+    setChapterTests(current => current.map(test => { const index = ordered.findIndex(item => item.kind === "test" && item.id === test.id); return index < 0 ? test : { ...test, contentOrder: index }; }));
+    setSaving(true); setError(""); setMessage("");
+    try {
+      const jobs: Promise<unknown>[] = [];
+      ordered.forEach((item, index) => {
+        if (item.kind === "lesson") {
+          const node = nodes.find(entry => entry.id === item.id);
+          if (node?.sharedKey && node.order !== index) jobs.push(updateSharedContentNode(node.sharedKey, { order: index }, user.uid));
+        } else if (item.kind === "test") {
+          const test = chapterTests.find(entry => entry.id === item.id);
+          if (test && test.contentOrder !== index) jobs.push(updatePsychotechnicalTestPlacement(test.id, { contentOrder: index }));
+        } else {
+          const set = chapterSets.find(entry => entry.id === item.id);
+          if (set && set.contentOrder !== index) jobs.push(updateQuestionSetPlacement(set.id, { contentOrder: index }));
+        }
+      });
+      await Promise.all(jobs);
+      setMessage("Ordre du chapitre mis à jour.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Impossible de réorganiser le chapitre.");
+      await Promise.all([refreshSubjectData(subjectId), refreshChapterExtras(subjectId)]).catch(console.error);
+    } finally { setSaving(false); }
+  }
+
+  async function reorderChapterItems(topicId: string, draggedKey: string, targetKey: string) {
+    if (draggedKey === targetKey) return;
+    const ordered = [...buildTopicItems(topicId).items];
+    const from = ordered.findIndex(item => item.key === draggedKey), to = ordered.findIndex(item => item.key === targetKey);
+    if (from < 0 || to < 0) return;
+    const [moved] = ordered.splice(from, 1); ordered.splice(to, 0, moved);
+    await applyChapterOrder(ordered);
+  }
+
+  async function moveChapterItem(topicId: string, item: ChapterItem, direction: -1 | 1) {
+    const ordered = [...buildTopicItems(topicId).items];
+    const from = ordered.findIndex(entry => entry.key === item.key), to = from + direction;
+    if (from < 0 || to < 0 || to >= ordered.length) return;
+    [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
+    await applyChapterOrder(ordered);
+  }
+
   async function refreshSubjectData(id = subjectId) {
     if (!id) { setAssociations([]); setNodes([]); setNodeId(""); return; }
     const [items, sharedNodes] = await Promise.all([listCourseSubjectsBySubjectId(id), listSharedContentNodes(id)]);
@@ -4222,6 +4304,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
   }
   useEffect(() => { void listAdminSubjects().then(setSubjects).catch(console.error); }, []);
   useEffect(() => { void refreshSubjectData().catch(e => setError(e instanceof Error ? e.message : "Impossible de charger la matière.")); }, [subjectId]);
+  useEffect(() => { void refreshChapterExtras().catch(e => setError(e instanceof Error ? e.message : "Impossible de charger les quiz et tests de la matière.")); }, [subjectId]);
   useEffect(() => { void refreshBlocks().catch(e => setError(e instanceof Error ? e.message : "Impossible de charger le contenu.")); }, [nodeId]);
   useEffect(() => { void refreshQuestions().catch(e => setError(e instanceof Error ? e.message : "Impossible de charger les questions.")); }, [nodeId, subjectId]);
   useEffect(() => {
@@ -4278,6 +4361,13 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
     const children = isTopic ? nodes.filter(item => item.parentId === node.id) : [];
     setSaving(true); setError(""); setMessage(""); setOpenNodeMenuId(null);
     try {
+      if (isTopic) {
+        await Promise.all([
+          ...chapterSets.filter(set => set.contentNodeId === node.id).map(set => updateQuestionSetPlacement(set.id, { contentNodeId: null })),
+          ...chapterTests.filter(test => test.contentNodeId === node.id).map(test => updatePsychotechnicalTestPlacement(test.id, { contentNodeId: null })),
+        ]);
+        await refreshChapterExtras();
+      }
       for (const child of children) {
         if (child.sharedKey) await deleteSharedContentNode(child.sharedKey);
       }
@@ -4344,7 +4434,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
     setQuestionCorrect("a"); setQuestionExplanation("");
   }
   function selectNode(node: ContentNode) {
-    setOpenNodeMenuId(null);
+    setOpenNodeMenuId(null); setChapterFlow(null);
     setShowQuestionBank(false); setNodeId(node.id); setEditingNodeKey(node.sharedKey ?? null); setNodeTitle(node.title); setNodeDescription(node.description ?? ""); setNodeImageUrl(node.imageUrl ?? ""); setNodeImageFile(null); setNodeImagePreview(node.imageUrl ?? ""); setNodeImagePosition(node.imagePosition ?? "center"); setNodeType(node.type); setParentId(node.parentId ?? ""); setEditingBlockKey(null); setBlockHtml(""); setPreview(false);
     if (node.parentId) setExpandedTopics(current => ({...current, [node.parentId!]: true}));
   }
@@ -4352,6 +4442,75 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
     setExpandedTopics(current => ({...current, [node.id]: !current[node.id]}));
     selectNode(node);
   }
+
+  function startNewLesson(topic: ContentNode) {
+    setChapterFlow(null); setEditingNodeKey(null); setNodeTitle(""); setNodeDescription(""); setNodeImageUrl(""); setNodeImageFile(null); setNodeImagePreview(""); setNodeImagePosition("center");
+    setParentId(topic.id); setNodeId(topic.id); setNodeType("chapter"); setShowNodeForm(true);
+    setExpandedTopics(current => ({ ...current, [topic.id]: true }));
+  }
+
+  function startChapterAdd(topic: ContentNode, kind: ChapterAddKind) {
+    setError(""); setMessage("");
+    if (kind === "lesson") { startNewLesson(topic); return; }
+    setShowNodeForm(false); setNodeId(topic.id); setExpandedTopics(current => ({ ...current, [topic.id]: true }));
+    setChapterFlow({ kind, topicId: topic.id });
+  }
+
+  async function finishChapterFlow(text: string) {
+    setChapterFlow(null);
+    try { await refreshChapterExtras(subjectId); } catch (e) { console.error(e); }
+    setMessage(text);
+  }
+
+  async function handleChapterAction(item: ChapterItem, action: ChapterItemAction) {
+    const lessonNode = item.kind === "lesson" ? nodes.find(node => node.id === item.id) : undefined;
+    setError(""); setMessage("");
+    try {
+      if (action === "open" && lessonNode) { selectNode(lessonNode); return; }
+      if (action === "rename") {
+        if (lessonNode) { editNodeDetails(lessonNode); return; }
+        const set = chapterSets.find(entry => entry.id === item.id);
+        const test = chapterTests.find(entry => entry.id === item.id);
+        setRenameTarget(item); setRenameTitle(item.title); setRenameDescription((item.kind === "test" ? test?.description : set?.description) ?? "");
+        return;
+      }
+      if (action === "toggle-publish") {
+        const publish = item.status !== "published";
+        if (item.kind === "test") await updatePsychotechnicalTestStatus(item.id, publish ? "published" : "draft");
+        else await updateQuestionSetStatus(item.id, publish ? "published" : "draft");
+        await refreshChapterExtras(); setMessage(publish ? "Contenu publié." : "Contenu dépublié.");
+        return;
+      }
+      if (action === "remove") {
+        const confirmed = await confirmAction({ title: "Retirer du chapitre ?", description: <>« {item.title} » ne sera plus affiché dans ce chapitre. <strong>Le contenu n’est pas supprimé</strong> : vous pourrez le rajouter plus tard avec « + Ajouter un contenu ».</>, confirmLabel: "Retirer du chapitre", tone: "info" });
+        if (!confirmed) return;
+        if (item.kind === "test") await updatePsychotechnicalTestPlacement(item.id, { contentNodeId: null });
+        else await updateQuestionSetPlacement(item.id, { contentNodeId: null });
+        await refreshChapterExtras(); setMessage("Contenu retiré du chapitre. Il n’a pas été supprimé.");
+        return;
+      }
+      if (action === "delete") {
+        if (lessonNode) { setPendingNodeDeletion(lessonNode); return; }
+        const confirmed = await confirmAction({ title: "Supprimer définitivement ?", description: <>« {item.title} » sera supprimé définitivement, y compris pour les étudiants. Pour seulement l’enlever de ce chapitre, utilisez « Retirer du chapitre ». Cette action est irréversible.</> });
+        if (!confirmed) return;
+        if (item.kind === "test") await deletePsychotechnicalTest(item.id);
+        else await deleteQuestionSet(item.id);
+        await refreshChapterExtras(); setMessage("Contenu supprimé définitivement.");
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "L’action n’a pas pu être effectuée."); }
+  }
+
+  async function saveRename() {
+    if (!renameTarget || !renameTitle.trim()) return;
+    setSaving(true); setError("");
+    try {
+      if (renameTarget.kind === "test") await updatePsychotechnicalTestDetails(renameTarget.id, { title: renameTitle, description: renameDescription });
+      else await updateQuestionSetDetails(renameTarget.id, { title: renameTitle, description: renameDescription });
+      setRenameTarget(null); await refreshChapterExtras(); setMessage("Titre modifié.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Impossible de modifier ce contenu."); }
+    finally { setSaving(false); }
+  }
+
   async function saveNode() {
     if (!user || !subjectId || !nodeTitle.trim()) return;
     setSaving(true); setError(""); setMessage("");
@@ -4362,7 +4521,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
         await updateSharedContentNode(editingNodeKey, { title: nodeTitle.trim(), description: nodeDescription.trim(), type, ...(parentId ? {} : { imagePosition: nodeImagePosition, status: "published" }) }, user.uid);
       } else {
         const parent = parentId ? nodes.find(item => item.id === parentId) : undefined;
-        const created = await createSharedContentNode({ subjectId, parentSharedKey: parent?.sharedKey, type, title: nodeTitle.trim(), description: nodeDescription.trim(), order: nodes.filter(item => (parentId ? item.parentId === parentId : !item.parentId)).length, numberingStyle: nodes.find(item => (parentId ? item.parentId === parentId : !item.parentId))?.numberingStyle ?? (parentId ? "alpha" : "numeric"), userId: user.uid, imagePosition: parentId ? undefined : nodeImagePosition });
+        const created = await createSharedContentNode({ subjectId, parentSharedKey: parent?.sharedKey, type, title: nodeTitle.trim(), description: nodeDescription.trim(), order: parentId ? buildTopicItems(parentId).nextOrder : nodes.filter(item => !item.parentId).length, numberingStyle: nodes.find(item => (parentId ? item.parentId === parentId : !item.parentId))?.numberingStyle ?? (parentId ? "alpha" : "numeric"), userId: user.uid, imagePosition: parentId ? undefined : nodeImagePosition });
         if (!parentId) await updateSharedContentNode(created.sharedKey, { status: "published" }, user.uid);
         key = created.sharedKey;
         setNodeId(created.nodeIds[0] ?? "");
@@ -4440,16 +4599,20 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
           <button className="outline small-btn" style={{marginTop:12,width:"100%"}} onClick={()=>{setNodeId("");setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setNodeImageUrl("");setNodeImageFile(null);setNodeImagePreview("");setNodeImagePosition("center");setParentId("");setNodeType("topic");setShowNodeForm(true);}}>+ Nouveau thème</button>
           <div className="curriculum-numbering-control"><label htmlFor="topic-numbering-style">Numérotation des thèmes</label><select id="topic-numbering-style" className="fake-input" value={rootNodes[0]?.numberingStyle ?? "numeric"} onChange={e=>void changeSiblingNumbering(rootNodes,e.target.value as ContentNumberingStyle)}><option value="numeric">1, 2, 3…</option><option value="alpha">a), b), c)…</option><option value="roman">I, II, III…</option><option value="hierarchical">1.1, 1.2…</option></select></div>
           <div className="content-tree-simple">
-            {rootNodes.map((topic,index)=>{const lessons=nodes.filter(n=>n.parentId===topic.id).sort((a,b)=>a.order-b.order);const open=expandedTopics[topic.id] ?? false;return <div key={topic.id} className="content-tree-topic" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(draggedNodeId)void reorderSiblings(rootNodes,draggedNodeId,topic.id);}}>
-              <div draggable onDragStart={()=>setDraggedNodeId(topic.id)} onDragEnd={()=>setDraggedNodeId(null)} className={`tree-item tree-item-with-menu curriculum-draggable ${nodeId===topic.id?"active":""}`}><button className="tree-item-main" onClick={()=>openTopic(topic)}><span>{formatNodeNumber(index,rootNodes[0]?.numberingStyle ?? "numeric")}</span><div><strong>{topic.title}</strong><small>{lessons.length} leçon{lessons.length!==1?"s":""}</small></div></button><button type="button" className="node-menu-trigger" aria-label={`Options du thème ${topic.title}`} aria-expanded={openNodeMenuId===topic.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===topic.id?null:topic.id);}}>•••</button>{openNodeMenuId===topic.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(topic)}>Modifier</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(topic);}}>Supprimer définitivement</button></div>}</div>
-              {open && <div className="content-tree-lessons"><div className="curriculum-numbering-control lesson-numbering-control"><label>Numérotation des leçons</label><select className="fake-input" value={lessons[0]?.numberingStyle ?? "alpha"} onChange={e=>void changeSiblingNumbering(lessons,e.target.value as ContentNumberingStyle)}><option value="alpha">a), b), c)…</option><option value="numeric">1, 2, 3…</option><option value="roman">I, II, III…</option><option value="hierarchical">{index+1}.1, {index+1}.2…</option></select></div>{lessons.map((lesson,i)=><div key={lesson.id} draggable onDragStart={()=>setDraggedNodeId(lesson.id)} onDragEnd={()=>setDraggedNodeId(null)} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(draggedNodeId)void reorderSiblings(lessons,draggedNodeId,lesson.id);}} className={`tree-item tree-item-with-menu lesson-tree-item curriculum-draggable ${nodeId===lesson.id?"active":""}`}><button className="tree-item-main" onClick={()=>selectNode(lesson)}><span>{formatNodeNumber(i,lessons[0]?.numberingStyle ?? "alpha",index)}</span><div><strong>{lesson.title}</strong><small>{lesson.status === "published" ? "Publié" : "Brouillon"}</small></div></button><button type="button" className="node-menu-trigger" aria-label={`Options de la leçon ${lesson.title}`} aria-expanded={openNodeMenuId===lesson.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===lesson.id?null:lesson.id);}}>•••</button>{openNodeMenuId===lesson.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(lesson)}>Modifier</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(lesson);}}>Supprimer définitivement</button></div>}</div>)}<button className="tree-add-lesson" onClick={()=>{setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setNodeImageUrl("");setNodeImageFile(null);setNodeImagePreview("");setNodeImagePosition("center");setParentId(topic.id);setNodeId(topic.id);setNodeType("chapter");setShowNodeForm(true);}}>+ Ajouter une leçon</button></div>}
+            {rootNodes.map((topic,index)=>{const lessons=nodes.filter(n=>n.parentId===topic.id).sort((a,b)=>a.order-b.order);const open=expandedTopics[topic.id] ?? false;const built=buildTopicItems(topic.id);const otherCount=built.items.length-lessons.length;return <div key={topic.id} className="content-tree-topic" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(draggedNodeId)void reorderSiblings(rootNodes,draggedNodeId,topic.id);}}>
+              <div draggable onDragStart={()=>setDraggedNodeId(topic.id)} onDragEnd={()=>setDraggedNodeId(null)} className={`tree-item tree-item-with-menu curriculum-draggable ${nodeId===topic.id?"active":""}`}><button className="tree-item-main" onClick={()=>openTopic(topic)}><span>{formatNodeNumber(index,rootNodes[0]?.numberingStyle ?? "numeric")}</span><div><strong>{topic.title}</strong><small>{lessons.length} leçon{lessons.length!==1?"s":""}{otherCount>0?` · ${otherCount} évaluation${otherCount!==1?"s":""}`:""}</small></div></button><button type="button" className="node-menu-trigger" aria-label={`Options du thème ${topic.title}`} aria-expanded={openNodeMenuId===topic.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===topic.id?null:topic.id);}}>•••</button>{openNodeMenuId===topic.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(topic)}>Modifier</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(topic);}}>Supprimer définitivement</button></div>}</div>
+              {open && <div className="content-tree-lessons"><div className="curriculum-numbering-control lesson-numbering-control"><label>Numérotation des leçons</label><select className="fake-input" value={lessons[0]?.numberingStyle ?? "alpha"} onChange={e=>void changeSiblingNumbering(lessons,e.target.value as ContentNumberingStyle)}><option value="alpha">a), b), c)…</option><option value="numeric">1, 2, 3…</option><option value="roman">I, II, III…</option><option value="hierarchical">{index+1}.1, {index+1}.2…</option></select></div>{built.items.map((item,i)=>{const lesson=item.kind==="lesson"?nodes.find(n=>n.id===item.id):undefined;const numberLabel=formatNodeNumber(i,lessons[0]?.numberingStyle ?? "alpha",index);const typeLabel=item.kind==="quiz"?"Quiz":item.kind==="exercise"?"Exercice":item.kind==="test"?"Test":"";return <div key={item.key} draggable onDragStart={()=>setDraggedChapterKey(item.key)} onDragEnd={()=>setDraggedChapterKey(null)} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const dragged=draggedChapterKey;setDraggedChapterKey(null);if(dragged)void reorderChapterItems(topic.id,dragged,item.key);}} className={`tree-item tree-item-with-menu lesson-tree-item curriculum-draggable ${lesson&&nodeId===lesson.id?"active":""}`}><button className="tree-item-main" onClick={()=>{if(lesson)selectNode(lesson);else{selectNode(topic);}}}><span>{numberLabel}</span><div><strong>{item.title}</strong><small>{typeLabel?`${typeLabel} · `:""}{item.status === "published" ? "Publié" : "Brouillon"}</small></div></button>{lesson && <><button type="button" className="node-menu-trigger" aria-label={`Options de la leçon ${lesson.title}`} aria-expanded={openNodeMenuId===lesson.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===lesson.id?null:lesson.id);}}>•••</button>{openNodeMenuId===lesson.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(lesson)}>Modifier</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(lesson);}}>Supprimer définitivement</button></div>}</>}</div>})}<ChapterAddMenu block onSelect={kind=>startChapterAdd(topic,kind)} disabled={saving} /></div>}
             </div>})}
           </div>
         </>}
       </div>
       <div className="editor panel">
         {showNodeForm && <div className="compact-create-form"><div className="lesson-workspace-head"><div><span className="pill">{editingNodeKey ? (parentId ? "MODIFIER LA LEÇON" : "MODIFIER LE THÈME") : parentId ? "NOUVELLE LEÇON" : "NOUVEAU THÈME"}</span><h2>{editingNodeKey ? (parentId ? "Modifier la leçon" : "Modifier le thème") : parentId ? "Ajouter une leçon" : "Créer un thème"}</h2></div></div><div className="form-grid"><label>Titre<input className="fake-input" autoFocus value={nodeTitle} onChange={e=>setNodeTitle(e.target.value)} placeholder={parentId ? "Ex. Divisibilité" : "Ex. Théorie des nombres"} /></label><label>Description <span className="optional-label">(facultative)</span><input className="fake-input" value={nodeDescription} onChange={e=>setNodeDescription(e.target.value)} placeholder="Une courte description" /></label></div>{!parentId && <div className="topic-illustration-editor"><div><label>Illustration du thème <span className="optional-label">(facultative)</span></label><label className="topic-upload-box"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>handleNodeImageChange(e.target.files?.[0] ?? null)} /><span>☁️ Cliquez pour ajouter une image</span><small>JPG, PNG ou WebP · recommandé : 1600 × 900 px<br/>Carré, paysage ou portrait acceptés · 8 Mo max.</small></label></div><div className="topic-image-settings">{nodeImagePreview ? <div className="topic-image-preview" style={{backgroundImage:`url(${nodeImagePreview})`,backgroundPosition:nodeImagePosition}} /> : <div className="topic-image-preview topic-image-preview-empty">Aperçu</div>}<label>Position de l’image<select className="fake-input" value={nodeImagePosition} onChange={e=>setNodeImagePosition(e.target.value as NonNullable<ContentNode["imagePosition"]>)}><option value="center">Centre</option><option value="top">Haut</option><option value="bottom">Bas</option><option value="left">Gauche</option><option value="right">Droite</option></select></label></div></div>}<div className="editor-actions"><button className="primary" disabled={saving || !nodeTitle.trim()} onClick={()=>void saveNode()}>{saving ? "Enregistrement..." : editingNodeKey ? "Enregistrer" : "Créer"}</button><button className="outline" onClick={resetNode}>Annuler</button></div></div>}
-        {!subjectId ? <div className="empty-state"><h3>Sélectionnez une matière</h3><p>Commencez ensuite par créer un thème.</p></div> : showNodeForm ? null : !selectedNode ? <div className="empty-state"><h3>Votre matière est prête.</h3><p>Créez un thème à gauche, puis ajoutez ses leçons.</p></div> : selectedNode.parentId ? <>
+        {!subjectId ? <div className="empty-state"><h3>Sélectionnez une matière</h3><p>Commencez ensuite par créer un thème.</p></div> : showNodeForm ? null : chapterFlow && selectedNode && !selectedNode.parentId && chapterFlow.topicId === selectedNode.id ? (
+          chapterFlow.kind === "test"
+            ? <Suspense fallback={<LightweightLoader />}><AdminPsychotechnicalPage chapter={{ subjectId, contentNodeId: selectedNode.id, courseIds: Array.from(new Set(associations.map(item => item.courseId))), nextOrder: buildTopicItems(selectedNode.id).nextOrder, onDone: text => void finishChapterFlow(text), onCancel: () => setChapterFlow(null) }} /></Suspense>
+            : <QuestionAdmin key={chapterFlow.kind} initialSubjectId={subjectId} chapter={{ contentNodeId: selectedNode.id, setType: chapterFlow.kind, nextOrder: buildTopicItems(selectedNode.id).nextOrder, onDone: text => void finishChapterFlow(text), onCancel: () => setChapterFlow(null) }} />
+        ) : !selectedNode ? <div className="empty-state"><h3>Votre matière est prête.</h3><p>Créez un thème à gauche, puis ajoutez ses leçons.</p></div> : selectedNode.parentId ? <>
           <div className="lesson-workspace-head"><div><span className="pill">LEÇON</span><h2>{selectedNode.title}</h2><small>{selectedTopic?.title} · {selectedNode.status === "published" ? "Publié" : "Brouillon"}</small></div><div className="lesson-workspace-actions"><button className="outline small-btn lesson-head-btn lesson-head-title" onClick={()=>editNodeDetails(selectedNode)}><PencilIcon />Modifier le titre</button><button className={`small-btn lesson-head-btn lesson-head-content${preview ? " is-edit" : ""}`} onClick={()=>{ if (preview) setEditingBlockKey(blocks[0]?.sharedKey ?? null); setPreview(!preview); }}>{preview ? <><ContentEditIcon />Éditer le contenu</> : <><EyeIcon />Aperçu</>}</button>{selectedNode.status === "published" ? <button className="outline small-btn lesson-head-btn" onClick={()=>void unpublishLesson()}>Dépublier</button> : <button className="primary small-btn lesson-head-btn" onClick={()=>void publishLesson()}>Publier</button>}</div></div>
           {preview ? <LessonContentReader html={String(blockHtml || blocks[0]?.content.html || "")} /> : <>
             <RichLessonEditor value={blockHtml || String(blocks[0]?.content.html ?? "")} onChange={setBlockHtml} storageFolder={`content-subjects/${subjectId}/${selectedNode.id}`} initialExpanded lessonTitle={selectedNode.title} onExitExpanded={()=>setPreview(true)} onSave={saveLesson} isSaving={saving} canSave={Boolean(blockHtml.trim())} />
@@ -4461,18 +4624,29 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
             </div>
           </>}
         </> : <>
-          <div className="lesson-workspace-head"><div><span className="pill">THÈME</span><h2>{selectedNode.title}</h2><small>{childNodes.length} leçon{childNodes.length!==1?"s":""}</small></div><button className="primary small-btn" onClick={()=>{setEditingNodeKey(null);setNodeTitle("");setNodeDescription("");setParentId(selectedNode.id);setNodeId(selectedNode.id);setNodeType("chapter");setShowNodeForm(true);}}>+ Ajouter une leçon</button></div>
-          <div className="topic-lesson-grid">{childNodes.length?childNodes.map((lesson,index)=><button className="topic-lesson-card" key={lesson.id} onClick={()=>selectNode(lesson)}><span>{formatNodeNumber(index,childNodes[0]?.numberingStyle ?? "alpha",rootNodes.findIndex(item=>item.id===selectedNode.id))}</span><strong>{lesson.title}</strong><small>{lesson.status === "published" ? "Publié" : "Brouillon"}</small></button>):<div className="empty-state">Ce thème ne contient encore aucune leçon.</div>}</div>
+          {(() => { const built = buildTopicItems(selectedNode.id); const topicIndex = rootNodes.findIndex(item => item.id === selectedNode.id); const style = childNodes[0]?.numberingStyle ?? "alpha"; return <>
+          <div className="lesson-workspace-head"><div><span className="pill">THÈME</span><h2>{selectedNode.title}</h2><small>{built.items.length} contenu{built.items.length!==1?"s":""} dans ce chapitre</small></div><ChapterAddMenu onSelect={kind=>startChapterAdd(selectedNode,kind)} disabled={saving} /></div>
+          <ChapterContentList items={built.items} busy={saving} formatNumber={index=>formatNodeNumber(index,style,topicIndex)} onAction={(item,action)=>void handleChapterAction(item,action)} onMove={(item,direction)=>void moveChapterItem(selectedNode.id,item,direction)} onReorder={(draggedKey,targetKey)=>void reorderChapterItems(selectedNode.id,draggedKey,targetKey)} />
+          </>; })()}
         </>}
         {(selectedNode && !selectedNode.parentId) && <div className="editor-actions"><button className="outline" onClick={()=>{setNodeTitle(selectedNode.title);setNodeDescription(selectedNode.description??"");setNodeImageUrl(selectedNode.imageUrl??"");setNodeImageFile(null);setNodeImagePreview(selectedNode.imageUrl??"");setNodeImagePosition(selectedNode.imagePosition??"center");setEditingNodeKey(selectedNode.sharedKey??null);setParentId("");setNodeType("topic");setShowNodeForm(true);}}>Modifier le thème</button></div>}
       </div>
     </div>
+    {renameTarget && <div className="cav-confirm-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget && !saving)setRenameTarget(null);}}>
+      <section className="cav-confirm-dialog chapter-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="chapter-rename-title">
+        <span className="cav-confirm-eyebrow">{renameTarget.kind === "test" ? "TEST PSYCHOTECHNIQUE" : renameTarget.kind === "exercise" ? "EXERCICE" : "QUIZ"}</span>
+        <h2 id="chapter-rename-title">Modifier le titre</h2>
+        <label>Titre<input className="fake-input" autoFocus value={renameTitle} onChange={e=>setRenameTitle(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void saveRename();}} /></label>
+        <label>Description <span className="optional-label">(facultative)</span><textarea className="fake-textarea short" rows={2} value={renameDescription} onChange={e=>setRenameDescription(e.target.value)} /></label>
+        <div className="cav-confirm-actions"><button type="button" className="cav-confirm-cancel" disabled={saving} onClick={()=>setRenameTarget(null)}>Annuler</button><button type="button" className="primary" disabled={saving || !renameTitle.trim()} onClick={()=>void saveRename()}>{saving ? "Enregistrement…" : "Enregistrer"}</button></div>
+      </section>
+    </div>}
     {pendingNodeDeletion && <div className="cav-confirm-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget && !saving)setPendingNodeDeletion(null);}}>
       <section className="cav-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cav-delete-title" aria-describedby="cav-delete-description">
         <div className="cav-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5m0 3h.01M10.3 3.9 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3l-7.5-13.1a2 2 0 0 0-3.4 0Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span className="cav-confirm-eyebrow">CONFIRMATION REQUISE</span>
         <h2 id="cav-delete-title">Supprimer {pendingNodeDeletion.parentId ? "cette leçon" : "ce thème"} ?</h2>
-        <p id="cav-delete-description">{pendingNodeDeletion.parentId ? <>La leçon <strong>« {pendingNodeDeletion.title} »</strong> sera supprimée définitivement.</> : <>Le thème <strong>« {pendingNodeDeletion.title} »</strong> ainsi que toutes ses leçons seront supprimés définitivement.</>} Cette action est irréversible.</p>
+        <p id="cav-delete-description">{pendingNodeDeletion.parentId ? <>La leçon <strong>« {pendingNodeDeletion.title} »</strong> sera supprimée définitivement.</> : <>Le thème <strong>« {pendingNodeDeletion.title} »</strong> ainsi que toutes ses leçons seront supprimés définitivement. Ses quiz, exercices et tests psychotechniques ne sont pas supprimés : ils restent disponibles via « + Ajouter un contenu » dans un autre thème.</>} Cette action est irréversible.</p>
         <div className="cav-confirm-actions"><button type="button" className="cav-confirm-cancel" disabled={saving} onClick={()=>setPendingNodeDeletion(null)}>Annuler</button><button type="button" className="cav-confirm-delete" disabled={saving} onClick={()=>{if(pendingNodeDeletion)void removeNodePermanently(pendingNodeDeletion);}}><span aria-hidden="true">{saving ? "…" : "⌫"}</span>{saving ? "Suppression…" : "Supprimer définitivement"}</button></div>
       </section>
     </div>}
@@ -4576,7 +4750,16 @@ function LessonQuestionForm({ questions, lessonId, courseId, userId }: { questio
 }
 
 
-function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: string; onBack?: () => void }) {
+/** Inside a chapter, QuestionAdmin creates (or picks) one quiz/exercise and places it in that chapter. */
+type QuestionChapterContext = {
+  contentNodeId: string;
+  setType: "quiz" | "exercise";
+  nextOrder: number;
+  onDone: (message: string) => void;
+  onCancel: () => void;
+};
+
+function QuestionAdmin({ initialSubjectId = "", onBack, chapter }: { initialSubjectId?: string; onBack?: () => void; chapter?: QuestionChapterContext }) {
   const { user } = useAuth();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const subjectId = initialSubjectId;
@@ -4594,12 +4777,12 @@ function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: s
   const [shortAnswer, setShortAnswer] = useState("");
   const [points, setPoints] = useState("1");
   const [explanation, setExplanation] = useState("");
-  const [setType, setSetType] = useState<"quiz" | "exercise">("quiz");
+  const [setType, setSetType] = useState<"quiz" | "exercise">(chapter?.setType ?? "quiz");
   const [setTitle, setSetTitle] = useState("");
   const [setDescription, setSetDescription] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
-  const [showEvaluationForm, setShowEvaluationForm] = useState(false);
+  const [showEvaluationForm, setShowEvaluationForm] = useState(Boolean(chapter));
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -4684,12 +4867,24 @@ function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: s
         description: setDescription.trim(),
         subjectId,
         questionIds: selectedIds,
-        type: setType,
+        type: chapter?.setType ?? setType,
         settings: { showScore: true, showCorrections: true, showExplanations: true, showPoints: true, allowRetry: true, passingScore: 70 },
         userId: user.uid,
+        ...(chapter ? { contentNodeId: chapter.contentNodeId, contentOrder: chapter.nextOrder } : {}),
       });
+      if (chapter) { chapter.onDone(chapter.setType === "exercise" ? "Exercice ajouté au chapitre (brouillon)." : "Quiz ajouté au chapitre (brouillon)."); return; }
       setSetTitle(""); setSetDescription(""); setSelectedIds([]); setShowEvaluationForm(false); setMessage("Évaluation créée en brouillon."); await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "Impossible de créer l'évaluation."); }
+    finally { setSaving(false); }
+  }
+
+  const attachableSets = chapter ? sets.filter(item => !item.contentNodeId && (chapter.setType === "exercise" ? item.type === "exercise" : item.type === "quiz" || item.type === "practice")) : [];
+
+  async function attachExistingSet(item: QuestionSet) {
+    if (!chapter) return;
+    setError(""); setSaving(true);
+    try { await updateQuestionSetPlacement(item.id, { contentNodeId: chapter.contentNodeId, contentOrder: chapter.nextOrder }); chapter.onDone(chapter.setType === "exercise" ? "Exercice ajouté au chapitre." : "Quiz ajouté au chapitre."); }
+    catch (e) { setError(e instanceof Error ? e.message : "Impossible d’ajouter ce contenu au chapitre."); }
     finally { setSaving(false); }
   }
 
@@ -4706,16 +4901,18 @@ function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: s
 
   return (
     <div className="page">
-      {onBack && <button className="back" onClick={onBack}>← Retour à la matière</button>}
+      {chapter ? <button className="back" onClick={chapter.onCancel}>← Retour au chapitre</button> : onBack && <button className="back" onClick={onBack}>← Retour à la matière</button>}
       <div className="page-title">
         <div>
-          <div className="eyebrow">ÉVALUATIONS</div>
-          <h1>Quiz & exercices</h1>
-          <p>Créez des questions puis assemblez-les en quiz ou exercices.</p>
+          <div className="eyebrow">{chapter ? "AJOUTER AU CHAPITRE" : "ÉVALUATIONS"}</div>
+          <h1>{chapter ? (chapter.setType === "exercise" ? "Nouvel exercice" : "Nouveau quiz") : "Quiz & exercices"}</h1>
+          <p>{chapter ? "Choisissez des questions publiées. Le contenu sera placé dans ce chapitre automatiquement." : "Créez des questions puis assemblez-les en quiz ou exercices."}</p>
         </div>
       </div>
       {error && <div className="form-error">{error}</div>}
       {message && <div className="form-success">{message}</div>}
+
+      {chapter && attachableSets.length > 0 && <section className="panel"><div className="section-head"><div><div className="eyebrow">DÉJÀ CRÉÉS</div><h2>{chapter.setType === "exercise" ? "Utiliser un exercice existant" : "Utiliser un quiz existant"}</h2><p>Ajoutez au chapitre un contenu déjà créé pour cette matière.</p></div></div><div className="admin-list">{attachableSets.map(item => <div className="admin-course" key={item.id}><div><strong>{item.title}</strong><span>{item.questions.length} question(s) · {item.status === "published" ? "Publié" : "Brouillon"}</span></div><div className="admin-list-actions"><button className="outline small-btn" disabled={saving} onClick={() => void attachExistingSet(item)}>Ajouter au chapitre</button></div></div>)}</div></section>}
 
       <section className="panel">
         <div className="section-head">
@@ -4744,11 +4941,11 @@ function QuestionAdmin({ initialSubjectId = "", onBack }: { initialSubjectId?: s
 
       <section className="panel">
         <div className="section-head">
-          <div><div className="eyebrow">2 · ÉVALUATIONS</div><h2>Quiz & exercices</h2><p>Choisissez les questions publiées à utiliser.</p></div>
-          <button className="primary" disabled={!published.length} onClick={() => { setShowEvaluationForm(v => !v); setShowQuestionForm(false); }}>{showEvaluationForm ? "Fermer" : "+ Créer une évaluation"}</button>
+          <div><div className="eyebrow">{chapter ? "2 · CONTENU DU CHAPITRE" : "2 · ÉVALUATIONS"}</div><h2>{chapter ? (chapter.setType === "exercise" ? "Créer l’exercice" : "Créer le quiz") : "Quiz & exercices"}</h2><p>{published.length || !chapter ? "Choisissez les questions publiées à utiliser." : "Créez puis publiez au moins une question dans la banque ci-dessus pour pouvoir l’utiliser ici."}</p></div>
+          {!chapter && <button className="primary" disabled={!published.length} onClick={() => { setShowEvaluationForm(v => !v); setShowQuestionForm(false); }}>{showEvaluationForm ? "Fermer" : "+ Créer une évaluation"}</button>}
         </div>
-        {showEvaluationForm && <div className="compact-create-panel"><div className="form-grid"><label>Type<select className="fake-input" value={setType} onChange={e => setSetType(e.target.value as "quiz" | "exercise")}><option value="quiz">Quiz</option><option value="exercise">Exercice</option></select></label><label>Titre<input className="fake-input" value={setTitle} onChange={e => setSetTitle(e.target.value)} placeholder={`${setType === "quiz" ? "Quiz" : "Exercice"} — ${subjectName}`} /></label></div><label>Description <span className="optional-label">(facultative)</span><textarea className="fake-textarea short" rows={2} value={setDescription} onChange={e => setSetDescription(e.target.value)} /></label><div className="practice-picker"><strong>Questions à inclure</strong>{published.map(q => <label className="practice-picker-row" key={q.id}><input type="checkbox" checked={selectedIds.includes(q.id)} onChange={() => setSelectedIds(cur => cur.includes(q.id) ? cur.filter(id => id !== q.id) : [...cur, q.id])} /><span>{String(q.questionContent.text ?? "Question")}</span></label>)}</div><div className="editor-actions"><button className="primary" disabled={saving || !selectedIds.length} onClick={() => void createEvaluation()}>{saving ? "Création..." : "Créer en brouillon"}</button><button className="outline" onClick={() => setShowEvaluationForm(false)}>Annuler</button></div></div>}
-        <div className="admin-list">{sets.map(item => <div className="admin-course" key={item.id}><div><strong>{item.title}</strong><span>{item.type === "quiz" ? "Quiz" : item.type === "exercise" ? "Exercice" : item.type} · {item.questions.length} question(s)</span></div><div className="admin-list-actions"><span className={`status ${item.status === "published" ? "published" : "draft"}`}>{item.status === "published" ? "Publié" : "Brouillon"}</span><button className="outline small-btn" onClick={() => void toggleSet(item)}>{item.status === "published" ? "Dépublier" : "Publier"}</button><button className="outline small-btn danger-btn" onClick={() => void removeSet(item)}>Supprimer</button></div></div>)}{!sets.length && <div className="empty-state">Aucun quiz ou exercice créé.</div>}</div>
+        {showEvaluationForm && <div className="compact-create-panel"><div className="form-grid">{!chapter && <label>Type<select className="fake-input" value={setType} onChange={e => setSetType(e.target.value as "quiz" | "exercise")}><option value="quiz">Quiz</option><option value="exercise">Exercice</option></select></label>}<label>Titre<input className="fake-input" value={setTitle} onChange={e => setSetTitle(e.target.value)} placeholder={`${setType === "quiz" ? "Quiz" : "Exercice"} — ${subjectName}`} /></label></div><label>Description <span className="optional-label">(facultative)</span><textarea className="fake-textarea short" rows={2} value={setDescription} onChange={e => setSetDescription(e.target.value)} /></label><div className="practice-picker"><strong>Questions à inclure</strong>{published.map(q => <label className="practice-picker-row" key={q.id}><input type="checkbox" checked={selectedIds.includes(q.id)} onChange={() => setSelectedIds(cur => cur.includes(q.id) ? cur.filter(id => id !== q.id) : [...cur, q.id])} /><span>{String(q.questionContent.text ?? "Question")}</span></label>)}</div><div className="editor-actions"><button className="primary" disabled={saving || !selectedIds.length} onClick={() => void createEvaluation()}>{saving ? "Création..." : "Créer en brouillon"}</button><button className="outline" onClick={() => chapter ? chapter.onCancel() : setShowEvaluationForm(false)}>Annuler</button></div></div>}
+        {!chapter && <div className="admin-list">{sets.map(item => <div className="admin-course" key={item.id}><div><strong>{item.title}</strong><span>{item.type === "quiz" ? "Quiz" : item.type === "exercise" ? "Exercice" : item.type} · {item.questions.length} question(s)</span></div><div className="admin-list-actions"><span className={`status ${item.status === "published" ? "published" : "draft"}`}>{item.status === "published" ? "Publié" : "Brouillon"}</span><button className="outline small-btn" onClick={() => void toggleSet(item)}>{item.status === "published" ? "Dépublier" : "Publier"}</button><button className="outline small-btn danger-btn" onClick={() => void removeSet(item)}>Supprimer</button></div></div>)}{!sets.length && <div className="empty-state">Aucun quiz ou exercice créé.</div>}</div>}
       </section>
     </div>
   );
