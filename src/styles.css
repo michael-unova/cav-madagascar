@@ -4921,3 +4921,10 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
   .lesson-table-hint { display:block; }
   .lesson-content-reader .lesson-reader-page-inner table { border-radius:8px; }
 }
+
+/* index.css forces `table { min-width: 620px }` up to 900px wide, which pushes lesson tables
+   past the phone screen. Lesson tables must be allowed to shrink to the screen width. */
+@media (max-width: 900px) {
+  .lesson-content-reader .lesson-reader-page-inner table,
+  .learning-text table { min-width: 0; }
+}
