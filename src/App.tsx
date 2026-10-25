@@ -103,7 +103,7 @@ import type {
 import type { Subject } from "./types/subject";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { getFirebaseStorage } from "./lib/firebase/storage";
-import { collection, doc, onSnapshot, query, setDoc, Timestamp, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, Timestamp, where, writeBatch } from "firebase/firestore";
 import { getFirebaseFirestore } from "./lib/firebase/firestore";
 import type { LessonComment, LessonCommentCategory } from "./types/lessonComment";
 import type { LessonNotification } from "./features/lessonComments/lessonCommentRepository";
@@ -4890,6 +4890,18 @@ function ProfilePage({ role, displayName, userEmail }: { role: Role; displayName
   </div>;
 }
 
+type StudentEnrollmentRecord = {
+  key: string;
+  enrollmentId: string;
+  historyId?: string;
+  courseId: string;
+  title: string;
+  state: "active" | "expired" | "revoked";
+  enrolledAt?: Date;
+  expiresAt?: Date;
+  revokedAt?: Date;
+};
+
 type AdminStudentRow = {
   uid: string;
   displayName: string;
@@ -4900,11 +4912,14 @@ type AdminStudentRow = {
   courseNames: string[];
   courseIds: string[];
   courseHistoryNames: string[];
+  enrollmentRecords: StudentEnrollmentRecord[];
   role: "student" | "content_manager";
 };
 
 function AdminUsers() {
   const db = getFirebaseFirestore();
+  const { user: currentAdmin } = useAuth();
+  const [revokingKey, setRevokingKey] = useState<string | null>(null);
   const [users, setUsers] = useState<AdminStudentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -4914,7 +4929,6 @@ function AdminUsers() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
   const [availableCourses, setAvailableCourses] = useState<Array<{ id: string; title: string }>>([]);
   const [exporting, setExporting] = useState<"excel" | "word" | "pdf" | null>(null);
-  const [selectedHistoryStudent, setSelectedHistoryStudent] = useState<AdminStudentRow | null>(null);
   const [selectedActiveStudent, setSelectedActiveStudent] = useState<AdminStudentRow | null>(null);
   const [selectedRoleStudent, setSelectedRoleStudent] = useState<AdminStudentRow | null>(null);
   const [roleDraft, setRoleDraft] = useState<"student" | "content_manager">("student");
@@ -4964,6 +4978,51 @@ function AdminUsers() {
         historyNamesByUser.set(userId, current);
       }
 
+      // One record per purchase, with its real current state (en cours / expiré / révoqué).
+      const toDate = (value: unknown) => value && typeof value === "object" && "toDate" in value ? (value as { toDate: () => Date }).toDate() : undefined;
+      const now = Date.now();
+      const stateOf = (data: Record<string, unknown>): StudentEnrollmentRecord["state"] => {
+        const status = String(data.status ?? "");
+        if (status === "revoked") return "revoked";
+        const expiresAt = toDate(data.expiresAt);
+        if (status === "active" && !(expiresAt && expiresAt.getTime() <= now)) return "active";
+        return "expired";
+      };
+      const enrollmentByDocId = new Map(enrollmentsSnapshot.map(item => [String(item.docId ?? ""), item]));
+      const recordsByUser = new Map<string, StudentEnrollmentRecord[]>();
+      const pushRecord = (userId: string, record: StudentEnrollmentRecord) => {
+        const list = recordsByUser.get(userId) ?? [];
+        list.push(record);
+        recordsByUser.set(userId, list);
+      };
+      const coveredPaymentIds = new Set<string>();
+      for (const entry of historySnapshot) {
+        const userId = String(entry.userId ?? "");
+        const courseId = String(entry.courseId ?? "");
+        const title = courseMap.get(courseId);
+        if (!userId || !courseId || !title) continue;
+        const historyId = String(entry.docId ?? "");
+        const enrollmentId = `${userId}_${courseId}`;
+        const current = enrollmentByDocId.get(enrollmentId);
+        const isCurrent = !!current && String(current.paymentId ?? "") === historyId;
+        if (isCurrent) coveredPaymentIds.add(historyId);
+        const source = isCurrent && current ? current : entry;
+        const state = isCurrent && current ? stateOf(current) : String(entry.status ?? "") === "revoked" ? "revoked" : "expired";
+        pushRecord(userId, { key: `h-${historyId}`, enrollmentId, historyId, courseId, title, state, enrolledAt: toDate(source.enrolledAt) ?? toDate(entry.enrolledAt), expiresAt: toDate(source.expiresAt) ?? toDate(entry.expiresAt), revokedAt: toDate(source.revokedAt) });
+      }
+      for (const entry of enrollmentsSnapshot) {
+        const userId = String(entry.userId ?? "");
+        const courseId = String(entry.courseId ?? "");
+        const title = courseMap.get(courseId);
+        if (!userId || !courseId || !title || String(entry.status ?? "") === "pending") continue;
+        if (coveredPaymentIds.has(String(entry.paymentId ?? "")) && String(entry.paymentId ?? "")) continue;
+        pushRecord(userId, { key: `e-${String(entry.docId ?? "")}`, enrollmentId: String(entry.docId ?? `${userId}_${courseId}`), courseId, title, state: stateOf(entry), enrolledAt: toDate(entry.enrolledAt), expiresAt: toDate(entry.expiresAt), revokedAt: toDate(entry.revokedAt) });
+      }
+      const rank = { active: 0, expired: 1, revoked: 1 } as const;
+      for (const list of recordsByUser.values()) {
+        list.sort((a, b) => rank[a.state] - rank[b.state] || (b.enrolledAt?.getTime() ?? 0) - (a.enrolledAt?.getTime() ?? 0));
+      }
+
       const rows = usersSnapshot
         .filter(item => item.data.role === "student" || item.data.role === "content_manager")
         .map(item => ({
@@ -4979,6 +5038,7 @@ function AdminUsers() {
           courseNames: (namesByUser.get(item.id) ?? []).sort((a, b) => a.localeCompare(b, "fr")),
           courseIds: courseIdsByUser.get(item.id) ?? [],
           courseHistoryNames: (historyNamesByUser.get(item.id) ?? []).sort((a, b) => a.localeCompare(b, "fr")),
+          enrollmentRecords: recordsByUser.get(item.id) ?? [],
         }));
       setUsers(sortNewestFirst(rows));
       setLoading(false);
@@ -4990,12 +5050,12 @@ function AdminUsers() {
       rebuild();
     }, err => { console.error(err); setError("Impossible de charger les utilisateurs."); setLoading(false); });
     const unsubEnrollments = onSnapshot(collection(db, "enrollments"), snapshot => {
-      enrollmentsSnapshot = snapshot.docs.map(item => item.data());
+      enrollmentsSnapshot = snapshot.docs.map(item => ({ ...item.data(), docId: item.id }));
       enrollmentsReady = true;
       rebuild();
     }, err => { console.error(err); setError("Impossible de charger les inscriptions."); setLoading(false); });
     const unsubHistory = onSnapshot(collection(db, "enrollmentHistory"), snapshot => {
-      historySnapshot = snapshot.docs.map(item => item.data());
+      historySnapshot = snapshot.docs.map(item => ({ ...item.data(), docId: item.id }));
       historyReady = true;
       rebuild();
     }, err => { console.error(err); historyReady = true; rebuild(); });
@@ -5077,7 +5137,6 @@ function AdminUsers() {
   }
 
   const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]?.toUpperCase()).join("") || "U";
-  const openHistory = (item: AdminStudentRow) => setSelectedHistoryStudent(item);
   const openRoleEditor = (item: AdminStudentRow) => {
     setSelectedRoleStudent(item);
     setRoleDraft(item.role);
@@ -5108,6 +5167,27 @@ function AdminUsers() {
     }
   }
   const openActiveCourses = (item: AdminStudentRow) => setSelectedActiveStudent(item);
+
+  async function revokeEnrollment(student: AdminStudentRow, record: StudentEnrollmentRecord) {
+    const confirmed = await confirmAction({
+      title: "Révoquer l’accès à ce concours ?",
+      description: <><strong>{student.displayName}</strong> perdra immédiatement l’accès à <strong>« {record.title} »</strong>. L’historique est conservé et l’étudiant devra s’inscrire de nouveau pour y accéder.</>,
+      confirmLabel: "Révoquer l’accès",
+    });
+    if (!confirmed) return;
+    setRevokingKey(record.key); setError("");
+    try {
+      const batch = writeBatch(db);
+      const patch = { status: "revoked", revokedAt: serverTimestamp(), revokedBy: currentAdmin?.uid ?? null };
+      batch.update(doc(db, "enrollments", record.enrollmentId), patch);
+      if (record.historyId) batch.update(doc(db, "enrollmentHistory", record.historyId), patch);
+      await batch.commit();
+      announceSuccess("Accès révoqué", `${student.displayName} n’a plus accès à « ${record.title} ». L’historique est conservé.`);
+    } catch (e) {
+      console.error(e);
+      setError("Impossible de révoquer l’accès. Réessayez dans un instant.");
+    } finally { setRevokingKey(null); }
+  }
 
   return <div className="page">
     <div className="page-title">
@@ -5144,20 +5224,21 @@ function AdminUsers() {
     </div>
     <div className="panel users-table-panel">
       {loading ? <div className="empty-state">Chargement...</div> : filtered.length === 0 ? <div className="empty-state">Aucun étudiant trouvé.</div> : <div className="users-table">
-        <div className="users-table-head"><span>Étudiant</span><span>Email</span><span>Téléphone</span><span>Concours actifs</span><span>Historique</span><span>Membre depuis</span><span>Statut</span><span>Actions</span></div>
+        <div className="users-table-head"><span>Étudiant</span><span>Email</span><span>Téléphone</span><span>Concours</span><span>Membre depuis</span><span>Statut</span><span>Actions</span></div>
         {filtered.map(item => <div className="users-table-row" key={item.uid}>
           <button type="button" className="user-identity user-identity-button" onClick={() => openRoleEditor(item)} aria-label={`Modifier le rôle de ${item.displayName}`}><div className="avatar">{initials(item.displayName)}</div><strong>{item.displayName}</strong></button>
           <div className="user-cell muted-cell">{item.email || "-"}</div>
           <div className="user-cell">{item.phone || <span className="missing-value">Non renseigné</span>}</div>
           <div className="user-courses-cell">
-            {item.courseNames.slice(0, 2).map(name => <span className="course-chip" key={`active-${name}`}>{name}</span>)}
-            {item.courseNames.length > 2 && <button type="button" className="course-count-chip course-count-button" onClick={() => openActiveCourses(item)} title="Voir tous les concours actifs">+{item.courseNames.length - 2}</button>}
-            {item.courseNames.length === 0 && <span className="missing-value">Aucun concours</span>}
-          </div>
-          <div className="user-courses-cell history-courses-cell">
-            {item.courseHistoryNames.slice(0, 2).map(name => <button type="button" className="history-chip history-chip-button" key={`history-${name}`} onClick={() => openHistory(item)} title="Voir l’historique">✓ {name}</button>)}
-            {item.courseHistoryNames.length > 2 && <button type="button" className="course-count-chip history-count-chip history-count-button" onClick={() => openHistory(item)} title="Voir tout l’historique">+{item.courseHistoryNames.length - 2}</button>}
-            {item.courseHistoryNames.length === 0 && <span className="missing-value">Aucun historique</span>}
+            {item.enrollmentRecords.length === 0 ? <span className="missing-value">Aucun concours</span> : (() => {
+              const activeCount = item.enrollmentRecords.filter(record => record.state === "active").length;
+              const pastCount = item.enrollmentRecords.length - activeCount;
+              return <button type="button" className="user-courses-summary" onClick={() => openActiveCourses(item)} title="Voir et gérer les concours de cet étudiant">
+                <span className={`courses-pill ${activeCount ? "courses-pill-active" : "courses-pill-muted"}`}>{activeCount} en cours</span>
+                {pastCount > 0 && <span className="courses-pill courses-pill-muted">{pastCount} terminé{pastCount > 1 ? "s" : ""}</span>}
+                <span className="courses-manage" aria-hidden="true">›</span>
+              </button>;
+            })()}
           </div>
           <div className="user-cell">{item.createdAt ? item.createdAt.toLocaleDateString("fr-FR") : "-"}</div>
           <span className={`status ${item.status === "active" ? "published" : "draft"}`}>{item.status === "active" ? "Actif" : "Suspendu"}</span>
@@ -5182,30 +5263,32 @@ function AdminUsers() {
         <div className="student-history-actions"><button type="button" className="outline small-btn" disabled={savingRole} onClick={() => setSelectedRoleStudent(null)}>Annuler</button><button type="button" className="primary" disabled={savingRole} onClick={() => void saveUserRole()}>{savingRole ? "Enregistrement..." : "Enregistrer"}</button></div>
       </div>
     </div>}
-    {selectedActiveStudent && <div className="student-history-backdrop" role="presentation" onClick={() => setSelectedActiveStudent(null)}>
-      <div className="student-history-modal" role="dialog" aria-modal="true" aria-labelledby="student-active-title" onClick={event => event.stopPropagation()}>
-        <div className="student-history-head">
-          <div><div className="eyebrow">CONCOURS ACTIFS</div><h2 id="student-active-title">{selectedActiveStudent.displayName}</h2><p>{selectedActiveStudent.courseNames.length} concours actif{selectedActiveStudent.courseNames.length > 1 ? "s" : ""}</p></div>
-          <button type="button" className="link-button" onClick={() => setSelectedActiveStudent(null)}>Fermer</button>
+    {selectedActiveStudent && (() => {
+      const student = users.find(user => user.uid === selectedActiveStudent.uid) ?? selectedActiveStudent;
+      const current = student.enrollmentRecords.filter(record => record.state === "active");
+      const past = student.enrollmentRecords.filter(record => record.state !== "active");
+      const fmt = (date?: Date) => date ? date.toLocaleDateString("fr-FR") : "-";
+      const renderRecord = (record: StudentEnrollmentRecord) => <div className="enrollment-record" key={record.key}>
+        <div className="enrollment-record-main">
+          <strong>{record.title}</strong>
+          <small>{record.state === "revoked" ? `Inscrit le ${fmt(record.enrolledAt)} · Accès révoqué le ${fmt(record.revokedAt)}` : record.state === "expired" ? `Inscrit le ${fmt(record.enrolledAt)} · Expiré le ${fmt(record.expiresAt)}` : `Inscrit le ${fmt(record.enrolledAt)} · Expire le ${fmt(record.expiresAt)}`}</small>
         </div>
-        <div className="student-history-list">
-          {selectedActiveStudent.courseNames.map((name, index) => <div className="student-history-item" key={`active-detail-${name}-${index}`}><span className="student-history-index">{index + 1}</span><strong>{name}</strong></div>)}
+        <span className={`enrollment-state enrollment-state-${record.state}`}>{record.state === "active" ? "En cours" : record.state === "revoked" ? "Révoqué" : "Expiré"}</span>
+        {record.state === "active" && <button type="button" className="outline small-btn danger-btn" disabled={revokingKey === record.key} onClick={() => void revokeEnrollment(student, record)}>{revokingKey === record.key ? "Révocation..." : "Révoquer l’accès"}</button>}
+      </div>;
+      return <div className="student-history-backdrop" role="presentation" onClick={() => setSelectedActiveStudent(null)}>
+        <div className="student-history-modal enrollment-modal" role="dialog" aria-modal="true" aria-labelledby="student-active-title" onClick={event => event.stopPropagation()}>
+          <div className="student-history-head">
+            <div><div className="eyebrow">CONCOURS DE L’ÉTUDIANT</div><h2 id="student-active-title">{student.displayName}</h2><p>{current.length} en cours · {past.length} terminé{past.length > 1 ? "s" : ""}</p></div>
+            <button type="button" className="link-button" onClick={() => setSelectedActiveStudent(null)}>Fermer</button>
+          </div>
+          <div className="enrollment-section"><h3>En cours ({current.length})</h3>{current.length === 0 ? <p className="missing-value">Aucun concours en cours.</p> : current.map(renderRecord)}</div>
+          <div className="enrollment-section"><h3>Terminés · historique ({past.length})</h3>{past.length === 0 ? <p className="missing-value">Aucun concours terminé.</p> : past.map(renderRecord)}</div>
+          <p className="user-role-help">Révoquer un accès termine le parcours de l’étudiant dans ce concours : il devra s’inscrire de nouveau. L’historique reste conservé.</p>
+          <div className="student-history-actions"><button type="button" className="primary" onClick={() => setSelectedActiveStudent(null)}>Fermer</button></div>
         </div>
-        <div className="student-history-actions"><button type="button" className="primary" onClick={() => setSelectedActiveStudent(null)}>Fermer</button></div>
-      </div>
-    </div>}
-    {selectedHistoryStudent && <div className="student-history-backdrop" role="presentation" onClick={() => setSelectedHistoryStudent(null)}>
-      <div className="student-history-modal" role="dialog" aria-modal="true" aria-labelledby="student-history-title" onClick={event => event.stopPropagation()}>
-        <div className="student-history-head">
-          <div><div className="eyebrow">HISTORIQUE DES CONCOURS</div><h2 id="student-history-title">{selectedHistoryStudent.displayName}</h2><p>{selectedHistoryStudent.courseHistoryNames.length} concours dans l’historique</p></div>
-          <button type="button" className="link-button" onClick={() => setSelectedHistoryStudent(null)}>Fermer</button>
-        </div>
-        <div className="student-history-list">
-          {selectedHistoryStudent.courseHistoryNames.map((name, index) => <div className="student-history-item" key={`history-detail-${name}-${index}`}><span className="student-history-index">{index + 1}</span><strong>{name}</strong></div>)}
-        </div>
-        <div className="student-history-actions"><button type="button" className="primary" onClick={() => setSelectedHistoryStudent(null)}>Fermer</button></div>
-      </div>
-    </div>}
+      </div>;
+    })()}
   </div>;
 }
 

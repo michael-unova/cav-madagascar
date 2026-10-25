@@ -4928,3 +4928,25 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
   .lesson-content-reader .lesson-reader-page-inner table,
   .learning-text table { min-width: 0; }
 }
+
+
+/* ---- Utilisateurs: one "Concours" column + manage/revoke dialog ---- */
+.users-table-head,.users-table-row{grid-template-columns:1.25fr 1.35fr .95fr 1.7fr .9fr .72fr 1.55fr;min-width:1180px}
+@media(max-width:1050px){.users-table-head,.users-table-row{grid-template-columns:1.2fr 1.3fr .95fr 1.65fr .85fr .7fr 1.45fr}}
+.user-courses-summary{display:flex;align-items:center;gap:6px;flex-wrap:wrap;overflow:hidden;appearance:none;border:1px solid #dce5ee;background:#fff;border-radius:12px;padding:7px 10px;cursor:pointer;font:inherit;max-width:100%;transition:background .15s ease,border-color .15s ease}
+.user-courses-summary:hover{background:#f4f8fc;border-color:#b9ccde}
+.courses-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-size:10px;font-weight:800;white-space:nowrap}
+.courses-pill-active{background:#e6f6ec;color:#16803c}
+.courses-pill-muted{background:#eef3f8;color:#65778a}
+.courses-manage{margin-left:auto;font-size:14px;font-weight:800;color:#1769e0;line-height:1}
+.enrollment-modal{width:min(640px,100%)}
+.enrollment-section{margin-top:18px}
+.enrollment-section h3{margin:0 0 8px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:#718197}
+.enrollment-record{display:flex;align-items:center;gap:10px;padding:12px 13px;border:1px solid #e5ebf1;border-radius:12px;background:#f9fbfd;margin-bottom:8px;flex-wrap:wrap}
+.enrollment-record-main{flex:1 1 220px;min-width:0;display:grid;gap:3px}
+.enrollment-record-main strong{font-size:13px;color:var(--navy);overflow-wrap:anywhere}
+.enrollment-record-main small{color:#7b8d9d;font-size:11px}
+.enrollment-state{border-radius:999px;padding:4px 9px;font-size:10px;font-weight:800;white-space:nowrap}
+.enrollment-state-active{background:#e6f6ec;color:#16803c}
+.enrollment-state-expired{background:#eef3f8;color:#65778a}
+.enrollment-state-revoked{background:#fdeeee;color:#b34141}
