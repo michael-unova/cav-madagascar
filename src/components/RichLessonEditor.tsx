@@ -589,6 +589,9 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
   const [vimeoError, setVimeoError] = useState('')
   const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null)
   const [imageRect, setImageRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
+  const [selectedVideo, setSelectedVideo] = useState<HTMLElement | null>(null)
+  const [videoRect, setVideoRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
+  const [replacingVideo, setReplacingVideo] = useState(false)
   const resizeRef = useRef<{ startX: number; startWidth: number; direction: 'nw' | 'ne' | 'sw' | 'se' } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const selectionRef = useRef<Range | null>(null)
@@ -629,6 +632,16 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
     setImageRect({ left: imageBox.left - containerBox.left, top: imageBox.top - containerBox.top, width: imageBox.width, height: imageBox.height })
   }
 
+  function refreshVideoRect() {
+    if (!selectedVideo || !ref.current || !containerRef.current || !ref.current.contains(selectedVideo)) {
+      setVideoRect(null)
+      return
+    }
+    const videoBox = selectedVideo.getBoundingClientRect()
+    const containerBox = containerRef.current.getBoundingClientRect()
+    setVideoRect({ left: videoBox.left - containerBox.left, top: videoBox.top - containerBox.top, width: videoBox.width, height: videoBox.height })
+  }
+
   // The toolbar is pinned with CSS `position: sticky`. The only JavaScript involved is
   // measuring the sticky application header so the toolbar docks right below it.
   useEffect(() => {
@@ -659,7 +672,8 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
     const observer = new ResizeObserver(updatePages)
     if (ref.current) observer.observe(ref.current)
     refreshImageRect()
-    const handle = () => refreshImageRect()
+    refreshVideoRect()
+    const handle = () => { refreshImageRect(); refreshVideoRect() }
     window.addEventListener('resize', handle)
     window.addEventListener('scroll', handle, true)
     return () => {
@@ -667,7 +681,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
       window.removeEventListener('scroll', handle, true)
       observer.disconnect()
     }
-  }, [selectedImage, value])
+  }, [selectedImage, selectedVideo, value])
 
   // Pressing a toolbar button must not move focus away from the editor or collapse the selection.
   function keepEditorSelection(event: MouseEvent<HTMLDivElement>) {
@@ -754,6 +768,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
   }
 
   function selectImage(image: HTMLImageElement) {
+    setSelectedVideo(null)
     setSelectedImage(image)
     const selection = window.getSelection()
     const range = document.createRange()
@@ -936,6 +951,35 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
     }
   }
 
+  function selectVideo(figure: HTMLElement) {
+    setSelectedImage(null)
+    setSelectedVideo(figure)
+    requestAnimationFrame(refreshVideoRect)
+  }
+
+  function removeSelectedVideo() {
+    if (!selectedVideo || !ref.current?.contains(selectedVideo)) return
+    selectedVideo.remove()
+    setSelectedVideo(null)
+    setVideoRect(null)
+    emit()
+    setPasteStatus('Vidéo supprimée de la leçon.')
+  }
+
+  function openReplaceVideoDialog() {
+    if (!selectedVideo) return
+    setReplacingVideo(true)
+    setVimeoUrl('')
+    setVimeoTitle(selectedVideo.querySelector('figcaption')?.textContent?.trim() ?? '')
+    setVimeoError('')
+    setVimeoDialogOpen(true)
+  }
+
+  function closeVimeoDialog() {
+    setVimeoDialogOpen(false)
+    setReplacingVideo(false)
+  }
+
   function extractVimeoEmbedUrl(rawUrl: string) {
     const value = rawUrl.trim()
     if (!value) return null
@@ -959,6 +1003,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
     setVimeoUrl('')
     setVimeoTitle('')
     setVimeoError('')
+    setReplacingVideo(false)
     setVimeoDialogOpen(true)
   }
 
@@ -969,6 +1014,32 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
       return
     }
     const title = vimeoTitle.trim() || 'Vidéo de la leçon'
+    if (replacingVideo) {
+      const iframe = selectedVideo?.querySelector('iframe')
+      if (!selectedVideo || !iframe || !ref.current?.contains(selectedVideo)) {
+        setVimeoError('La vidéo à remplacer est introuvable. Sélectionnez-la de nouveau.')
+        return
+      }
+      const nextUrl = new URL(embedUrl)
+      nextUrl.searchParams.set('title', '0')
+      nextUrl.searchParams.set('byline', '0')
+      nextUrl.searchParams.set('portrait', '0')
+      nextUrl.searchParams.set('badge', '0')
+      nextUrl.searchParams.set('vimeo_logo', '0')
+      nextUrl.searchParams.set('controls', '1')
+      nextUrl.searchParams.set('fullscreen', '1')
+      nextUrl.searchParams.set('pip', '1')
+      nextUrl.searchParams.set('playsinline', '1')
+      iframe.setAttribute('src', nextUrl.toString())
+      iframe.setAttribute('title', title)
+      const caption = selectedVideo.querySelector('figcaption')
+      if (caption) caption.textContent = title
+      emit()
+      closeVimeoDialog()
+      requestAnimationFrame(refreshVideoRect)
+      setPasteStatus('Vidéo remplacée.')
+      return
+    }
     restoreSelection()
     ref.current?.focus()
     const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;')
@@ -987,7 +1058,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
     const html = `<figure class=\"lesson-video\" contenteditable=\"false\"><div class=\"lesson-video-frame\"><iframe src=\"${playerUrl.toString()}\" title=\"${safeTitle}\" loading=\"lazy\" frameborder=\"0\" allow=\"autoplay; fullscreen; picture-in-picture; clipboard-write\" allowfullscreen></iframe></div><figcaption>${safeTitle}</figcaption></figure><p><br></p>`
     document.execCommand('insertHTML', false, sanitizeLessonHtml(html))
     emit()
-    setVimeoDialogOpen(false)
+    closeVimeoDialog()
     setPasteStatus('Vidéo Vimeo ajoutée à la leçon.')
   }
 
@@ -1028,8 +1099,11 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
 
   function handleEditorClick(event: MouseEvent<HTMLDivElement>) {
     const target = event.target
+    const videoFigure = target instanceof Element ? target.closest<HTMLElement>('figure.lesson-video') : null
     if (target instanceof HTMLImageElement) selectImage(target)
+    else if (videoFigure) { selectVideo(videoFigure); return }
     else setSelectedImage(null)
+    setSelectedVideo(null)
     rememberSelection()
   }
 
@@ -1105,6 +1179,18 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
       <span className="ribbon-help">Le zoom modifie l’échelle visuelle du document.</span>
     </div>}
 
+    {selectedVideo && videoRect && mode === 'edit' && (
+      <div className="lesson-image-selection" style={{ left: videoRect.left, top: videoRect.top, width: videoRect.width, height: videoRect.height }} aria-hidden="true" />
+    )}
+
+    {selectedVideo && mode === 'edit' && (
+      <div className="lesson-image-tools" role="toolbar" aria-label="Outils de la vidéo">
+        <strong>Vidéo</strong>
+        <button type="button" onClick={openReplaceVideoDialog}>Remplacer</button>
+        <button type="button" className="image-delete-button" onClick={removeSelectedVideo}>Supprimer</button>
+      </div>
+    )}
+
     {selectedImage && mode === 'edit' && (
       <div className="lesson-image-tools" role="toolbar" aria-label="Outils de l’image">
         <strong>Image</strong><span>Taille</span>
@@ -1116,7 +1202,7 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
 
     <div className="lesson-editor-workspace">
       <aside className="lesson-outline-panel" aria-label="Plan de la leçon"><div className="lesson-panel-heading"><strong>Plan de la leçon</strong><span>{pageCount} p.</span></div><input value={outlineSearch} onChange={e => setOutlineSearch(e.target.value)} placeholder="Rechercher une section…" aria-label="Rechercher une section" /><nav>{(() => { const doc = new DOMParser().parseFromString(value || '', 'text/html'); const headings = [...doc.body.querySelectorAll('h1,h2,h3')].map((h, i) => ({ text: (h.textContent || '').trim() || `Section ${i + 1}`, level: Number(h.tagName.slice(1)), index: i })); const filtered = headings.filter(h => h.text.toLowerCase().includes(outlineSearch.toLowerCase())); return filtered.length ? filtered.map(h => <button key={`${h.index}-${h.text}`} type="button" className={`outline-item outline-level-${h.level}`} onClick={() => { const editor = ref.current; const target = editor?.querySelectorAll('h1,h2,h3').item(h.index); target?.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (target && editor) { const range = document.createRange(); range.selectNodeContents(target); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); rememberSelection(); editor.focus(); } }}>{h.level === 1 ? '▾ ' : '· '}{h.text}</button>) : <p className="outline-empty">Ajoutez des titres pour créer le plan automatiquement.</p> })()}</nav></aside>
-      <main className="lesson-editor-canvas" style={{ "--lesson-zoom": zoom / 100 } as CSSProperties}>{mode === 'edit' ? <div ref={ref} className="lesson-editor-surface lesson-document a4-document" contentEditable suppressContentEditableWarning onInput={() => { setSelectedImage(null); emit() }} onPaste={(event) => void pasteFromWord(event)} onClick={handleEditorClick} onMouseUp={handleEditorMouseUp} onKeyUp={handleEditorKeyUp} onKeyDown={(event) => { if ((event.key === 'Backspace' || event.key === 'Delete') && selectedImage) { event.preventDefault(); removeSelectedImage(); } }} data-placeholder="Commencez à écrire votre cours…" /> : <div className="lesson-preview lesson-editor-surface lesson-document a4-document" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(value) }} />}</main>
+      <main className="lesson-editor-canvas" style={{ "--lesson-zoom": zoom / 100 } as CSSProperties}>{mode === 'edit' ? <div ref={ref} className="lesson-editor-surface lesson-document a4-document" contentEditable suppressContentEditableWarning onInput={() => { setSelectedImage(null); setSelectedVideo(null); emit() }} onPaste={(event) => void pasteFromWord(event)} onClick={handleEditorClick} onMouseUp={handleEditorMouseUp} onKeyUp={handleEditorKeyUp} onKeyDown={(event) => { if ((event.key === 'Backspace' || event.key === 'Delete') && selectedImage) { event.preventDefault(); removeSelectedImage(); } else if ((event.key === 'Backspace' || event.key === 'Delete') && selectedVideo) { event.preventDefault(); removeSelectedVideo(); } }} data-placeholder="Commencez à écrire votre cours…" /> : <div className="lesson-preview lesson-editor-surface lesson-document a4-document" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(value) }} />}</main>
       <aside className="lesson-properties-panel" aria-label="Propriétés de la leçon"><div className="lesson-properties-tabs"><button type="button" className={rightPanelTab === 'properties' ? 'active' : ''} onClick={() => setRightPanelTab('properties')}>Propriétés</button><button type="button" className={rightPanelTab === 'equation' ? 'active' : ''} onClick={() => setRightPanelTab('equation')}>Équation</button></div>{rightPanelTab === 'properties' ? <div className="lesson-properties-body"><strong>Texte</strong><label>Police<select defaultValue="Times New Roman" onChange={e => applyInlineStyle('fontFamily', e.target.value)}><option>Times New Roman</option><option>Arial</option><option>Calibri</option><option>Georgia</option><option>Verdana</option></select></label><label>Taille<select defaultValue="12pt" onChange={e => applyInlineStyle('fontSize', e.target.value)}>{['8pt','9pt','10pt','11pt','12pt','14pt','16pt','18pt','20pt','24pt','28pt','36pt','48pt'].map(size => <option key={size}>{size}</option>)}</select></label><label>Couleur du texte<input type="color" defaultValue="#173f65" onChange={e => applyInlineStyle('color', e.target.value)} /></label><label>Surlignage<input type="color" defaultValue="#fff176" onChange={e => applyInlineStyle('backgroundColor', e.target.value)} /></label><div className="lesson-property-buttons"><button type="button" onClick={() => command('bold')}><b>B</b></button><button type="button" onClick={() => command('italic')}><i>I</i></button><button type="button" onClick={() => command('underline')}><u>U</u></button><button type="button" onClick={() => command('subscript')}>x₂</button><button type="button" onClick={() => command('superscript')}>x²</button></div><strong>Paragraphe</strong><div className="lesson-property-buttons"><button type="button" onClick={() => command('justifyLeft')}>Gauche</button><button type="button" onClick={() => command('justifyCenter')}>Centre</button><button type="button" onClick={() => command('justifyRight')}>Droite</button></div><p className="lesson-properties-note">Les réglages s’appliquent au texte sélectionné. Les marges du document suivent le format A4.</p></div> : <div className="lesson-properties-body lesson-equation-panel"><strong>Galerie d’équations</strong><p className="equation-gallery-intro">Choisissez une structure, puis adaptez son code LaTeX.</p><input className="equation-search" type="search" placeholder="Rechercher une formule…" value={equationSearch} onChange={e => setEquationSearch(e.target.value)} aria-label="Rechercher une formule" /><div className="equation-category-tabs">{['Structures','Algèbre','Calcul','Fonctions','Symboles','Ensembles','Matrices','Probabilités'].map(category => <button key={category} type="button" className={equationCategory === category ? 'active' : ''} onClick={() => setEquationCategory(category)}>{category}</button>)}</div><div className="equation-template-grid">{EQUATION_TEMPLATES.filter(item => item.category === equationCategory && `${item.label} ${item.latex} ${item.keywords}`.toLowerCase().includes(equationSearch.toLowerCase())).map(item => <button key={item.label} type="button" title={item.latex} onClick={() => setEquationLatex(item.latex)}><span>{item.symbol}</span>{item.label}</button>)}</div>{EQUATION_TEMPLATES.filter(item => item.category === equationCategory && `${item.label} ${item.latex} ${item.keywords}`.toLowerCase().includes(equationSearch.toLowerCase())).length === 0 && <p className="lesson-properties-note">Aucune formule trouvée. Saisissez une expression LaTeX ci-dessous.</p>}<label>Code LaTeX<textarea value={equationLatex} onChange={e => setEquationLatex(e.target.value)} rows={4} spellCheck={false} /></label><div className="equation-source-preview" aria-label="Aperçu mathématique" dangerouslySetInnerHTML={{ __html: latexToMathML(equationLatex) }} /><button type="button" className="equation-insert-button" onClick={insertEquation}>Insérer dans la leçon</button><p className="lesson-properties-note">Structures courantes de mathématiques scolaires. Certaines commandes LaTeX avancées et les équations Word complexes peuvent nécessiter une conversion supplémentaire.</p></div>}</aside>
     </div>
 
@@ -1128,14 +1214,14 @@ export function RichLessonEditor({ value, onChange, storageFolder, initialExpand
     </div>
     {pasteStatus && <p className="lesson-editor-status" role="status">{pasteStatus}</p>}
 
-    {vimeoDialogOpen && <div className="lesson-vimeo-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setVimeoDialogOpen(false) }}>
+    {vimeoDialogOpen && <div className="lesson-vimeo-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closeVimeoDialog() }}>
       <div className="lesson-vimeo-modal" role="dialog" aria-modal="true" aria-labelledby="lesson-vimeo-title">
-        <div className="lesson-vimeo-modal-head"><div><span className="eyebrow">VIDÉO DANS LA LEÇON</span><h3 id="lesson-vimeo-title">Insérer une vidéo Vimeo</h3></div><button type="button" className="lesson-vimeo-close" onClick={() => setVimeoDialogOpen(false)} aria-label="Fermer">×</button></div>
+        <div className="lesson-vimeo-modal-head"><div><span className="eyebrow">VIDÉO DANS LA LEÇON</span><h3 id="lesson-vimeo-title">{replacingVideo ? 'Remplacer la vidéo Vimeo' : 'Insérer une vidéo Vimeo'}</h3></div><button type="button" className="lesson-vimeo-close" onClick={closeVimeoDialog} aria-label="Fermer">×</button></div>
         <p className="page-description">La vidéo sera intégrée directement dans votre document A4, entre vos textes et vos illustrations.</p>
         <label>URL Vimeo<input autoFocus value={vimeoUrl} onChange={event => { setVimeoUrl(event.target.value); setVimeoError('') }} placeholder="https://vimeo.com/123456789" /></label>
         <label>Titre de la vidéo <span>(facultatif)</span><input value={vimeoTitle} onChange={event => setVimeoTitle(event.target.value)} placeholder="Ex. La Constitution malgache" /></label>
         {vimeoError && <div className="lesson-vimeo-error">{vimeoError}</div>}
-        <div className="lesson-vimeo-modal-actions"><button type="button" className="outline" onClick={() => setVimeoDialogOpen(false)}>Annuler</button><button type="button" className="primary" onClick={insertVimeoVideo}>Insérer la vidéo</button></div>
+        <div className="lesson-vimeo-modal-actions"><button type="button" className="outline" onClick={closeVimeoDialog}>Annuler</button><button type="button" className="primary" onClick={insertVimeoVideo}>{replacingVideo ? 'Remplacer la vidéo' : 'Insérer la vidéo'}</button></div>
       </div>
     </div>}
   </div>

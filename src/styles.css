@@ -4873,3 +4873,7 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 .question-category-badge.is-technical { background:#fff1e6; color:#b8460a; }
 .question-type-filter { margin-top:-4px; }
 .question-status-hint { margin:6px 2px 0; color:#7a8aa0; font-size:.72rem; font-weight:700; line-height:1.4; }
+
+/* Edit mode: let clicks reach the video figure so it can be selected, replaced or deleted. */
+.lesson-editor-surface[contenteditable="true"] figure.lesson-video{cursor:pointer}
+.lesson-editor-surface[contenteditable="true"] figure.lesson-video iframe{pointer-events:none}
