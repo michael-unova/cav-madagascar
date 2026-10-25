@@ -3114,13 +3114,17 @@ function EnrollmentFlow({
             <div>
               <strong>Instructions de paiement</strong>
               <p>
-                Utilisez le numéro de paiement indiqué par CAV Madagascar,
-                effectuez le paiement, puis conservez votre référence de
-                transaction.
+                Avant de procéder au paiement, vérifiez attentivement que vous avez sélectionné le bon concours et l’option correspondante.
               </p>
-              <small>
-                La référence doit correspondre au paiement effectué.
-              </small>
+              <p>
+                Effectuez ensuite votre paiement sur le numéro officiel de CAV Madagascar, selon le moyen de paiement choisi.
+              </p>
+              <p className="payment-number">
+                Numéro de paiement : <strong>034 70 202 22</strong> – CAV Madagascar.
+              </p>
+              <p>
+                Une fois le paiement effectué, conservez votre référence de transaction et saisissez-la dans le champ prévu à cet effet.
+              </p>
             </div>
           </div>
           {error && (
@@ -3184,6 +3188,14 @@ function EnrollmentFlow({
               <small>Vous aurez accès après validation.</small>
             </div>
           </div>
+        </div>
+        <div className="validation-delay-note">
+          <strong>Délai de validation de votre inscription</strong>
+          <p>Votre inscription sera validée après vérification de votre paiement par notre équipe.</p>
+          <p>Les demandes soumises pendant les jours ouvrables et les heures de bureau sont généralement traitées rapidement.</p>
+          <p>Les demandes effectuées en dehors des heures de bureau, les week-ends ou les jours fériés peuvent nécessiter un délai supplémentaire. Elles seront traitées dès la reprise de nos activités.</p>
+          <p>Vous recevrez une confirmation dès la validation de votre inscription.</p>
+          <p className="validation-delay-important"><strong>Important :</strong> Lors de la création de votre compte, veillez à renseigner un numéro de téléphone valide et joignable afin de faciliter les échanges avec notre équipe et de permettre de vous contacter rapidement en cas de besoin.</p>
         </div>
         <button className="primary" onClick={() => setPage("dashboard")}>
           Retour au tableau de bord <Icon name="arrow" />

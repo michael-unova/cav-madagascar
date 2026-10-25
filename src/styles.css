@@ -4950,3 +4950,15 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 .enrollment-state-active{background:#e6f6ec;color:#16803c}
 .enrollment-state-expired{background:#eef3f8;color:#65778a}
 .enrollment-state-revoked{background:#fdeeee;color:#b34141}
+
+
+/* Payment instructions + validation delay notice */
+.payment-instructions p{margin:0 0 8px;line-height:1.55}
+.payment-instructions p:last-child{margin-bottom:0}
+.payment-instructions .payment-number{padding:9px 12px;border-radius:10px;background:#eef5ff;border:1px solid #d6e5fb;color:#173f65}
+.payment-instructions .payment-number strong{font-size:1.08em;letter-spacing:.3px;white-space:nowrap}
+.validation-delay-note{margin:22px 0;padding:16px 18px;border:1px solid #dce7ef;border-radius:14px;background:#f8fbff;text-align:left}
+.validation-delay-note>strong{display:block;margin-bottom:8px;color:#173f65}
+.validation-delay-note p{margin:0 0 8px;font-size:.9rem;line-height:1.55;color:#4b6178}
+.validation-delay-note p:last-child{margin-bottom:0}
+.validation-delay-note .validation-delay-important{padding:10px 12px;border-radius:10px;background:#fff7e6;border:1px solid #f3dfb2;color:#6b5320}
