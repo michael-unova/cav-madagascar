@@ -2967,9 +2967,8 @@ function EnrollmentFlow({
 }) {
   const [step, setStep] = useState<"course" | "payment" | "pending">("course");
   const [reference, setReference] = useState("");
-  const [method, setMethod] = useState<
-    "mvola" | "orange_money" | "airtel_money"
-  >("mvola");
+  // CAV Madagascar accepts MVola only.
+  const method = "mvola" as const;
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [existing, setExisting] = useState<Enrollment | null>(null);
@@ -3087,27 +3086,18 @@ function EnrollmentFlow({
           <div className="eyebrow">ÉTAPE 2 · PAIEMENT</div>
           <h1>Effectuez votre paiement</h1>
           <p>
-            Payez le montant de <strong>{formatPrice(course.price)} Ar</strong> avec l'un des moyens disponibles, puis saisissez la référence de transaction.
+            Payez le montant de <strong>{formatPrice(course.price)} Ar</strong> par MVola, puis saisissez la référence de transaction.
           </p>
-          <div className="payment-methods">
-            {(
-              [
-                ["mvola", "MVola"],
-                ["orange_money", "Orange Money"],
-                ["airtel_money", "Airtel Money"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                type="button"
-                key={value}
-                className={`pay-method ${method === value ? "selected" : ""}`}
-                onClick={() => setMethod(value)}
-              >
-                <strong>{label}</strong>
+          <div className="payment-methods payment-methods-single">
+            <div className="pay-method selected pay-method-single" aria-label="Moyen de paiement : MVola">
+              <span className="pay-method-check" aria-hidden="true">✓</span>
+              <div className="pay-method-info">
+                <small>Moyen de paiement</small>
+                <strong>MVola</strong>
                 <span>Mobile Money</span>
-                <b>{formatPrice(course.price)} Ar</b>
-              </button>
-            ))}
+              </div>
+              <b>{formatPrice(course.price)} Ar</b>
+            </div>
           </div>
           <div className="payment-instructions">
             <div className="qr-demo">QR</div>
