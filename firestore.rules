@@ -211,6 +211,7 @@ service cloud.firestore {
         && request.resource.data.adminReply == resource.data.adminReply
         && request.resource.data.adminReplyBy == resource.data.adminReplyBy
         && request.resource.data.adminReplyAt == resource.data.adminReplyAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'updatedAt', 'unreadForAdmin'])
         || (manager()
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.studentName == resource.data.studentName
@@ -255,7 +256,25 @@ service cloud.firestore {
           && request.resource.data.unreadForAdmin == false
           && request.resource.data.adminReply == resource.data.adminReply
           && request.resource.data.adminReplyBy == resource.data.adminReplyBy
-          && request.resource.data.adminReplyAt == resource.data.adminReplyAt);
+          && request.resource.data.adminReplyAt == resource.data.adminReplyAt)
+        // A manager may record that they opened a question (only their own entry in seenBy).
+        || (manager()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy'])
+          && request.resource.data.seenBy.diff(resource.data.get('seenBy', {})).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.seenBy[request.auth.uid].name is string
+          && request.resource.data.seenBy[request.auth.uid].name.size() <= 160
+          && request.resource.data.seenBy[request.auth.uid].at == request.time)
+        // A manager may mark a root question as treated, or reopen it.
+        || (manager()
+          && resource.data.get('parentCommentId', null) == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['treated', 'treatedById', 'treatedByName', 'treatedAt'])
+          && request.resource.data.treated is bool
+          && (request.resource.data.treated == false
+            ? (request.resource.data.treatedById == null && request.resource.data.treatedByName == null && request.resource.data.treatedAt == null)
+            : (request.resource.data.treatedById == request.auth.uid
+              && request.resource.data.treatedByName is string
+              && request.resource.data.treatedByName.size() <= 160
+              && request.resource.data.treatedAt == request.time)));
       // Authors delete their own comment; admins and content managers can moderate (delete) any comment.
       allow delete: if (activeUser() && resource.data.userId == request.auth.uid) || manager();
 

@@ -29,7 +29,23 @@ function mapComment(id: string, data: Record<string, unknown>): LessonComment {
     adminReply: typeof data.adminReply === 'string' ? data.adminReply : undefined,
     adminReplyBy: typeof data.adminReplyBy === 'string' ? data.adminReplyBy : undefined,
     adminReplyAt: (data.adminReplyAt as LessonComment['adminReplyAt']) ?? null,
+    seenBy: mapSeenBy(data.seenBy),
+    treated: data.treated === true,
+    treatedById: typeof data.treatedById === 'string' ? data.treatedById : null,
+    treatedByName: typeof data.treatedByName === 'string' ? data.treatedByName : null,
+    treatedAt: (data.treatedAt as LessonComment['treatedAt']) ?? null,
   }
+}
+
+function mapSeenBy(value: unknown): LessonComment['seenBy'] {
+  if (!value || typeof value !== 'object') return {}
+  const result: NonNullable<LessonComment['seenBy']> = {}
+  for (const [uid, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object') continue
+    const record = entry as Record<string, unknown>
+    result[uid] = { name: String(record.name ?? 'Administrateur'), at: (record.at as NonNullable<LessonComment['seenBy']>[string]['at']) ?? null }
+  }
+  return result
 }
 
 function sortNewest(items: LessonComment[]) {
@@ -115,6 +131,19 @@ export async function deleteLessonCommentThread(commentIds: string[]) {
     ids.slice(start, start + 400).forEach(id => batch.delete(doc(db, COLLECTION, id)))
     await batch.commit()
   }
+}
+
+/** Records, once per admin, that this question was opened. Other admins see it right away. */
+export async function markQuestionSeen(commentId: string, userId: string, name: string) {
+  if (!userId) return
+  await updateDoc(doc(db, COLLECTION, commentId), { [`seenBy.${userId}`]: { name: name.trim().slice(0, 160) || 'Administrateur', at: serverTimestamp() } })
+}
+
+/** Marks a question as treated (resolved) or reopens it. */
+export async function setQuestionTreated(commentId: string, treated: boolean, userId: string, name: string) {
+  await updateDoc(doc(db, COLLECTION, commentId), treated
+    ? { treated: true, treatedById: userId, treatedByName: name.trim().slice(0, 160) || 'Administrateur', treatedAt: serverTimestamp() }
+    : { treated: false, treatedById: null, treatedByName: null, treatedAt: null })
 }
 
 export async function markLessonCommentRead(commentId: string) {

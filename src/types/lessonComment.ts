@@ -24,4 +24,10 @@ export interface LessonComment {
   adminReply?: string
   adminReplyBy?: string
   adminReplyAt?: Timestamp | null
+  /** Admins and content managers who opened this question, keyed by user id. */
+  seenBy?: Record<string, { name: string; at?: Timestamp | null }>
+  treated?: boolean
+  treatedById?: string | null
+  treatedByName?: string | null
+  treatedAt?: Timestamp | null
 }
