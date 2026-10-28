@@ -150,8 +150,8 @@ export function ChapterContentList({
                 {menuKey === item.key && (
                   <div className="node-action-menu chapter-item-menu" role="menu">
                     {isLesson && <button type="button" role="menuitem" onClick={() => { setMenuKey(null); onAction(item, 'open') }}>Ouvrir la leçon</button>}
-                    <button type="button" role="menuitem" onClick={() => { setMenuKey(null); onAction(item, 'rename') }}>{isLesson ? 'Modifier le titre' : 'Modifier le titre'}</button>
-                    {!isLesson && <button type="button" role="menuitem" onClick={() => { setMenuKey(null); onAction(item, 'toggle-publish') }}>{item.status === 'published' ? 'Dépublier' : 'Publier'}</button>}
+                    <button type="button" role="menuitem" onClick={() => { setMenuKey(null); onAction(item, 'rename') }}>Modifier le titre</button>
+                    <button type="button" role="menuitem" onClick={() => { setMenuKey(null); onAction(item, 'toggle-publish') }}>{item.status === 'published' ? 'Dépublier' : 'Publier'}</button>
                     {!isLesson && <button type="button" role="menuitem" onClick={() => { setMenuKey(null); onAction(item, 'remove') }}>Retirer du chapitre</button>}
                     <button type="button" role="menuitem" className="danger-action" onClick={() => { setMenuKey(null); onAction(item, 'delete') }}>Supprimer définitivement</button>
                   </div>
