@@ -16,7 +16,10 @@ export interface ContentNode {
   order: number
   /** Numbering format shared by sibling nodes at the same curriculum level. */
   numberingStyle?: ContentNumberingStyle
+  /** For topics: 'archived' means hidden from students on purpose (its lessons are hidden with it). */
   status: ContentStatus
+  /** Set on lessons that were hidden because their topic was hidden, so publishing the topic restores them. */
+  hiddenWithTopic?: boolean
   createdBy: string
   updatedBy: string
   /** Stable identifier shared by every course association using the same reusable subject content. */

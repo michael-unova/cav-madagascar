@@ -4554,7 +4554,8 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
       const type: ContentNodeType = parentId ? "chapter" : "topic";
       let key = editingNodeKey;
       if (editingNodeKey) {
-        await updateSharedContentNode(editingNodeKey, { title: nodeTitle.trim(), description: nodeDescription.trim(), type, ...(parentId ? {} : { imagePosition: nodeImagePosition, status: "published" }) }, user.uid);
+        const hiddenTopic = !parentId && nodes.some(item => item.sharedKey === editingNodeKey && item.status === "archived");
+        await updateSharedContentNode(editingNodeKey, { title: nodeTitle.trim(), description: nodeDescription.trim(), type, ...(parentId ? {} : { imagePosition: nodeImagePosition, ...(hiddenTopic ? {} : { status: "published" as const }) }) }, user.uid);
       } else {
         const parent = parentId ? nodes.find(item => item.id === parentId) : undefined;
         const created = await createSharedContentNode({ subjectId, parentSharedKey: parent?.sharedKey, type, title: nodeTitle.trim(), description: nodeDescription.trim(), order: parentId ? buildTopicItems(parentId).nextOrder : nodes.filter(item => !item.parentId).length, numberingStyle: nodes.find(item => (parentId ? item.parentId === parentId : !item.parentId))?.numberingStyle ?? (parentId ? "alpha" : "numeric"), userId: user.uid, imagePosition: parentId ? undefined : nodeImagePosition });
@@ -4603,6 +4604,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
   }
   async function publishLesson() {
     if (!user || !selectedNode?.sharedKey) return;
+    if (nodes.find(item => item.id === selectedNode.parentId)?.status === "archived") { setError("Ce thème est masqué aux étudiants. Publiez d’abord le thème pour publier cette leçon."); return; }
     try {
       await updateSharedContentNode(selectedNode.sharedKey,{status:"published"},user.uid);
       for (const block of blocks) if (block.sharedKey) await updateSharedContentBlock(block.sharedKey,{status:"published"},user.uid);
@@ -4618,22 +4620,53 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
       await refreshSubjectData(subjectId); await refreshBlocks(); setMessage("Leçon dépubliée.");
     } catch (e) { setError(e instanceof Error ? e.message : "Impossible de dépublier la leçon."); }
   }
+  // Writes only (no UI state): publishes or hides one lesson together with its content blocks.
+  async function applyLessonPublication(node: ContentNode, publish: boolean) {
+    if (!user || !node.sharedKey) return;
+    const status = publish ? "published" : "draft";
+    await updateSharedContentNode(node.sharedKey, { status }, user.uid);
+    const lessonBlocks = await listContentBlocks(node.id, false);
+    for (const block of lessonBlocks) if (block.sharedKey) await updateSharedContentBlock(block.sharedKey, { status }, user.uid);
+    if (publish) {
+      const lessonQuestions = (await listAdminQuestions(subjectId)).filter(question => question.contentNodeId === node.id && question.status !== "published");
+      for (const question of lessonQuestions) await updateQuestion(question.id, { status: "published" });
+    }
+  }
   async function setLessonPublication(node: ContentNode, publish: boolean) {
     if (!user || !node.sharedKey) return;
+    if (publish && nodes.find(item => item.id === node.parentId)?.status === "archived") { setOpenNodeMenuId(null); setError("Ce thème est masqué aux étudiants. Publiez d’abord le thème pour publier cette leçon."); return; }
     setOpenNodeMenuId(null); setSaving(true); setError(""); setMessage("");
     try {
-      const status = publish ? "published" : "draft";
-      await updateSharedContentNode(node.sharedKey, { status }, user.uid);
-      const lessonBlocks = await listContentBlocks(node.id, false);
-      for (const block of lessonBlocks) if (block.sharedKey) await updateSharedContentBlock(block.sharedKey, { status }, user.uid);
-      if (publish) {
-        const lessonQuestions = (await listAdminQuestions(subjectId)).filter(question => question.contentNodeId === node.id && question.status !== "published");
-        for (const question of lessonQuestions) await updateQuestion(question.id, { status: "published" });
-      }
+      await applyLessonPublication(node, publish);
+      await updateSharedContentNode(node.sharedKey, { hiddenWithTopic: false }, user.uid);
       await refreshSubjectData(subjectId);
       if (node.id === nodeId) { await refreshBlocks(); await refreshQuestions(); }
       setMessage(publish ? "Leçon publiée. Les étudiants peuvent la voir." : "Leçon dépubliée. Les étudiants ne la voient plus, vous ne perdez aucun contenu.");
     } catch (e) { setError(e instanceof Error ? e.message : publish ? "Impossible de publier la leçon." : "Impossible de dépublier la leçon."); }
+    finally { setSaving(false); }
+  }
+  // Hides a whole thème from students (its lessons are hidden with it) or shows it again, restoring those lessons.
+  async function setTopicPublication(topic: ContentNode, publish: boolean) {
+    if (!user || !topic.sharedKey) return;
+    setOpenNodeMenuId(null); setSaving(true); setError(""); setMessage("");
+    try {
+      const lessons = nodes.filter(item => item.parentId === topic.id);
+      if (publish) {
+        await updateSharedContentNode(topic.sharedKey, { status: "published" }, user.uid);
+        for (const lesson of lessons.filter(item => item.hiddenWithTopic)) {
+          await applyLessonPublication(lesson, true);
+          if (lesson.sharedKey) await updateSharedContentNode(lesson.sharedKey, { hiddenWithTopic: false }, user.uid);
+        }
+      } else {
+        for (const lesson of lessons.filter(item => item.status === "published")) {
+          await applyLessonPublication(lesson, false);
+          if (lesson.sharedKey) await updateSharedContentNode(lesson.sharedKey, { hiddenWithTopic: true }, user.uid);
+        }
+        await updateSharedContentNode(topic.sharedKey, { status: "archived" }, user.uid);
+      }
+      await refreshSubjectData(subjectId);
+      setMessage(publish ? "Thème publié. Ses leçons masquées avec lui sont de nouveau visibles." : "Thème masqué. Les étudiants ne voient plus ce thème ni ses leçons. Rien n’est supprimé.");
+    } catch (e) { setError(e instanceof Error ? e.message : publish ? "Impossible de publier le thème." : "Impossible de masquer le thème."); }
     finally { setSaving(false); }
   }
   async function removeQuestion(question: Question) {
@@ -4654,7 +4687,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
           <div className="curriculum-numbering-control"><label htmlFor="topic-numbering-style">Numérotation des thèmes</label><select id="topic-numbering-style" className="fake-input" value={rootNodes[0]?.numberingStyle ?? "numeric"} onChange={e=>void changeSiblingNumbering(rootNodes,e.target.value as ContentNumberingStyle)}><option value="numeric">1, 2, 3…</option><option value="alpha">a), b), c)…</option><option value="roman">I, II, III…</option><option value="hierarchical">1.1, 1.2…</option></select></div>
           <div className="content-tree-simple">
             {rootNodes.map((topic,index)=>{const lessons=nodes.filter(n=>n.parentId===topic.id).sort((a,b)=>a.order-b.order);const open=expandedTopics[topic.id] ?? false;const built=buildTopicItems(topic.id);const otherCount=built.items.length-lessons.length;return <div key={topic.id} className="content-tree-topic" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(draggedNodeId)void reorderSiblings(rootNodes,draggedNodeId,topic.id);}}>
-              <div draggable onDragStart={()=>setDraggedNodeId(topic.id)} onDragEnd={()=>setDraggedNodeId(null)} className={`tree-item tree-item-with-menu curriculum-draggable ${nodeId===topic.id?"active":""}`}><button className="tree-item-main" onClick={()=>openTopic(topic)}><span>{formatNodeNumber(index,rootNodes[0]?.numberingStyle ?? "numeric")}</span><div><strong>{topic.title}</strong><small>{lessons.length} leçon{lessons.length!==1?"s":""}{otherCount>0?` · ${otherCount} évaluation${otherCount!==1?"s":""}`:""}</small></div></button><button type="button" className="node-menu-trigger" aria-label={`Options du thème ${topic.title}`} aria-expanded={openNodeMenuId===topic.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===topic.id?null:topic.id);}}>•••</button>{openNodeMenuId===topic.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(topic)}>Modifier</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(topic);}}>Supprimer définitivement</button></div>}</div>
+              <div draggable onDragStart={()=>setDraggedNodeId(topic.id)} onDragEnd={()=>setDraggedNodeId(null)} className={`tree-item tree-item-with-menu curriculum-draggable ${nodeId===topic.id?"active":""}`}><button className="tree-item-main" onClick={()=>openTopic(topic)}><span>{formatNodeNumber(index,rootNodes[0]?.numberingStyle ?? "numeric")}</span><div><strong>{topic.title}</strong><small>{topic.status==="archived"?"Masqué · ":""}{lessons.length} leçon{lessons.length!==1?"s":""}{otherCount>0?` · ${otherCount} évaluation${otherCount!==1?"s":""}`:""}</small></div></button><button type="button" className="node-menu-trigger" aria-label={`Options du thème ${topic.title}`} aria-expanded={openNodeMenuId===topic.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===topic.id?null:topic.id);}}>•••</button>{openNodeMenuId===topic.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(topic)}>Modifier</button><button onClick={()=>void setTopicPublication(topic,topic.status==="archived")}>{topic.status==="archived"?"Publier le thème":"Masquer le thème"}</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(topic);}}>Supprimer définitivement</button></div>}</div>
               {open && <div className="content-tree-lessons"><div className="curriculum-numbering-control lesson-numbering-control"><label>Numérotation des leçons</label><select className="fake-input" value={lessons[0]?.numberingStyle ?? "alpha"} onChange={e=>void changeSiblingNumbering(lessons,e.target.value as ContentNumberingStyle)}><option value="alpha">a), b), c)…</option><option value="numeric">1, 2, 3…</option><option value="roman">I, II, III…</option><option value="hierarchical">{index+1}.1, {index+1}.2…</option></select></div>{built.items.map((item,i)=>{const lesson=item.kind==="lesson"?nodes.find(n=>n.id===item.id):undefined;const numberLabel=formatNodeNumber(i,lessons[0]?.numberingStyle ?? "alpha",index);const typeLabel=item.kind==="quiz"?"Quiz":item.kind==="exercise"?"Exercice":item.kind==="test"?"Test":"";return <div key={item.key} draggable onDragStart={()=>setDraggedChapterKey(item.key)} onDragEnd={()=>setDraggedChapterKey(null)} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const dragged=draggedChapterKey;setDraggedChapterKey(null);if(dragged)void reorderChapterItems(topic.id,dragged,item.key);}} className={`tree-item tree-item-with-menu lesson-tree-item curriculum-draggable ${lesson&&nodeId===lesson.id?"active":""}`}><button className="tree-item-main" onClick={()=>{if(lesson)selectNode(lesson);else{selectNode(topic);}}}><span>{numberLabel}</span><div><strong>{item.title}</strong><small>{typeLabel?`${typeLabel} · `:""}{item.status === "published" ? "Publié" : "Brouillon"}</small></div></button>{lesson && <><button type="button" className="node-menu-trigger" aria-label={`Options de la leçon ${lesson.title}`} aria-expanded={openNodeMenuId===lesson.id} onClick={e=>{e.stopPropagation();setOpenNodeMenuId(openNodeMenuId===lesson.id?null:lesson.id);}}>•••</button>{openNodeMenuId===lesson.id && <div className="node-action-menu"><button onClick={()=>editNodeDetails(lesson)}>Modifier</button><button onClick={()=>void setLessonPublication(lesson,lesson.status!=="published")}>{lesson.status==="published"?"Dépublier":"Publier"}</button><button className="danger-action" onClick={()=>{setOpenNodeMenuId(null);setPendingNodeDeletion(lesson);}}>Supprimer définitivement</button></div>}</>}</div>})}<ChapterAddMenu block onSelect={kind=>startChapterAdd(topic,kind)} disabled={saving} /></div>}
             </div>})}
           </div>
@@ -4679,7 +4712,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
           </>}
         </> : <>
           {(() => { const built = buildTopicItems(selectedNode.id); const topicIndex = rootNodes.findIndex(item => item.id === selectedNode.id); const style = childNodes[0]?.numberingStyle ?? "alpha"; return <>
-          <div className="lesson-workspace-head"><div><span className="pill">THÈME</span><h2>{selectedNode.title}</h2><small>{built.items.length} contenu{built.items.length!==1?"s":""} dans ce chapitre</small></div><ChapterAddMenu onSelect={kind=>startChapterAdd(selectedNode,kind)} disabled={saving} /></div>
+          <div className="lesson-workspace-head"><div><span className="pill">THÈME</span>{selectedNode.status==="archived" && <span className="status draft" style={{marginLeft:8}}>Masqué aux étudiants</span>}<h2>{selectedNode.title}</h2><small>{built.items.length} contenu{built.items.length!==1?"s":""} dans ce chapitre</small></div><ChapterAddMenu onSelect={kind=>startChapterAdd(selectedNode,kind)} disabled={saving} /></div>
           <ChapterContentList items={built.items} busy={saving} formatNumber={index=>formatNodeNumber(index,style,topicIndex)} onAction={(item,action)=>void handleChapterAction(item,action)} onMove={(item,direction)=>void moveChapterItem(selectedNode.id,item,direction)} onReorder={(draggedKey,targetKey)=>void reorderChapterItems(selectedNode.id,draggedKey,targetKey)} />
           </>; })()}
         </>}

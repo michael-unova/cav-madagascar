@@ -32,6 +32,7 @@ function mapNode(id: string, data: Record<string, unknown>): ContentNode {
     order: Number(data.order ?? 0),
     numberingStyle: ['alpha','numeric','hierarchical','roman'].includes(String(data.numberingStyle)) ? data.numberingStyle as ContentNumberingStyle : undefined,
     status: (data.status ?? 'draft') as ContentStatus,
+    hiddenWithTopic: data.hiddenWithTopic === true ? true : undefined,
     createdBy: String(data.createdBy ?? ''),
     updatedBy: String(data.updatedBy ?? ''),
     sharedKey: typeof data.sharedKey === 'string' ? data.sharedKey : undefined,
@@ -180,7 +181,7 @@ export async function updateContentNode(id:string,input:Partial<Pick<ContentNode
   await updateDoc(doc(db,'contentNodes',id),{...input,updatedBy:userId,updatedAt:serverTimestamp()})
 }
 
-export async function updateSharedContentNode(key: string, input: Partial<Pick<ContentNode,'title'|'description'|'imageUrl'|'imagePosition'|'order'|'status'|'type'|'numberingStyle'>>, userId: string) {
+export async function updateSharedContentNode(key: string, input: Partial<Pick<ContentNode,'title'|'description'|'imageUrl'|'imagePosition'|'order'|'status'|'type'|'numberingStyle'|'hiddenWithTopic'>>, userId: string) {
   const snap = await getDocs(query(collection(db, 'contentNodes'), where('sharedKey', '==', key)))
   const batch = writeBatch(db)
   snap.docs.forEach(item => batch.update(item.ref, { ...input, updatedBy: userId, updatedAt: serverTimestamp() }))
