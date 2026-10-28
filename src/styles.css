@@ -5032,3 +5032,30 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 
 /* Broadcast recipients, dedup and history filters */
 .broadcast-recipients{border:1px solid #e5edf8;background:#f9fbff;border-radius:16px;padding:14px;margin:4px 0 18px}.broadcast-recipients-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:10px}.broadcast-recipients-head>div{display:grid;gap:3px}.broadcast-recipients-head small{color:#718096;font-size:12px}.broadcast-compose-card .broadcast-recipients-sort{margin:0;min-width:210px}.broadcast-compose-card label.broadcast-skip-option{display:flex;align-items:center;gap:9px;margin:0 0 10px;font-weight:600}.broadcast-compose-card .broadcast-skip-option input{width:auto}.broadcast-recipient-list{display:grid;gap:6px;max-height:280px;overflow:auto}.broadcast-recipient-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #e9eef5;border-radius:11px;background:#fff}.broadcast-recipient-row>div{display:grid;gap:2px;min-width:0}.broadcast-recipient-row small{color:#7b8798;font-size:11px}.broadcast-received,.broadcast-new{font-size:11px;font-weight:800;border-radius:999px;padding:6px 9px;white-space:nowrap}.broadcast-new{background:#eaf8ef;color:#16803c}.broadcast-received{background:#eef2f7;color:#607086}.broadcast-received-skip{background:#fff6e5;color:#a15c00}.broadcast-recipients-empty{margin:0;color:#718096;font-size:13px}.broadcast-history-filters{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.broadcast-history-filters select{border:1px solid #dfe7f2;border-radius:10px;padding:8px 10px;background:#fff;font:inherit}.broadcast-history-filters .broadcast-skip-option{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600}.broadcast-type-badge{display:inline-block;margin-left:6px;padding:3px 8px;border-radius:999px;background:#eef5ff;color:#1769e0;font-size:11px;font-weight:800}
+
+/* Student notifications on tablet and desktop: polished dropdown under the bell. */
+@media (min-width: 768px) {
+  .top-notification-panel { display:flex; flex-direction:column; width:min(420px, calc(100vw - 32px)); max-height:min(70vh, 560px); top:calc(100% + 12px); right:0; border:1px solid #e1eaf4; border-radius:18px; background:#fff; box-shadow:0 24px 60px rgba(9,30,55,.22); animation:student-notification-modal-in 160ms ease-out both; }
+  .top-notification-head { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 16px 14px; border-bottom:1px solid #edf2f7; }
+  .top-notification-head > div { min-width:0; display:grid; gap:4px; }
+  .top-notification-head strong { color:#122b49; font-size:1.05rem; font-weight:800; line-height:1.25; }
+  .top-notification-head small { color:#63758a; font-size:.8rem; font-weight:700; }
+  .top-notification-close { flex:0 0 34px; width:34px; height:34px; display:grid; place-items:center; border:1px solid #dce6f0; border-radius:10px; background:#f7faff; color:#24415f; font-size:1.3rem; line-height:1; cursor:pointer; transition:background .16s ease, border-color .16s ease; }
+  .top-notification-close:hover { background:#eaf2fd; border-color:#b7cde3; }
+  .top-notification-close:focus-visible { outline:3px solid rgba(23,105,224,.22); outline-offset:2px; }
+  .top-notification-actions { flex:0 0 auto; padding:8px 16px; border-bottom:1px solid #edf2f7; text-align:right; }
+  .top-notification-actions button { border:0; background:transparent; color:#1769e0; font-family:inherit; font-size:.78rem; font-weight:800; cursor:pointer; }
+  .top-notification-actions button:hover { text-decoration:underline; }
+  .top-notification-list { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+  .top-notification-item { display:flex; flex-direction:row; align-items:flex-start; gap:12px; width:100%; padding:14px 16px; border:0; border-bottom:1px solid #edf2f7; background:#fff; text-align:left; white-space:normal; cursor:pointer; transition:background .16s ease; }
+  .top-notification-item:last-child { border-bottom:0; }
+  .top-notification-item:hover, .top-notification-item:focus-visible { background:#f5f9ff; outline:none; }
+  .top-notification-unread-dot { flex:0 0 9px; width:9px; height:9px; margin-top:6px; border-radius:50%; background:#2674ed; box-shadow:0 0 0 4px rgba(38,116,237,.14); }
+  .top-notification-copy { display:grid; flex:1 1 auto; min-width:0; gap:6px; white-space:normal; overflow-wrap:anywhere; }
+  .top-notification-copy strong { display:block; color:#183653; font-size:.88rem; font-weight:800; line-height:1.45; white-space:normal; overflow-wrap:anywhere; }
+  .top-notification-copy small { display:block; color:#708197; font-size:.74rem; font-weight:600; line-height:1.4; white-space:normal; overflow-wrap:anywhere; }
+  .top-notification-empty { padding:28px 22px; text-align:center; color:#63758a; }
+  .top-notification-empty > span { display:grid; place-items:center; width:44px; height:44px; margin:0 auto 10px; border-radius:50%; background:#e6f7ec; color:#12813f; font-weight:800; }
+  .top-notification-empty strong { display:block; color:#18304b; }
+  .top-notification-empty p { margin:6px 0 0; font-size:.82rem; line-height:1.5; }
+}
