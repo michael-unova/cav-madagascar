@@ -55,6 +55,8 @@ export interface QuestionSet {
   subjectId: string
   /** Chapter (topic node) this quiz or exercise is placed in. Optional: older sets have none. */
   contentNodeId?: string
+  /** Student app only: shared key of the chapter, so the placement still matches course-linked copies of the chapter. */
+  contentNodeSharedKey?: string
   /** Position inside the chapter's unified content list (shared numeric space with lessons and tests). */
   contentOrder?: number
   type: QuestionSetType

@@ -866,13 +866,37 @@ export const getStudentPracticeSets = onCall({ region: 'africa-south1' }, async 
           type: String(data.type ?? 'practice'),
           settings: data.settings ?? null,
           status: 'published',
+          contentNodeId: typeof data.contentNodeId === 'string' ? data.contentNodeId : '',
+          contentOrder: typeof data.contentOrder === 'number' ? data.contentOrder : undefined,
         }
       })
       .filter(item => ['practice', 'exercise', 'quiz', 'important_questions'].includes(item.type))
   }))
 
+  const flatSets = groups.flat()
+
+  // Chapter placement: lets the student app show each quiz or exercise inside its chapter, in the
+  // administrator's order. Only chapters that are published (readable by students) are resolved,
+  // so an item placed in a draft chapter stays in "Testez vos connaissances". No answer data is added.
+  const placementIds = [...new Set(flatSets.map(item => item.contentNodeId).filter(Boolean))]
+  const chapters = new Map<string, { sharedKey: string }>()
+  if (placementIds.length) {
+    const nodeSnapshots = await db.getAll(...placementIds.map(id => db.doc(`contentNodes/${id}`)))
+    for (const node of nodeSnapshots) {
+      const data = node.data()
+      if (node.exists && data?.status === 'published') chapters.set(node.id, { sharedKey: typeof data.sharedKey === 'string' ? data.sharedKey : '' })
+    }
+  }
+
   return {
-    sets: groups.flat().sort((a, b) => a.title.localeCompare(b.title, 'fr')),
+    sets: flatSets
+      .map(({ contentNodeId, contentOrder, ...item }) => {
+        const chapter = contentNodeId ? chapters.get(contentNodeId) : undefined
+        return chapter
+          ? { ...item, contentNodeId, contentNodeSharedKey: chapter.sharedKey, ...(contentOrder !== undefined ? { contentOrder } : {}) }
+          : item
+      })
+      .sort((a, b) => a.title.localeCompare(b.title, 'fr')),
   }
 })
 

@@ -1860,6 +1860,18 @@ async function listContentNodesSafe(courseSubjectId: string): Promise<ContentNod
   }
 }
 
+/** Same numbering as the administrator panel, so a chapter item has the same number on both sides. */
+function formatContentNumber(index: number, style: ContentNumberingStyle = "alpha", parentIndex?: number) {
+  const n = index + 1;
+  if (style === "alpha") return `${n <= 26 ? String.fromCharCode(96 + n) : n})`;
+  if (style === "roman") {
+    const vals: [number,string][] = [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],[50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]];
+    let rest=n, roman=""; for (const [value,symbol] of vals) while(rest>=value){roman+=symbol;rest-=value;} return `${roman}.`;
+  }
+  if (style === "hierarchical") return `${(parentIndex ?? 0) + 1}.${n}`;
+  return `${n}.`;
+}
+
 function CoursePage({
   setPage,
   onBack,
@@ -1873,12 +1885,13 @@ function CoursePage({
   onBack?: () => void;
   course?: CourseView;
   userId?: string;
-  practice: () => void;
+  practice: (setId?: string) => void;
   initialLessonId?: string | null;
   initialCommentId?: string | null;
 }) {
   const [subjects, setSubjects] = useState<CourseSubject[]>([]);
   const [nodes, setNodes] = useState<ContentNode[]>([]);
+  const [chapterSets, setChapterSets] = useState<QuestionSet[]>([]);
   const [progress, setProgress] = useState(0);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -1936,6 +1949,18 @@ function CoursePage({
     fallback();
   };
 
+  useEffect(() => {
+    if (!course?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { httpsCallable } = await import("firebase/functions");
+      const { getFirebaseFunctions } = await import("./lib/firebase/functions");
+      const load = httpsCallable<{ courseId: string }, { sets: QuestionSet[] }>(getFirebaseFunctions(), "getStudentPracticeSets");
+      const response = await load({ courseId: course.id });
+      if (!cancelled) setChapterSets(response.data.sets.filter(item => item.contentNodeId && ["quiz", "exercise", "practice"].includes(item.type)));
+    })().catch(() => { if (!cancelled) setChapterSets([]); });
+    return () => { cancelled = true; };
+  }, [course?.id]);
   useEffect(() => {
     const onCourseViewPopState = (event: PopStateEvent) => {
       const state = event.state as { __cavCourseView?: boolean; subjectId?: string; nodeId?: string; courseId?: string | null } | null;
@@ -2550,12 +2575,20 @@ function CoursePage({
                 const subjectTopics = subjectNodes.filter((node) => node.type === "topic").sort((a, b) => a.order - b.order);
                 const subjectLessons = subjectNodes.filter((node) => node.type !== "topic").sort((a, b) => a.order - b.order);
                 const subjectTopicIds = new Set(subjectLessons.map((lesson) => lesson.parentId).filter(Boolean));
-                const subjectVisibleTopics = subjectTopics.filter((topic) => subjectTopicIds.has(topic.id));
+                const setsOfTopic = (topic: ContentNode) => chapterSets.filter((item) => item.contentNodeId === topic.id || Boolean(topic.sharedKey && item.contentNodeSharedKey === topic.sharedKey));
+                const subjectVisibleTopics = subjectTopics.filter((topic) => subjectTopicIds.has(topic.id) || setsOfTopic(topic).length > 0);
                 const subjectOrphanLessons = subjectLessons.filter((lesson) => !lesson.parentId || !subjectTopics.some((topic) => topic.id === lesson.parentId));
                 return (
                   <>
                     {subjectVisibleTopics.map((topic, topicIndex) => {
                       const topicLessons = subjectLessons.filter((lesson) => lesson.parentId === topic.id);
+                      // One list in the administrator's order: lessons and placed quizzes/exercises share the same order space.
+                      const unplaced = Number.MAX_SAFE_INTEGER / 2;
+                      const chapterRows = [
+                        ...topicLessons.map((lesson) => ({ key: `lesson:${lesson.id}`, order: lesson.order, rank: 0, title: lesson.title, lesson, set: undefined as QuestionSet | undefined })),
+                        ...setsOfTopic(topic).map((set) => ({ key: `set:${set.id}`, order: set.contentOrder ?? unplaced, rank: set.type === "exercise" ? 2 : 1, title: set.title, lesson: undefined as ContentNode | undefined, set })),
+                      ].sort((a, b) => a.order - b.order || a.rank - b.rank || a.title.localeCompare(b.title, "fr"));
+                      const numberingStyle = topicLessons[0]?.numberingStyle ?? "alpha";
                       return (
                         <section className="student-topic student-topic-detail" key={topic.id}>
                           <div className={`student-topic-visual ${topic.imageUrl ? "has-image" : ""}`}>
@@ -2565,11 +2598,17 @@ function CoursePage({
                           </div>
                           <div className="student-topic-title"><span>{topicIndex + 1}</span><strong>Leçons</strong><small>{topicLessons.length} leçon{topicLessons.length === 1 ? "" : "s"}</small></div>
                           <div className="student-lesson-list">
-                            {topicLessons.map((lesson, index) => (
-                              <button className="lesson-row" key={lesson.id} onClick={() => void openLesson(lesson)}>
-                                <div className="lesson-number">{String.fromCharCode(97 + index)})</div>
-                                <div><strong>{lesson.title}</strong><span>Leçon · Lecture A4</span></div>
+                            {chapterRows.map((row, index) => row.lesson ? (
+                              <button className="lesson-row" key={row.key} onClick={() => void openLesson(row.lesson!)}>
+                                <div className="lesson-number">{formatContentNumber(index, numberingStyle, topicIndex)}</div>
+                                <div><strong>{row.title}</strong><span>Leçon · Lecture A4</span></div>
                                 <span className="lesson-head-btn">Lire →</span>
+                              </button>
+                            ) : (
+                              <button className="lesson-row" key={row.key} onClick={() => practice(row.set!.id)}>
+                                <div className="lesson-number">{formatContentNumber(index, numberingStyle, topicIndex)}</div>
+                                <div><strong>{row.title}</strong><span>{row.set!.type === "exercise" ? "Exercice" : "Quiz"} · {row.set!.questions.length} question{row.set!.questions.length === 1 ? "" : "s"}</span></div>
+                                <span className="lesson-head-btn">Commencer →</span>
                               </button>
                             ))}
                           </div>
@@ -2624,7 +2663,7 @@ function CoursePage({
           <div className="eyebrow">ENTRAÎNEMENT</div>
           <h3>Testez vos connaissances</h3>
           <p>Les entraînements publiés pour cette préparation apparaîtront ici.</p>
-          <button className="primary full" disabled={!subjects.length} onClick={practice}>Commencer un entraînement <Icon name="arrow" /></button>
+          <button className="primary full" disabled={!subjects.length} onClick={() => practice()}>Commencer un entraînement <Icon name="arrow" /></button>
         </aside>
       </div>
     </div>
@@ -2634,10 +2673,12 @@ function Practice({
   setPage,
   onBack,
   course,
+  focusSetId,
 }: {
   setPage: (p: StudentPage) => void;
   onBack?: () => void;
   course?: CourseView;
+  focusSetId?: string | null;
 }) {
   const [sets, setSets] = useState<QuestionSet[]>([]);
   const [important, setImportant] = useState<QuestionSet[]>([]);
@@ -2663,8 +2704,11 @@ function Practice({
         { sets: QuestionSet[] }
       >(getFirebaseFunctions(), "getStudentPracticeSets");
       const response = await getStudentPracticeSets({ courseId: course.id });
+      // A quiz placed in a chapter is opened from that chapter. It no longer appears in the
+      // general list, unless it is the one the student just opened from its chapter.
       const nextSets = response.data.sets.filter(item =>
-        ["practice", "exercise", "quiz"].includes(item.type),
+        ["practice", "exercise", "quiz"].includes(item.type) &&
+        (focusSetId ? item.id === focusSetId : !item.contentNodeId),
       );
       const nextImportant = response.data.sets.filter(item =>
         item.type === "important_questions",
@@ -2735,17 +2779,17 @@ function Practice({
   return (
     <div className="page narrow">
       <button className="back" onClick={() => onBack ? onBack() : setPage("course")}>
-        ← Retour au parcours
+        {focusSetId ? "← Retour au chapitre" : "← Retour au parcours"}
       </button>
       <div className="page-title">
         <div>
           <div className="eyebrow">ÉVALUATIONS</div>
-          <h1>Entraînements & quiz</h1>
-          <p>Les évaluations de toutes les Matières de cette préparation.</p>
+          <h1>{focusSetId ? "Quiz du chapitre" : "Entraînements & quiz"}</h1>
+          <p>{focusSetId ? "Répondez aux questions puis validez pour voir votre résultat." : "Les évaluations de toutes les Matières de cette préparation."}</p>
         </div>
       </div>
       {error && <div className="form-error">{error}</div>}
-      <div className="practice-tabs">
+      {!focusSetId && <div className="practice-tabs">
         {sets.map((item) => (
           <button
             key={item.id}
@@ -2761,7 +2805,7 @@ function Practice({
             {item.title}
           </button>
         ))}
-      </div>
+      </div>}
       {active && !submitted && (
         <div className="panel">
           <div className="eyebrow">
@@ -4165,16 +4209,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
   const [renameTitle, setRenameTitle] = useState("");
   const [renameDescription, setRenameDescription] = useState("");
 
-  function formatNodeNumber(index: number, style: ContentNumberingStyle = "alpha", parentIndex?: number) {
-    const n = index + 1;
-    if (style === "alpha") return `${n <= 26 ? String.fromCharCode(96 + n) : n})`;
-    if (style === "roman") {
-      const vals: [number,string][] = [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],[50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]];
-      let rest=n, roman=""; for (const [value,symbol] of vals) while(rest>=value){roman+=symbol;rest-=value;} return `${roman}.`;
-    }
-    if (style === "hierarchical") return `${(parentIndex ?? 0) + 1}.${n}`;
-    return `${n}.`;
-  }
+  const formatNodeNumber = formatContentNumber;
 
   async function changeSiblingNumbering(siblings: ContentNode[], style: ContentNumberingStyle) {
     if (!user || !siblings.length) return;
@@ -5981,6 +6016,7 @@ function AppContent() {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [notificationLessonId, setNotificationLessonId] = useState<string | null>(null);
   const [notificationCommentId, setNotificationCommentId] = useState<string | null>(null);
+  const [focusPracticeSetId, setFocusPracticeSetId] = useState<string | null>(null);
   const [selectedAdminSubjectId, setSelectedAdminSubjectId] = useState<string | null>(null);
   const [selectedAdminNodeId, setSelectedAdminNodeId] = useState<string | null>(null);
   const [adminPreviewCourseId, setAdminPreviewCourseId] = useState<string | null>(null);
@@ -6405,13 +6441,13 @@ function AppContent() {
               onBack={() => goBack(() => navigateStudentPage("dashboard"))}
               course={selectedCourse}
               userId={user?.uid}
-              practice={() => navigateStudentPage("practice")}
+              practice={(setId) => { setFocusPracticeSetId(setId ?? null); navigateStudentPage("practice"); }}
               initialLessonId={notificationLessonId}
               initialCommentId={notificationCommentId}
             />
           );
         if (studentPage === "practice")
-          return <Practice setPage={navigateStudentPage} onBack={() => goBack(() => navigateStudentPage("course"))} course={selectedCourse} />;
+          return <Practice key={focusPracticeSetId ?? "all"} setPage={navigateStudentPage} onBack={() => goBack(() => navigateStudentPage("course"))} course={selectedCourse} focusSetId={focusPracticeSetId} />;
         if (studentPage === "results")
           return <ResultsPage userId={user!.uid} />;
         return <ProfilePage role="student" displayName={displayName} userEmail={user?.email ?? ""} />
