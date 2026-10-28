@@ -5059,3 +5059,11 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
   .top-notification-empty strong { display:block; color:#18304b; }
   .top-notification-empty p { margin:6px 0 0; font-size:.82rem; line-height:1.5; }
 }
+
+/* Admin: visible progress while publishing or hiding content */
+.admin-busy-shield { position:fixed; inset:0; z-index:9998; cursor:progress; background:rgba(255,255,255,.35); }
+.admin-busy-toast { position:fixed; z-index:9999; left:50%; bottom:28px; transform:translateX(-50%); display:inline-flex; align-items:center; gap:12px; max-width:calc(100vw - 32px); padding:13px 20px; border-radius:999px; background:#0f2744; color:#fff; font-weight:800; font-size:.88rem; box-shadow:0 18px 40px rgba(9,30,55,.35); animation:adminBusyIn .18s ease-out both; }
+.admin-busy-spinner { flex:0 0 auto; width:18px; height:18px; border-radius:50%; border:2.5px solid rgba(255,255,255,.3); border-top-color:#fff; animation:adminBusySpin .7s linear infinite; }
+@keyframes adminBusySpin { to { transform:rotate(360deg); } }
+@keyframes adminBusyIn { from { opacity:0; transform:translate(-50%,8px); } to { opacity:1; transform:translate(-50%,0); } }
+@media (prefers-reduced-motion: reduce) { .admin-busy-spinner, .admin-busy-toast { animation:none; } .admin-busy-spinner { border-top-color:#fff; } }

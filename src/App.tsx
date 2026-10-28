@@ -4202,6 +4202,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
   const [saving, setSaving] = useState(false);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [draggedChapterKey, setDraggedChapterKey] = useState<string | null>(null);
+  const [busyLabel, setBusyLabel] = useState("");
   const [chapterSets, setChapterSets] = useState<QuestionSet[]>([]);
   const [chapterTests, setChapterTests] = useState<PsychotechnicalTest[]>([]);
   const [chapterFlow, setChapterFlow] = useState<{ kind: "quiz" | "exercise" | "test"; topicId: string } | null>(null);
@@ -4512,9 +4513,12 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
       if (action === "toggle-publish") {
         const publish = item.status !== "published";
         if (lessonNode) { await setLessonPublication(lessonNode, publish); return; }
-        if (item.kind === "test") await updatePsychotechnicalTestStatus(item.id, publish ? "published" : "draft");
-        else await updateQuestionSetStatus(item.id, publish ? "published" : "draft");
-        await refreshChapterExtras(); setMessage(publish ? "Contenu publié." : "Contenu dépublié.");
+        setBusyLabel(publish ? "Publication en cours…" : "Dépublication en cours…");
+        try {
+          if (item.kind === "test") await updatePsychotechnicalTestStatus(item.id, publish ? "published" : "draft");
+          else await updateQuestionSetStatus(item.id, publish ? "published" : "draft");
+          await refreshChapterExtras(); setMessage(publish ? "Contenu publié." : "Contenu dépublié.");
+        } finally { setBusyLabel(""); }
         return;
       }
       if (action === "remove") {
@@ -4635,7 +4639,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
   async function setLessonPublication(node: ContentNode, publish: boolean) {
     if (!user || !node.sharedKey) return;
     if (publish && nodes.find(item => item.id === node.parentId)?.status === "archived") { setOpenNodeMenuId(null); setError("Ce thème est masqué aux étudiants. Publiez d’abord le thème pour publier cette leçon."); return; }
-    setOpenNodeMenuId(null); setSaving(true); setError(""); setMessage("");
+    setOpenNodeMenuId(null); setSaving(true); setError(""); setMessage(""); setBusyLabel(publish ? "Publication de la leçon…" : "Dépublication de la leçon…");
     try {
       await applyLessonPublication(node, publish);
       await updateSharedContentNode(node.sharedKey, { hiddenWithTopic: false }, user.uid);
@@ -4643,22 +4647,26 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
       if (node.id === nodeId) { await refreshBlocks(); await refreshQuestions(); }
       setMessage(publish ? "Leçon publiée. Les étudiants peuvent la voir." : "Leçon dépubliée. Les étudiants ne la voient plus, vous ne perdez aucun contenu.");
     } catch (e) { setError(e instanceof Error ? e.message : publish ? "Impossible de publier la leçon." : "Impossible de dépublier la leçon."); }
-    finally { setSaving(false); }
+    finally { setSaving(false); setBusyLabel(""); }
   }
   // Hides a whole thème from students (its lessons are hidden with it) or shows it again, restoring those lessons.
   async function setTopicPublication(topic: ContentNode, publish: boolean) {
     if (!user || !topic.sharedKey) return;
-    setOpenNodeMenuId(null); setSaving(true); setError(""); setMessage("");
+    setOpenNodeMenuId(null); setSaving(true); setError(""); setMessage(""); setBusyLabel(publish ? "Publication du thème…" : "Masquage du thème…");
     try {
       const lessons = nodes.filter(item => item.parentId === topic.id);
       if (publish) {
         await updateSharedContentNode(topic.sharedKey, { status: "published" }, user.uid);
-        for (const lesson of lessons.filter(item => item.hiddenWithTopic)) {
+        const toRestore = lessons.filter(item => item.hiddenWithTopic);
+        for (const [index, lesson] of toRestore.entries()) {
+          setBusyLabel(`Publication des leçons… ${index + 1}/${toRestore.length}`);
           await applyLessonPublication(lesson, true);
           if (lesson.sharedKey) await updateSharedContentNode(lesson.sharedKey, { hiddenWithTopic: false }, user.uid);
         }
       } else {
-        for (const lesson of lessons.filter(item => item.status === "published")) {
+        const toHide = lessons.filter(item => item.status === "published");
+        for (const [index, lesson] of toHide.entries()) {
+          setBusyLabel(`Masquage des leçons… ${index + 1}/${toHide.length}`);
           await applyLessonPublication(lesson, false);
           if (lesson.sharedKey) await updateSharedContentNode(lesson.sharedKey, { hiddenWithTopic: true }, user.uid);
         }
@@ -4667,7 +4675,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
       await refreshSubjectData(subjectId);
       setMessage(publish ? "Thème publié. Ses leçons masquées avec lui sont de nouveau visibles." : "Thème masqué. Les étudiants ne voient plus ce thème ni ses leçons. Rien n’est supprimé.");
     } catch (e) { setError(e instanceof Error ? e.message : publish ? "Impossible de publier le thème." : "Impossible de masquer le thème."); }
-    finally { setSaving(false); }
+    finally { setSaving(false); setBusyLabel(""); }
   }
   async function removeQuestion(question: Question) {
     if (!(await confirmAction({ title: "Supprimer cette question ?", description: "Cette question sera supprimée définitivement. Cette action est irréversible." }))) return;
@@ -4719,6 +4727,7 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
         {(selectedNode && !selectedNode.parentId) && <div className="editor-actions"><button className="outline" onClick={()=>{setNodeTitle(selectedNode.title);setNodeDescription(selectedNode.description??"");setNodeImageUrl(selectedNode.imageUrl??"");setNodeImageFile(null);setNodeImagePreview(selectedNode.imageUrl??"");setNodeImagePosition(selectedNode.imagePosition??"center");setEditingNodeKey(selectedNode.sharedKey??null);setParentId("");setNodeType("topic");setShowNodeForm(true);}}>Modifier le thème</button></div>}
       </div>
     </div>
+    {busyLabel && <><div className="admin-busy-shield" aria-hidden="true" /><div className="admin-busy-toast" role="status" aria-live="polite"><span className="admin-busy-spinner" aria-hidden="true" /><span>{busyLabel}</span></div></>}
     {renameTarget && <div className="cav-confirm-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget && !saving)setRenameTarget(null);}}>
       <section className="cav-confirm-dialog chapter-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="chapter-rename-title">
         <span className="cav-confirm-eyebrow">{renameTarget.kind === "test" ? "TEST PSYCHOTECHNIQUE" : renameTarget.kind === "exercise" ? "EXERCICE" : "QUIZ"}</span>
