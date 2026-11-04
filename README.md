@@ -5,9 +5,9 @@ around classes, courses, lessons, and progress tracking.
 
 This repository currently contains **Milestone 1: Foundation and
 Architecture**: the application shell, routing, layouts, UI components, and
-Firebase foundation that later milestones build on. See `HANDOFF.md` for a
-full record of what has been implemented and what comes next, and
-`PROJECT_RULES.md` for the rules that govern this project.
+Firebase foundation that later milestones build on. See [`docs/`](docs/README.md)
+for setup guides, audits and change notes, and `PROJECT_RULES.md` for the rules
+that govern this project.
 
 ## Stack
 
