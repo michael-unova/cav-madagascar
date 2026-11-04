@@ -1,0 +1,49 @@
+/* Sujets types: admin section and student cards, timer and meta. */
+
+/* Admin */
+.course-papers-section .section-head { align-items: flex-start; flex-wrap: wrap; }
+.course-papers-section .section-head > div { min-width: 0; flex: 1 1 320px; }
+.course-paper-form { margin: 0 0 18px; padding: 18px; border: 1px solid var(--line, #dfe7f0); border-radius: 14px; background: #f8fafc; }
+.course-paper-list { display: grid; gap: 10px; }
+.course-paper-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.course-paper-row > div:first-child { min-width: 0; flex: 1 1 260px; }
+.course-paper-row > div:first-child span { display: block; overflow-wrap: anywhere; }
+.course-paper-row .admin-list-actions { flex-wrap: wrap; }
+.course-paper-editor .lesson-workspace-head { flex-wrap: wrap; gap: 12px; }
+
+/* Student: card list inside the "Testez vos connaissances" aside */
+.course-paper-cards { display: grid; gap: 10px; margin: 4px 0 2px; }
+.course-paper-card {
+  display: grid; gap: 6px; width: 100%; text-align: left;
+  padding: 14px 16px; border: 1px solid #cfe1df; border-radius: 12px; background: #fff;
+  color: var(--navy, #123b68); transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.course-paper-card:hover { border-color: #7fb7b2; box-shadow: 0 8px 20px rgba(18, 59, 104, .08); transform: translateY(-1px); }
+.course-paper-card:focus-visible { outline: 3px solid rgba(22, 139, 134, .35); outline-offset: 2px; }
+.course-paper-card-title { font: 700 15px Manrope, sans-serif; overflow-wrap: anywhere; }
+.course-paper-card-description { font-size: 12px; line-height: 1.5; color: var(--muted, #6d7d91); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.course-paper-card-meta { font-size: 11px; color: var(--muted, #6d7d91); }
+.course-paper-card-cta { font-size: 12px; font-weight: 700; color: var(--teal, #168b86); }
+
+/* Student: paper page */
+.course-paper-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: -14px 0 18px; }
+.course-paper-meta span { padding: 6px 12px; border-radius: 999px; background: #eaf2fa; color: var(--navy, #123b68); font-size: 12px; font-weight: 700; }
+.course-paper-timer {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  margin: 0 0 18px; padding: 12px 16px; border: 1px solid var(--line, #dfe7f0); border-radius: 14px;
+  background: rgba(255, 255, 255, .96); backdrop-filter: blur(8px); box-shadow: 0 6px 18px rgba(18, 59, 104, .06);
+}
+.course-paper-timer-clock small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .4px; color: var(--muted, #6d7d91); }
+.course-paper-timer-clock strong { font: 800 26px Manrope, sans-serif; font-variant-numeric: tabular-nums; color: var(--navy, #123b68); }
+.course-paper-timer-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.course-paper-timer.is-running { border-color: #9fd2cd; }
+.course-paper-timer.is-over { border-color: #f0b4b4; background: #fff5f5; }
+.course-paper-timer.is-over .course-paper-timer-clock strong { color: #b42318; }
+
+@media (max-width: 640px) {
+  .course-paper-timer { padding: 10px 12px; }
+  .course-paper-timer-actions { width: 100%; }
+  .course-paper-timer-actions button { flex: 1 1 0; }
+  .course-paper-row .admin-list-actions { width: 100%; }
+}

@@ -16,6 +16,7 @@ import {
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
 import type { Course, CourseCardColor, CourseGroup, CourseStatus } from '../../types/course'
 import type { Subject } from '../../types/subject'
+import { deleteCoursePapersForCourse } from '../coursePapers/coursePaperRepository'
 
 const firestore = getFirebaseFirestore()
 
@@ -204,6 +205,8 @@ export async function updateCourse(
 
 
 export async function deleteCourse(courseId: string): Promise<void> {
+  // Sujets types belong to their concours: remove them first so none is left orphaned.
+  await deleteCoursePapersForCourse(courseId)
   await deleteDoc(doc(firestore, 'courses', courseId))
 }
 

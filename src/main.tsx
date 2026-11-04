@@ -13,6 +13,7 @@ import { AuthProvider } from './features/auth/AuthContext'
 import { NotificationSoundProvider } from './features/sound'
 import './index.css'
 import './styles.css'
+import './styles/course-papers.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -131,6 +131,11 @@ import { ContentEditIcon, EyeIcon, PencilIcon } from "./components/ActionIcons";
 import { sortAlphabetically, sortNewestFirst } from "./features/admin/userSorting";
 import { isRecentVisit, markVisit } from "./lib/recentVisit";
 import { callableErrorMessage } from "./lib/firebase/callableError";
+import { LessonContentReader } from "./components/LessonContentReader";
+import { CoursePapersAdmin } from "./components/CoursePapersAdmin";
+import { CoursePaperView } from "./components/CoursePaperView";
+import { listStudentCoursePapers } from "./features/coursePapers";
+import type { CoursePaperSummary } from "./types/coursePaper";
 
 type Role = "visitor" | "student" | "admin" | "teacher";
 
@@ -1892,6 +1897,8 @@ function CoursePage({
   const [subjects, setSubjects] = useState<CourseSubject[]>([]);
   const [nodes, setNodes] = useState<ContentNode[]>([]);
   const [chapterSets, setChapterSets] = useState<QuestionSet[]>([]);
+  const [coursePapers, setCoursePapers] = useState<CoursePaperSummary[]>([]);
+  const [selectedPaperId, setSelectedPaperId] = useState("");
   const [progress, setProgress] = useState(0);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -1934,7 +1941,7 @@ function CoursePage({
       ? window.history.state as Record<string, unknown>
       : {};
     window.history.pushState(
-      { ...currentState, __cavCourseView: true, subjectId, nodeId, courseId: course?.id ?? null },
+      { ...currentState, __cavCourseView: true, subjectId, nodeId, paperId: "", courseId: course?.id ?? null },
       "",
       window.location.href,
     );
@@ -1962,15 +1969,26 @@ function CoursePage({
     return () => { cancelled = true; };
   }, [course?.id]);
   useEffect(() => {
+    if (!course?.id) return;
+    let cancelled = false;
+    setSelectedPaperId("");
+    listStudentCoursePapers(course.id)
+      .then(items => { if (!cancelled) setCoursePapers(items); })
+      .catch(error => { console.error(error); if (!cancelled) setCoursePapers([]); });
+    return () => { cancelled = true; };
+  }, [course?.id]);
+  useEffect(() => {
     const onCourseViewPopState = (event: PopStateEvent) => {
-      const state = event.state as { __cavCourseView?: boolean; subjectId?: string; nodeId?: string; courseId?: string | null } | null;
+      const state = event.state as { __cavCourseView?: boolean; subjectId?: string; nodeId?: string; paperId?: string; courseId?: string | null } | null;
       if (state?.__cavCourseView && (!state.courseId || state.courseId === course?.id)) {
         setSelectedSubjectId(state.subjectId ?? "");
         setSelectedNodeId(state.nodeId ?? "");
+        setSelectedPaperId(state.paperId ?? "");
       } else {
         // Returning to the app-level history entry means leaving this local view.
         setSelectedSubjectId("");
         setSelectedNodeId("");
+        setSelectedPaperId("");
       }
     };
     window.addEventListener("popstate", onCourseViewPopState);
@@ -2346,11 +2364,38 @@ function CoursePage({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const selectedPaper = coursePapers.find((paper) => paper.id === selectedPaperId);
+  const openCoursePaper = (paper: CoursePaperSummary) => {
+    const currentState = window.history.state && typeof window.history.state === "object"
+      ? window.history.state as Record<string, unknown>
+      : {};
+    window.history.pushState(
+      { ...currentState, __cavCourseView: true, subjectId: "", nodeId: "", paperId: paper.id, courseId: course?.id ?? null },
+      "",
+      window.location.href,
+    );
+    setSelectedSubjectId("");
+    setSelectedNodeId("");
+    setSelectedPaperId(paper.id);
+    window.scrollTo({ top: 0 });
+  };
+
   if (!course)
     return (
       <div className="page">
         <div className="panel empty-state">Aucune préparation sélectionnée.</div>
       </div>
+    );
+
+  if (selectedPaper)
+    return (
+      <CoursePaperView
+        key={selectedPaper.id}
+        courseId={course.id}
+        courseTitle={course.title}
+        paper={selectedPaper}
+        onBack={() => leaveCourseView(() => setSelectedPaperId(""))}
+      />
     );
 
   if (selectedNode)
@@ -2662,8 +2707,24 @@ function CoursePage({
         <aside className="practice-card">
           <div className="eyebrow">ENTRAÎNEMENT</div>
           <h3>Testez vos connaissances</h3>
-          <p>Les entraînements publiés pour cette préparation apparaîtront ici.</p>
-          <button className="primary full" disabled={!subjects.length} onClick={() => practice()}>Commencer un entraînement <Icon name="arrow" /></button>
+          {coursePapers.length > 0 ? (
+            <div className="course-paper-cards">
+              {coursePapers.map((paper) => (
+                <button type="button" className="course-paper-card" key={paper.id} onClick={() => openCoursePaper(paper)}>
+                  <span className="course-paper-card-title">{paper.title}</span>
+                  {paper.description && <span className="course-paper-card-description">{paper.description}</span>}
+                  <span className="course-paper-card-meta">
+                    {paper.timeLimitMinutes ? `⏱ ${paper.timeLimitMinutes < 60 ? `${paper.timeLimitMinutes} min` : `${Math.floor(paper.timeLimitMinutes / 60)} h${paper.timeLimitMinutes % 60 ? ` ${String(paper.timeLimitMinutes % 60).padStart(2, "0")}` : ""}`}` : "Sans limite de temps"}
+                    {paper.passMark !== null ? ` · Réussite ${paper.passMark} %` : ""}
+                  </span>
+                  <span className="course-paper-card-cta">Ouvrir le sujet →</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p>Les sujets types publiés pour ce concours apparaîtront ici.</p>
+          )}
+          <button className={coursePapers.length > 0 ? "outline full" : "primary full"} style={coursePapers.length > 0 ? { marginTop: 14 } : undefined} disabled={!subjects.length} onClick={() => practice()}>Commencer un entraînement <Icon name="arrow" /></button>
         </aside>
       </div>
     </div>
@@ -4099,6 +4160,7 @@ function AdminCourses({
           )}
         </div>
       </section>
+      {editingId && <CoursePapersAdmin key={editingId} courseId={editingId} userId={userId} />}
 
         </div>
       </div>
@@ -4747,43 +4809,6 @@ function ContentAdmin({ initialSubjectId = "", initialNodeId = "", initialPrevie
       </section>
     </div>}
   </div>;
-}
-
-function LessonContentReader({ html }: { html: string }) {
-  const pageRef = useRef<HTMLDivElement>(null)
-  // On phones, tell students when a table is wider than the screen so they know to swipe it sideways.
-  useEffect(() => {
-    const root = pageRef.current
-    if (!root) return
-    const update = () => {
-      root.querySelectorAll('.lesson-table-hint').forEach(node => node.remove())
-      root.querySelectorAll('table').forEach(table => {
-        if (table.scrollWidth > table.clientWidth + 2) {
-          const hint = document.createElement('p')
-          hint.className = 'lesson-table-hint'
-          hint.textContent = 'Faites glisser le tableau vers la gauche pour voir la suite →'
-          table.parentNode?.insertBefore(hint, table)
-        }
-      })
-    }
-    update()
-    window.addEventListener('resize', update)
-    return () => { window.removeEventListener('resize', update); root.querySelectorAll('.lesson-table-hint').forEach(node => node.remove()) }
-  }, [html])
-  return (
-    <article className="lesson-reader-preview lesson-content-reader">
-      <div className="lesson-reader-toolbar">
-        <div className="lesson-reader-toolbar-main">
-          <span className="lesson-reader-badge">📖 Cours</span>
-          <strong>Lecture</strong>
-        </div>
-        <span className="lesson-reader-hint">Contenu adapté à votre écran</span>
-      </div>
-      <div className="lesson-reader-page">
-        <div ref={pageRef} className="lesson-reader-page-inner" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(html) }} />
-      </div>
-    </article>
-  )
 }
 
 function LessonQuestionForm({ questions, lessonId, courseId, userId }: { questions: Question[]; lessonId: string; courseId: string; userId?: string }) {

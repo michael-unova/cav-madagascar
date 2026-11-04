@@ -68,6 +68,15 @@ service cloud.firestore {
       allow delete: if manager();
     }
 
+    // Sujets types (mock exam papers written per concours). The document itself is
+    // never readable by students directly: they get it through the
+    // getStudentCoursePaper callable, which checks their enrollment.
+    match /coursePapers/{id} {
+      allow read: if manager();
+      allow create, update: if manager();
+      allow delete: if manager();
+    }
+
     match /contactMessages/{id} {
       allow create: if request.resource.data.firstName is string
         && request.resource.data.firstName.size() > 0

@@ -820,6 +820,82 @@ export const getStudentLessonContent = onCall({ region: 'africa-south1' }, async
 })
 
 
+/**
+ * Shared access check for Sujets types. A student needs an active account and an
+ * active enrollment in a published concours. Progress in the lessons is never
+ * required: students may open a paper at any time.
+ */
+async function assertCoursePaperAccess(request: CallableRequest, courseId: string) {
+  const uid = request.auth?.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
+  await assertSingleSession(request)
+  if (!courseId) throw new HttpsError('invalid-argument', 'Préparation invalide.')
+
+  const profileSnapshot = await db.doc(`users/${uid}`).get()
+  if (!profileSnapshot.exists || profileSnapshot.data()?.status !== 'active') {
+    throw new HttpsError('permission-denied', 'Votre compte n’est pas actif.')
+  }
+
+  const enrollmentSnapshot = await db.collection('enrollments')
+    .where('userId', '==', uid)
+    .where('courseId', '==', courseId)
+    .where('status', '==', 'active')
+    .limit(1)
+    .get()
+  if (!enrollmentSnapshot.docs.some(item => isEnrollmentActive(item.data()))) {
+    throw new HttpsError('permission-denied', 'Votre accès à ce concours n’est pas actif.')
+  }
+
+  const courseSnapshot = await db.doc(`courses/${courseId}`).get()
+  if (!courseSnapshot.exists || courseSnapshot.data()?.status !== 'published') {
+    throw new HttpsError('not-found', 'Concours introuvable.')
+  }
+}
+
+function coursePaperSummary(id: string, data: DocumentData) {
+  return {
+    id,
+    courseId: String(data.courseId ?? ''),
+    title: String(data.title ?? ''),
+    description: String(data.description ?? ''),
+    timeLimitMinutes: typeof data.timeLimitMinutes === 'number' ? data.timeLimitMinutes : null,
+    passMark: typeof data.passMark === 'number' ? data.passMark : null,
+    status: 'published' as const,
+    order: Number(data.order ?? 0),
+  }
+}
+
+export const listStudentCoursePapers = onCall({ region: 'africa-south1' }, async request => {
+  const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : ''
+  await assertCoursePaperAccess(request, courseId)
+
+  const snapshot = await db.collection('coursePapers')
+    .where('courseId', '==', courseId)
+    .where('status', '==', 'published')
+    .get()
+
+  // The document (html) is deliberately not part of the list.
+  const papers = snapshot.docs
+    .map(item => coursePaperSummary(item.id, item.data()))
+    .sort((a, b) => a.order - b.order)
+  return { papers }
+})
+
+export const getStudentCoursePaper = onCall({ region: 'africa-south1' }, async request => {
+  const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : ''
+  const paperId = typeof request.data?.paperId === 'string' ? request.data.paperId : ''
+  await assertCoursePaperAccess(request, courseId)
+  if (!paperId) throw new HttpsError('invalid-argument', 'Sujet type invalide.')
+
+  const paperSnapshot = await db.doc(`coursePapers/${paperId}`).get()
+  const data = paperSnapshot.data()
+  if (!paperSnapshot.exists || !data || data.status !== 'published' || data.courseId !== courseId) {
+    throw new HttpsError('not-found', 'Sujet type introuvable.')
+  }
+
+  return { paper: coursePaperSummary(paperSnapshot.id, data), html: String(data.html ?? '') }
+})
+
 export const getStudentPracticeSets = onCall({ region: 'africa-south1' }, async request => {
   const uid = request.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')

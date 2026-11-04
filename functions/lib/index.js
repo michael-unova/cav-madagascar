@@ -793,6 +793,74 @@ export const getStudentLessonContent = onCall({ region: 'africa-south1' }, async
         .sort((a, b) => a.order - b.order);
     return { nodeId, blocks };
 });
+/**
+ * Shared access check for Sujets types. A student needs an active account and an
+ * active enrollment in a published concours. Progress in the lessons is never
+ * required: students may open a paper at any time.
+ */
+async function assertCoursePaperAccess(request, courseId) {
+    const uid = request.auth?.uid;
+    if (!uid)
+        throw new HttpsError('unauthenticated', 'Connexion requise.');
+    await assertSingleSession(request);
+    if (!courseId)
+        throw new HttpsError('invalid-argument', 'Préparation invalide.');
+    const profileSnapshot = await db.doc(`users/${uid}`).get();
+    if (!profileSnapshot.exists || profileSnapshot.data()?.status !== 'active') {
+        throw new HttpsError('permission-denied', 'Votre compte n’est pas actif.');
+    }
+    const enrollmentSnapshot = await db.collection('enrollments')
+        .where('userId', '==', uid)
+        .where('courseId', '==', courseId)
+        .where('status', '==', 'active')
+        .limit(1)
+        .get();
+    if (!enrollmentSnapshot.docs.some(item => isEnrollmentActive(item.data()))) {
+        throw new HttpsError('permission-denied', 'Votre accès à ce concours n’est pas actif.');
+    }
+    const courseSnapshot = await db.doc(`courses/${courseId}`).get();
+    if (!courseSnapshot.exists || courseSnapshot.data()?.status !== 'published') {
+        throw new HttpsError('not-found', 'Concours introuvable.');
+    }
+}
+function coursePaperSummary(id, data) {
+    return {
+        id,
+        courseId: String(data.courseId ?? ''),
+        title: String(data.title ?? ''),
+        description: String(data.description ?? ''),
+        timeLimitMinutes: typeof data.timeLimitMinutes === 'number' ? data.timeLimitMinutes : null,
+        passMark: typeof data.passMark === 'number' ? data.passMark : null,
+        status: 'published',
+        order: Number(data.order ?? 0),
+    };
+}
+export const listStudentCoursePapers = onCall({ region: 'africa-south1' }, async (request) => {
+    const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : '';
+    await assertCoursePaperAccess(request, courseId);
+    const snapshot = await db.collection('coursePapers')
+        .where('courseId', '==', courseId)
+        .where('status', '==', 'published')
+        .get();
+    // The document (html) is deliberately not part of the list.
+    const papers = snapshot.docs
+        .map(item => coursePaperSummary(item.id, item.data()))
+        .sort((a, b) => a.order - b.order);
+    return { papers };
+});
+export const getStudentCoursePaper = onCall({ region: 'africa-south1' }, async (request) => {
+    const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : '';
+    const paperId = typeof request.data?.paperId === 'string' ? request.data.paperId : '';
+    await assertCoursePaperAccess(request, courseId);
+    if (!paperId)
+        throw new HttpsError('invalid-argument', 'Sujet type invalide.');
+    const paperSnapshot = await db.doc(`coursePapers/${paperId}`).get();
+    const data = paperSnapshot.data();
+    if (!paperSnapshot.exists || !data || data.status !== 'published' || data.courseId !== courseId) {
+        throw new HttpsError('not-found', 'Sujet type introuvable.');
+    }
+    return { paper: coursePaperSummary(paperSnapshot.id, data), html: String(data.html ?? '') };
+});
 export const getStudentPracticeSets = onCall({ region: 'africa-south1' }, async (request) => {
     const uid = request.auth?.uid;
     if (!uid)
@@ -833,12 +901,35 @@ export const getStudentPracticeSets = onCall({ region: 'africa-south1' }, async 
                 type: String(data.type ?? 'practice'),
                 settings: data.settings ?? null,
                 status: 'published',
+                contentNodeId: typeof data.contentNodeId === 'string' ? data.contentNodeId : '',
+                contentOrder: typeof data.contentOrder === 'number' ? data.contentOrder : undefined,
             };
         })
             .filter(item => ['practice', 'exercise', 'quiz', 'important_questions'].includes(item.type));
     }));
+    const flatSets = groups.flat();
+    // Chapter placement: lets the student app show each quiz or exercise inside its chapter, in the
+    // administrator's order. Only chapters that are published (readable by students) are resolved,
+    // so an item placed in a draft chapter stays in "Testez vos connaissances". No answer data is added.
+    const placementIds = [...new Set(flatSets.map(item => item.contentNodeId).filter(Boolean))];
+    const chapters = new Map();
+    if (placementIds.length) {
+        const nodeSnapshots = await db.getAll(...placementIds.map(id => db.doc(`contentNodes/${id}`)));
+        for (const node of nodeSnapshots) {
+            const data = node.data();
+            if (node.exists && data?.status === 'published')
+                chapters.set(node.id, { sharedKey: typeof data.sharedKey === 'string' ? data.sharedKey : '' });
+        }
+    }
     return {
-        sets: groups.flat().sort((a, b) => a.title.localeCompare(b.title, 'fr')),
+        sets: flatSets
+            .map(({ contentNodeId, contentOrder, ...item }) => {
+            const chapter = contentNodeId ? chapters.get(contentNodeId) : undefined;
+            return chapter
+                ? { ...item, contentNodeId, contentNodeSharedKey: chapter.sharedKey, ...(contentOrder !== undefined ? { contentOrder } : {}) }
+                : item;
+        })
+            .sort((a, b) => a.title.localeCompare(b.title, 'fr')),
     };
 });
 export const submitPsychotechnicalTest = onCall({ region: 'africa-south1' }, async (request) => {
