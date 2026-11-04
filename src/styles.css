@@ -5067,3 +5067,26 @@ body.student-content-protected .lesson-document a[href],body.student-content-pro
 @keyframes adminBusySpin { to { transform:rotate(360deg); } }
 @keyframes adminBusyIn { from { opacity:0; transform:translate(-50%,8px); } to { opacity:1; transform:translate(-50%,0); } }
 @media (prefers-reduced-motion: reduce) { .admin-busy-spinner, .admin-busy-toast { animation:none; } .admin-busy-spinner { border-top-color:#fff; } }
+
+/* ---- Sujets types (mock exam papers) ---- */
+.exam-paper-card { display:grid; gap:10px; padding:2px 0 18px; }
+.exam-paper-card + .exam-paper-card { border-top:1px solid var(--line); padding-top:18px; }
+.exam-paper-card h3 { margin:0; }
+.exam-paper-card p { margin:0; }
+.exam-paper-meta { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:11px; color:var(--muted); }
+.exam-paper-timer { position:sticky; top:78px; z-index:3; display:flex; justify-content:center; gap:6px; margin:0 0 18px; padding:10px 16px; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); font-size:13px; color:var(--navy); }
+.exam-paper-timer b { font-variant-numeric:tabular-nums; }
+.exam-paper-timer.is-low { border-color:#e3a6a0; color:#a8352b; }
+.exam-paper-section { margin:26px 0 4px; padding:10px 14px; background:#eaf2fa; border-radius:10px; color:var(--navy); font-family:Manrope,sans-serif; font-weight:800; font-size:13px; letter-spacing:.3px; }
+.exam-paper-breakdown { margin:18px 0; }
+.exam-paper-breakdown h3 { margin:0 0 8px; }
+.exam-papers-admin .exam-paper-options { display:flex; flex-wrap:wrap; gap:8px 22px; margin:14px 0 0; font-size:13px; }
+.exam-papers-admin .exam-paper-options label { display:flex; align-items:center; gap:8px; }
+.exam-papers-admin .exam-paper-subject { margin-top:14px; border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#fff; }
+.exam-papers-admin .exam-paper-subject-head { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+.exam-papers-admin .exam-paper-subject-head strong { flex:1; color:var(--navy); }
+.exam-papers-admin .exam-paper-subject-head span { font-size:11px; color:var(--muted); }
+.exam-papers-admin .exam-paper-question { display:flex; align-items:flex-start; gap:10px; padding:7px 0; border-top:1px solid var(--line); font-size:13px; cursor:pointer; }
+.exam-papers-admin .exam-paper-question span { flex:1; }
+.exam-papers-admin .exam-paper-question small { color:var(--muted); white-space:nowrap; }
+@media (max-width:700px) { .exam-paper-timer { top:64px; } }

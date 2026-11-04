@@ -16,7 +16,7 @@ const emptyOptions: QuestionOption[] = [
   { id: 'a', label: 'A', text: '' }, { id: 'b', label: 'B', text: '' }, { id: 'c', label: 'C', text: '' }, { id: 'd', label: 'D', text: '' },
 ]
 
-const setTypeLabel: Record<QuestionSetType, string> = { question_bank: 'Banque', important_questions: 'Questions importantes', practice: 'Entraînement', exercise: 'Exercices', quiz: 'Quiz' }
+const setTypeLabel: Record<QuestionSetType, string> = { question_bank: 'Banque', important_questions: 'Questions importantes', practice: 'Entraînement', exercise: 'Exercices', quiz: 'Quiz', exam_paper: 'Sujet type' }
 
 export function AdminQuestionsPage() {
   const { user } = useAuth()

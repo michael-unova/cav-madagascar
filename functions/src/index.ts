@@ -888,6 +888,30 @@ export const getStudentPracticeSets = onCall({ region: 'africa-south1' }, async 
     }
   }
 
+  // "Sujets types": mock exam papers owned by this concours. Open to every student with active access,
+  // whatever their progress in the lessons. Like the other sets, they carry no answer key.
+  const examPaperSnapshot = await db.collection('questionSets')
+    .where('courseId', '==', courseId)
+    .where('type', '==', 'exam_paper')
+    .where('status', '==', 'published')
+    .get()
+  const examPapers = examPaperSnapshot.docs
+    .map(item => {
+      const data = item.data() ?? {}
+      return {
+        id: item.id,
+        title: String(data.title ?? ''),
+        description: String(data.description ?? ''),
+        questions: Array.isArray(data.questions) ? data.questions : [],
+        subjectId: '',
+        courseId,
+        type: 'exam_paper',
+        settings: data.settings ?? null,
+        status: 'published',
+      }
+    })
+    .sort((a, b) => a.title.localeCompare(b.title, 'fr'))
+
   return {
     sets: flatSets
       .map(({ contentNodeId, contentOrder, ...item }) => {
@@ -897,6 +921,7 @@ export const getStudentPracticeSets = onCall({ region: 'africa-south1' }, async 
           : item
       })
       .sort((a, b) => a.title.localeCompare(b.title, 'fr')),
+    examPapers,
   }
 })
 
@@ -961,7 +986,10 @@ export const submitPractice = onCall({ region: 'africa-south1' }, async request 
   const setSnapshot = await db.doc(`questionSets/${setId}`).get()
   if (!setSnapshot.exists) throw new HttpsError('not-found', 'Entraînement introuvable.')
   const set = setSnapshot.data() ?? {}
-  if (set.status !== 'published' || !['practice', 'exercise', 'quiz'].includes(String(set.type ?? ''))) throw new HttpsError('failed-precondition', 'Cette évaluation n’est pas disponible.')
+  if (set.status !== 'published' || !['practice', 'exercise', 'quiz', 'exam_paper'].includes(String(set.type ?? ''))) throw new HttpsError('failed-precondition', 'Cette évaluation n’est pas disponible.')
+  const isExamPaper = set.type === 'exam_paper'
+  // A Sujet type belongs to one concours; without it there is no access rule to apply.
+  if (isExamPaper && !String(set.courseId ?? '')) throw new HttpsError('failed-precondition', 'Ce sujet n’est associé à aucun concours.')
 
   let courseId = String(set.courseId ?? '')
   if (courseId) {
@@ -999,6 +1027,17 @@ export const submitPractice = onCall({ region: 'africa-south1' }, async request 
   let pendingManualCount = 0
   const results: Record<string, boolean> = {}
 
+  // Exam papers: which matière each question belongs to, so the score can be split per matière.
+  const questionSubjects = new Map<string, { subjectId: string; title: string }>()
+  if (isExamPaper && Array.isArray(set.questions)) {
+    for (const item of set.questions) {
+      if (item && typeof item === 'object' && typeof item.id === 'string') {
+        questionSubjects.set(item.id, { subjectId: String(item.subjectId ?? ''), title: String(item.subjectTitle ?? '') })
+      }
+    }
+  }
+  const subjectTotals = new Map<string, { title: string; earned: number; total: number }>()
+
   questionSnapshots.forEach((snapshot, index) => {
     if (!snapshot.exists) return
     const question = snapshot.data() ?? {}
@@ -1012,9 +1051,23 @@ export const submitPractice = onCall({ region: 'africa-south1' }, async request 
     const correct = answerIsCorrect(type, answerMap.get(questionIds[index]), question.correctAnswer)
     results[questionIds[index]] = correct
     if (correct) earnedPoints += points
+    const subject = questionSubjects.get(questionIds[index])
+    if (subject) {
+      const entry = subjectTotals.get(subject.subjectId) ?? { title: subject.title, earned: 0, total: 0 }
+      entry.total += points
+      if (correct) entry.earned += points
+      subjectTotals.set(subject.subjectId, entry)
+    }
   })
 
   const percentage = totalPoints === 0 ? 0 : Math.round((earnedPoints / totalPoints) * 100)
+  const subjectResults = [...subjectTotals.entries()].map(([subjectId, entry]) => ({
+    subjectId,
+    title: entry.title,
+    earnedPoints: entry.earned,
+    totalPoints: entry.total,
+    percentage: entry.total === 0 ? 0 : Math.round((entry.earned / entry.total) * 100),
+  }))
   const attemptRef = await db.collection('practiceAttempts').add({
     userId: uid,
     courseId,
@@ -1024,10 +1077,11 @@ export const submitPractice = onCall({ region: 'africa-south1' }, async request 
     totalPoints,
     percentage,
     pendingManualCount,
+    ...(isExamPaper ? { subjectResults } : {}),
     submittedAt: new Date(),
   })
 
-  return { attemptId: attemptRef.id, earnedPoints, totalPoints, percentage, pendingManualCount, results }
+  return { attemptId: attemptRef.id, earnedPoints, totalPoints, percentage, pendingManualCount, results, ...(isExamPaper ? { subjectResults } : {}) }
 })
 
 export const submitLessonQuestions = onCall({ region: 'africa-south1' }, async request => {

@@ -204,6 +204,9 @@ export async function updateCourse(
 
 
 export async function deleteCourse(courseId: string): Promise<void> {
+  // The Sujets types of a concours belong to it alone, so they go with it. (Quizzes belong to matières and stay.)
+  const papers = await getDocs(query(collection(firestore, 'questionSets'), where('courseId', '==', courseId), where('type', '==', 'exam_paper')))
+  await Promise.all(papers.docs.map((item) => deleteDoc(item.ref)))
   await deleteDoc(doc(firestore, 'courses', courseId))
 }
 

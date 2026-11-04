@@ -71,9 +71,17 @@ The current product scope is:
 - question bank
 - practice/entraînement sets
 - automatic practice scoring for objective questions
+- per-concours mock exam papers ("Sujets types") that combine questions from all the matières of a concours
 - admin analytics and user management
 
-There is intentionally **no exam/simulation engine** in the current product scope.
+Each concours has its own **Sujets types**, managed by admins in the concours editor
+(title, description, optional time limit, scoring options and the questions drawn from
+every matière of the concours). Enrolled students can open a published Sujet type at any
+time, whether or not they have finished the lessons. Scoring goes through `submitPractice`
+and is reported per matière.
+
+There is intentionally no full exam-day simulation beyond these papers (no proctoring or
+fixed exam sessions).
 
 ### Practice scoring backend
 

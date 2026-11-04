@@ -1,6 +1,6 @@
 import { addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { getFirebaseFirestore } from '../../lib/firebase/firestore'
-import type { PracticeAttempt, PracticeQuestionSnapshot, Question, QuestionSet, QuestionSetType, QuestionType, QuestionDifficulty } from '../../types/question'
+import type { PracticeAttempt, PracticeQuestionSnapshot, Question, QuestionSet, QuestionSetSettings, QuestionSetType, QuestionType, QuestionDifficulty } from '../../types/question'
 
 const db = getFirebaseFirestore()
 
@@ -49,7 +49,7 @@ function mapQuestionSet(id: string, data: Record<string, unknown>): QuestionSet 
 }
 
 function mapAttempt(id: string, data: Record<string, unknown>): PracticeAttempt {
-  return { id, userId: String(data.userId ?? ''), courseId: String(data.courseId ?? ''), questionSetId: String(data.questionSetId ?? ''), answers: Array.isArray(data.answers) ? data.answers as PracticeAttempt['answers'] : [], earnedPoints: Number(data.earnedPoints ?? 0), totalPoints: Number(data.totalPoints ?? 0), percentage: Number(data.percentage ?? 0), pendingManualCount: Number(data.pendingManualCount ?? 0), submittedAt: toDate(data.submittedAt) }
+  return { id, userId: String(data.userId ?? ''), courseId: String(data.courseId ?? ''), questionSetId: String(data.questionSetId ?? ''), answers: Array.isArray(data.answers) ? data.answers as PracticeAttempt['answers'] : [], earnedPoints: Number(data.earnedPoints ?? 0), totalPoints: Number(data.totalPoints ?? 0), percentage: Number(data.percentage ?? 0), pendingManualCount: Number(data.pendingManualCount ?? 0), subjectResults: Array.isArray(data.subjectResults) ? data.subjectResults as PracticeAttempt['subjectResults'] : undefined, submittedAt: toDate(data.submittedAt) }
 }
 
 export async function listAdminQuestions(subjectId = ''): Promise<Question[]> {
@@ -170,4 +170,69 @@ export async function deleteQuestionSet(setId: string): Promise<void> { await de
 export async function listMyPracticeAttempts(userId: string): Promise<PracticeAttempt[]> {
   const snapshot = await getDocs(query(collection(db, 'practiceAttempts'), where('userId', '==', userId)))
   return snapshot.docs.map(item => mapAttempt(item.id, item.data())).sort((a, b) => (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0))
+}
+
+/** All "Sujets types" (mock exam papers) of one concours, drafts included. Admin only. */
+export async function listAdminExamPapers(courseId: string): Promise<QuestionSet[]> {
+  if (!courseId) return []
+  const snapshot = await getDocs(query(collection(db, 'questionSets'), where('courseId', '==', courseId), where('type', '==', 'exam_paper')))
+  return snapshot.docs.map(item => mapQuestionSet(item.id, item.data())).sort((a, b) => a.title.localeCompare(b.title, 'fr'))
+}
+
+/**
+ * Creates (or, with `id`, updates) a Sujet type of a concours. The questions may come from any matière of the
+ * concours (`subjects`); each one is stored with its matière so the paper can be shown and scored per matière.
+ * A new paper starts as a draft. Updating keeps its publication status.
+ */
+export async function saveExamPaper(input: {
+  id?: string
+  courseId: string
+  title: string
+  description: string
+  questionIds: string[]
+  subjects: { id: string; title: string }[]
+  settings: QuestionSetSettings
+  userId: string
+}): Promise<string> {
+  const title = input.title.trim()
+  if (!title) throw new Error('Donnez un titre à ce sujet.')
+  const subjectTitles = new Map(input.subjects.map(item => [item.id, item.title]))
+  const questions = await Promise.all(input.questionIds.map(id => getQuestion(id)))
+  const snapshots: PracticeQuestionSnapshot[] = questions
+    .filter((q): q is Question => Boolean(q && q.status === 'published' && subjectTitles.has(q.subjectId)))
+    .map(q => ({
+      id: q.id,
+      type: q.type,
+      questionContent: q.questionContent,
+      ...(q.options ? { options: q.options } : {}),
+      ...(q.explanation?.trim() ? { explanation: q.explanation.trim() } : {}),
+      points: q.points,
+      subjectId: q.subjectId,
+      subjectTitle: subjectTitles.get(q.subjectId) ?? '',
+    }))
+  if (snapshots.length === 0) throw new Error('Sélectionnez au moins une question publiée des matières de ce concours.')
+  const { durationMinutes, passingScore, ...flags } = input.settings
+  const settings: QuestionSetSettings = {
+    ...flags,
+    ...(passingScore !== undefined ? { passingScore } : {}),
+    ...(durationMinutes && durationMinutes > 0 ? { durationMinutes: Math.round(durationMinutes) } : {}),
+  }
+  const data = {
+    title,
+    description: input.description.trim(),
+    courseId: input.courseId,
+    subjectId: '',
+    questionIds: snapshots.map(q => q.id),
+    questions: snapshots,
+    type: 'exam_paper' as const,
+    settings,
+    updatedAt: serverTimestamp(),
+  }
+  if (input.id) {
+    // `settings` is replaced as a whole so a removed time limit does not linger.
+    await updateDoc(doc(db, 'questionSets', input.id), data)
+    return input.id
+  }
+  const ref = await addDoc(collection(db, 'questionSets'), { ...data, status: 'draft', createdBy: input.userId })
+  return ref.id
 }

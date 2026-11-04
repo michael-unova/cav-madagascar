@@ -1,6 +1,7 @@
 export type QuestionType = 'multiple_choice' | 'multiple_select' | 'true_false' | 'short_answer' | 'numeric' | 'written'
 export type QuestionDifficulty = 'easy' | 'medium' | 'hard'
-export type QuestionSetType = 'question_bank' | 'important_questions' | 'practice' | 'exercise' | 'quiz'
+/** `exam_paper` is a "Sujet type": a mock exam of one concours that combines questions from all its matières. */
+export type QuestionSetType = 'question_bank' | 'important_questions' | 'practice' | 'exercise' | 'quiz' | 'exam_paper'
 
 export interface QuestionOption {
   id: string
@@ -33,6 +34,9 @@ export interface PracticeQuestionSnapshot {
   options?: QuestionOption[]
   explanation?: string
   points: number
+  /** Exam papers only: the matière the question belongs to, so the paper can be shown and scored per matière. */
+  subjectId?: string
+  subjectTitle?: string
 }
 
 export interface QuestionSetSettings {
@@ -42,6 +46,8 @@ export interface QuestionSetSettings {
   showPoints: boolean
   allowRetry: boolean
   passingScore?: number
+  /** Exam papers only: time limit in minutes. Absent means no time limit. */
+  durationMinutes?: number
 }
 
 export interface QuestionSet {
@@ -81,5 +87,15 @@ export interface PracticeAttempt {
   totalPoints: number
   percentage: number
   pendingManualCount: number
+  /** Exam papers only: the score obtained in each matière. */
+  subjectResults?: SubjectResult[]
   submittedAt?: Date
+}
+
+export interface SubjectResult {
+  subjectId: string
+  title: string
+  earnedPoints: number
+  totalPoints: number
+  percentage: number
 }

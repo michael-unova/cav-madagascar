@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FormEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useAuth } from "./features/auth";
@@ -94,6 +94,7 @@ const AdminAnalyticsPage = lazy(() => import("./pages/AdminAnalyticsPage").then(
 const AdminBillingPage = lazy(() => import("./pages/AdminBillingPage").then((module) => ({ default: module.AdminBillingPage })));
 const LibraryPage = lazy(() => import("./pages/LibraryPage").then((module) => ({ default: module.LibraryPage })));
 const AdminLibraryPage = lazy(() => import("./pages/AdminLibraryPage").then((module) => ({ default: module.AdminLibraryPage })));
+const AdminExamPapersPanel = lazy(() => import("./pages/AdminExamPapersPanel").then((module) => ({ default: module.AdminExamPapersPanel })));
 const AuthActionPage = lazy(() => import("./pages/AuthActionPage").then((module) => ({ default: module.AuthActionPage })));
 import { SoundSettingsCard } from "./features/sound";
 import { markNotificationRead, subscribeMyNotifications, subscribeUnreadLessonCommentCount } from "./features/lessonComments";
@@ -123,6 +124,7 @@ import type {
   QuestionOption,
   QuestionSet,
   QuestionType,
+  SubjectResult,
 } from "./types/question";
 import type { PsychotechnicalTest } from "./types/psychotechnical";
 import { ChapterAddMenu, ChapterContentList, type ChapterAddKind, type ChapterItem, type ChapterItemAction } from "./components/ChapterContentList";
@@ -1892,6 +1894,9 @@ function CoursePage({
   const [subjects, setSubjects] = useState<CourseSubject[]>([]);
   const [nodes, setNodes] = useState<ContentNode[]>([]);
   const [chapterSets, setChapterSets] = useState<QuestionSet[]>([]);
+  // "Sujets types" of this concours (mock exam papers). Open to every enrolled student, whatever their progress.
+  const [examPapers, setExamPapers] = useState<QuestionSet[]>([]);
+  const [examPapersState, setExamPapersState] = useState<"loading" | "ready" | "error">("loading");
   const [progress, setProgress] = useState(0);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -1955,10 +1960,13 @@ function CoursePage({
     (async () => {
       const { httpsCallable } = await import("firebase/functions");
       const { getFirebaseFunctions } = await import("./lib/firebase/functions");
-      const load = httpsCallable<{ courseId: string }, { sets: QuestionSet[] }>(getFirebaseFunctions(), "getStudentPracticeSets");
+      const load = httpsCallable<{ courseId: string }, { sets: QuestionSet[]; examPapers?: QuestionSet[] }>(getFirebaseFunctions(), "getStudentPracticeSets");
       const response = await load({ courseId: course.id });
-      if (!cancelled) setChapterSets(response.data.sets.filter(item => item.contentNodeId && ["quiz", "exercise", "practice"].includes(item.type)));
-    })().catch(() => { if (!cancelled) setChapterSets([]); });
+      if (cancelled) return;
+      setChapterSets(response.data.sets.filter(item => item.contentNodeId && ["quiz", "exercise", "practice"].includes(item.type)));
+      setExamPapers(response.data.examPapers ?? []);
+      setExamPapersState("ready");
+    })().catch(() => { if (!cancelled) { setChapterSets([]); setExamPapers([]); setExamPapersState("error"); } });
     return () => { cancelled = true; };
   }, [course?.id]);
   useEffect(() => {
@@ -2660,14 +2668,37 @@ function CoursePage({
           )}
         </main>
         <aside className="practice-card">
-          <div className="eyebrow">ENTRAÎNEMENT</div>
-          <h3>Testez vos connaissances</h3>
-          <p>Les entraînements publiés pour cette préparation apparaîtront ici.</p>
-          <button className="primary full" disabled={!subjects.length} onClick={() => practice()}>Commencer un entraînement <Icon name="arrow" /></button>
+          <div className="eyebrow">TESTEZ VOS CONNAISSANCES</div>
+          {examPapersState === "loading" ? <p>Chargement…</p>
+            : examPapersState === "error" ? <p>Impossible de charger le sujet de ce concours pour le moment.</p>
+            : examPapers.length === 0 ? <><h3>Sujet type</h3><p>Le sujet de ce concours sera bientôt disponible.</p></>
+            : examPapers.map((paper) => {
+              const matieres = new Set(paper.questions.map((q) => q.subjectId).filter(Boolean)).size;
+              const minutes = paper.settings?.durationMinutes;
+              return (
+                <div className="exam-paper-card" key={paper.id}>
+                  <h3>{paper.title}</h3>
+                  {paper.description && <p>{paper.description}</p>}
+                  <div className="exam-paper-meta">
+                    <span>{paper.questions.length} question{paper.questions.length === 1 ? "" : "s"}</span>
+                    {matieres > 0 && <span>{matieres} matière{matieres === 1 ? "" : "s"}</span>}
+                    <span>{minutes ? `${minutes} min` : "Sans limite de temps"}</span>
+                  </div>
+                  <button className="primary full" onClick={() => practice(paper.id)}>Commencer <Icon name="arrow" /></button>
+                </div>
+              );
+            })}
         </aside>
       </div>
     </div>
   );
+}
+function formatCountdown(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 }
 function Practice({
   setPage,
@@ -2692,6 +2723,8 @@ function Practice({
     pending: number;
   } | null>(null);
   const [results, setResults] = useState<Record<string, boolean>>({});
+  const [subjectResults, setSubjectResults] = useState<SubjectResult[]>([]);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -2701,12 +2734,14 @@ function Practice({
       const { getFirebaseFunctions } = await import("./lib/firebase/functions");
       const getStudentPracticeSets = httpsCallable<
         { courseId: string },
-        { sets: QuestionSet[] }
+        { sets: QuestionSet[]; examPapers?: QuestionSet[] }
       >(getFirebaseFunctions(), "getStudentPracticeSets");
       const response = await getStudentPracticeSets({ courseId: course.id });
+      // A Sujet type opened from the concours page.
+      const focusedPaper = focusSetId ? (response.data.examPapers ?? []).find(item => item.id === focusSetId) : undefined;
       // A quiz placed in a chapter is opened from that chapter. It no longer appears in the
       // general list, unless it is the one the student just opened from its chapter.
-      const nextSets = response.data.sets.filter(item =>
+      const nextSets = focusedPaper ? [focusedPaper] : response.data.sets.filter(item =>
         ["practice", "exercise", "quiz"].includes(item.type) &&
         (focusSetId ? item.id === focusSetId : !item.contentNodeId),
       );
@@ -2726,9 +2761,27 @@ function Practice({
       );
   }, [course]);
   const active = sets.find((item) => item.id === activeId);
+  const paperMode = active?.type === "exam_paper";
+  const durationMinutes = paperMode ? active?.settings?.durationMinutes : undefined;
   function setAnswer(questionId: string, value: unknown) {
     setAnswers((current) => ({ ...current, [questionId]: value }));
   }
+  // Time limit of a Sujet type: counts down while the paper is being answered and sends it when time is up.
+  const submitRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    if (!active || submitted || !durationMinutes) { setSecondsLeft(null); return; }
+    const end = Date.now() + durationMinutes * 60000;
+    setSecondsLeft(durationMinutes * 60);
+    const timer = window.setInterval(() => {
+      const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left === 0) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [active?.id, submitted, durationMinutes]);
+  useEffect(() => {
+    if (secondsLeft === 0 && !submitted) void submitRef.current();
+  }, [secondsLeft, submitted]);
   async function submit() {
     if (!active || saving) return;
     setSaving(true);
@@ -2744,6 +2797,7 @@ function Practice({
           percentage: number;
           pendingManualCount: number;
           results: Record<string, boolean>;
+          subjectResults?: SubjectResult[];
         }
       >(getFirebaseFunctions(), "submitPractice");
       const response = await submitPractice({
@@ -2760,6 +2814,7 @@ function Practice({
         pending: response.data.pendingManualCount,
       });
       setResults(response.data.results);
+      setSubjectResults(response.data.subjectResults ?? []);
       setSubmitted(true);
     } catch (err) {
       console.error(err);
@@ -2768,6 +2823,7 @@ function Practice({
       setSaving(false);
     }
   }
+  useEffect(() => { submitRef.current = submit; });
   if (!course)
     return (
       <div className="page narrow">
@@ -2779,16 +2835,21 @@ function Practice({
   return (
     <div className="page narrow">
       <button className="back" onClick={() => onBack ? onBack() : setPage("course")}>
-        {focusSetId ? "← Retour au chapitre" : "← Retour au parcours"}
+        {focusSetId && !paperMode ? "← Retour au chapitre" : "← Retour au parcours"}
       </button>
       <div className="page-title">
         <div>
-          <div className="eyebrow">ÉVALUATIONS</div>
-          <h1>{focusSetId ? "Quiz du chapitre" : "Entraînements & quiz"}</h1>
-          <p>{focusSetId ? "Répondez aux questions puis validez pour voir votre résultat." : "Les évaluations de toutes les Matières de cette préparation."}</p>
+          <div className="eyebrow">{paperMode ? "TESTEZ VOS CONNAISSANCES" : "ÉVALUATIONS"}</div>
+          <h1>{paperMode ? "Sujet d’examen blanc" : focusSetId ? "Quiz du chapitre" : "Entraînements & quiz"}</h1>
+          <p>{paperMode ? "Répondez aux questions de toutes les matières, puis validez pour voir votre résultat." : focusSetId ? "Répondez aux questions puis validez pour voir votre résultat." : "Les évaluations de toutes les Matières de cette préparation."}</p>
         </div>
       </div>
       {error && <div className="form-error">{error}</div>}
+      {paperMode && !submitted && secondsLeft !== null && (
+        <div className={`exam-paper-timer${secondsLeft <= 60 ? " is-low" : ""}`} role="timer" aria-live="off">
+          Temps restant : <b>{formatCountdown(secondsLeft)}</b>
+        </div>
+      )}
       {!focusSetId && <div className="practice-tabs">
         {sets.map((item) => (
           <button
@@ -2813,12 +2874,18 @@ function Practice({
               ? "QUIZ"
               : active.type === "exercise"
                 ? "EXERCICE"
-                : "ENTRAÎNEMENT"}
+                : active.type === "exam_paper"
+                  ? "SUJET TYPE"
+                  : "ENTRAÎNEMENT"}
           </div>
           <h2>{active.title}</h2>
           <p>{active.description}</p>
           {active.questions.map((q, index) => (
-            <div className="practice-question" key={q.id}>
+            <Fragment key={q.id}>
+            {paperMode && q.subjectTitle && q.subjectTitle !== active.questions[index - 1]?.subjectTitle && (
+              <div className="exam-paper-section">{q.subjectTitle}</div>
+            )}
+            <div className="practice-question">
               <strong>
                 {index + 1}.{" "}
                 {String(
@@ -2912,6 +2979,7 @@ function Practice({
                 />
               )}
             </div>
+            </Fragment>
           ))}
           <button
             className="primary"
@@ -2941,11 +3009,23 @@ function Practice({
               )}
             </>
           )}
+          {paperMode && active.settings?.showScore !== false && subjectResults.length > 0 && (
+            <div className="exam-paper-breakdown">
+              <h3>Résultat par matière</h3>
+              {subjectResults.map((item) => (
+                <div className="metric" key={item.subjectId}>
+                  <span>{item.title}</span>
+                  <b>{item.earnedPoints}/{item.totalPoints} · {item.percentage}%</b>
+                </div>
+              ))}
+            </div>
+          )}
           {active.settings?.showCorrections !== false &&
             active.questions.map(
-              (q) =>
+              (q, index) =>
                 q.type !== "written" && (
                   <p key={q.id}>
+                    {paperMode && <span>{index + 1}. </span>}
                     <strong>
                       {results[q.id] ? "✓ Correct" : "✗ Incorrect"}
                     </strong>
@@ -2964,6 +3044,7 @@ function Practice({
                   setSubmitted(false);
                   setAnswers({});
                   setResults({});
+                  setSubjectResults([]);
                   setScore(null);
                 }
               }}
@@ -2976,7 +3057,7 @@ function Practice({
           </div>
         </div>
       )}
-      {important.length > 0 && (
+      {important.length > 0 && !paperMode && (
         <div className="panel" style={{ marginTop: 24 }}>
           <div className="eyebrow">RÉVISION</div>
           <h2>Questions importantes</h2>
@@ -4099,6 +4180,15 @@ function AdminCourses({
           )}
         </div>
       </section>
+      {editingId ? (
+        <Suspense fallback={<LightweightLoader />}><AdminExamPapersPanel key={editingId} courseId={editingId} userId={userId} /></Suspense>
+      ) : (
+        <section className="panel course-editor-subjects" style={{ marginBottom: 0 }}>
+          <div className="eyebrow">TESTEZ VOS CONNAISSANCES</div>
+          <h2>Sujets types de ce concours</h2>
+          <p className="form-help">Enregistrez d’abord le concours et ajoutez ses matières : vous pourrez ensuite composer ses sujets types.</p>
+        </section>
+      )}
 
         </div>
       </div>
