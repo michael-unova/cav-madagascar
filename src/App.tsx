@@ -133,9 +133,9 @@ import { isRecentVisit, markVisit } from "./lib/recentVisit";
 import { callableErrorMessage } from "./lib/firebase/callableError";
 import { LessonContentReader } from "./components/LessonContentReader";
 import { CoursePapersAdmin } from "./components/CoursePapersAdmin";
-import { CoursePaperView } from "./components/CoursePaperView";
+import { CoursePapersBrowser } from "./components/CoursePapersBrowser";
 import { listStudentCoursePapers } from "./features/coursePapers";
-import type { CoursePaperSummary } from "./types/coursePaper";
+import type { CoursePaperGroupSummary } from "./types/coursePaper";
 
 type Role = "visitor" | "student" | "admin" | "teacher";
 
@@ -1897,7 +1897,10 @@ function CoursePage({
   const [subjects, setSubjects] = useState<CourseSubject[]>([]);
   const [nodes, setNodes] = useState<ContentNode[]>([]);
   const [chapterSets, setChapterSets] = useState<QuestionSet[]>([]);
-  const [coursePapers, setCoursePapers] = useState<CoursePaperSummary[]>([]);
+  const [coursePaperGroups, setCoursePaperGroups] = useState<CoursePaperGroupSummary[]>([]);
+  // Testez vos connaissances: hub (list of épreuves) -> one épreuve -> one Sujet type.
+  const [papersHub, setPapersHub] = useState(false);
+  const [paperGroupId, setPaperGroupId] = useState("");
   const [selectedPaperId, setSelectedPaperId] = useState("");
   const [progress, setProgress] = useState(0);
   const [selectedNodeId, setSelectedNodeId] = useState("");
@@ -1941,7 +1944,7 @@ function CoursePage({
       ? window.history.state as Record<string, unknown>
       : {};
     window.history.pushState(
-      { ...currentState, __cavCourseView: true, subjectId, nodeId, paperId: "", courseId: course?.id ?? null },
+      { ...currentState, __cavCourseView: true, subjectId, nodeId, papersHub: false, paperGroupId: "", paperId: "", courseId: course?.id ?? null },
       "",
       window.location.href,
     );
@@ -1971,23 +1974,29 @@ function CoursePage({
   useEffect(() => {
     if (!course?.id) return;
     let cancelled = false;
+    setPapersHub(false);
+    setPaperGroupId("");
     setSelectedPaperId("");
     listStudentCoursePapers(course.id)
-      .then(items => { if (!cancelled) setCoursePapers(items); })
-      .catch(error => { console.error(error); if (!cancelled) setCoursePapers([]); });
+      .then(items => { if (!cancelled) setCoursePaperGroups(items); })
+      .catch(error => { console.error(error); if (!cancelled) setCoursePaperGroups([]); });
     return () => { cancelled = true; };
   }, [course?.id]);
   useEffect(() => {
     const onCourseViewPopState = (event: PopStateEvent) => {
-      const state = event.state as { __cavCourseView?: boolean; subjectId?: string; nodeId?: string; paperId?: string; courseId?: string | null } | null;
+      const state = event.state as { __cavCourseView?: boolean; subjectId?: string; nodeId?: string; papersHub?: boolean; paperGroupId?: string; paperId?: string; courseId?: string | null } | null;
       if (state?.__cavCourseView && (!state.courseId || state.courseId === course?.id)) {
         setSelectedSubjectId(state.subjectId ?? "");
         setSelectedNodeId(state.nodeId ?? "");
+        setPapersHub(Boolean(state.papersHub));
+        setPaperGroupId(state.paperGroupId ?? "");
         setSelectedPaperId(state.paperId ?? "");
       } else {
         // Returning to the app-level history entry means leaving this local view.
         setSelectedSubjectId("");
         setSelectedNodeId("");
+        setPapersHub(false);
+        setPaperGroupId("");
         setSelectedPaperId("");
       }
     };
@@ -2364,19 +2373,20 @@ function CoursePage({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const selectedPaper = coursePapers.find((paper) => paper.id === selectedPaperId);
-  const openCoursePaper = (paper: CoursePaperSummary) => {
+  const goToPapers = (next: { hub: boolean; groupId: string; paperId: string }) => {
     const currentState = window.history.state && typeof window.history.state === "object"
       ? window.history.state as Record<string, unknown>
       : {};
     window.history.pushState(
-      { ...currentState, __cavCourseView: true, subjectId: "", nodeId: "", paperId: paper.id, courseId: course?.id ?? null },
+      { ...currentState, __cavCourseView: true, subjectId: "", nodeId: "", papersHub: next.hub, paperGroupId: next.groupId, paperId: next.paperId, courseId: course?.id ?? null },
       "",
       window.location.href,
     );
     setSelectedSubjectId("");
     setSelectedNodeId("");
-    setSelectedPaperId(paper.id);
+    setPapersHub(next.hub);
+    setPaperGroupId(next.groupId);
+    setSelectedPaperId(next.paperId);
     window.scrollTo({ top: 0 });
   };
 
@@ -2387,14 +2397,21 @@ function CoursePage({
       </div>
     );
 
-  if (selectedPaper)
+  if (papersHub && course)
     return (
-      <CoursePaperView
-        key={selectedPaper.id}
+      <CoursePapersBrowser
         courseId={course.id}
         courseTitle={course.title}
-        paper={selectedPaper}
-        onBack={() => leaveCourseView(() => setSelectedPaperId(""))}
+        groups={coursePaperGroups}
+        groupId={paperGroupId}
+        paperId={selectedPaperId}
+        onOpenGroup={(groupId) => goToPapers({ hub: true, groupId, paperId: "" })}
+        onOpenPaper={(groupId, paperId) => goToPapers({ hub: true, groupId, paperId })}
+        onBack={() => leaveCourseView(() => {
+          if (selectedPaperId) setSelectedPaperId("");
+          else if (paperGroupId) setPaperGroupId("");
+          else setPapersHub(false);
+        })}
       />
     );
 
@@ -2707,24 +2724,12 @@ function CoursePage({
         <aside className="practice-card">
           <div className="eyebrow">ENTRAÎNEMENT</div>
           <h3>Testez vos connaissances</h3>
-          {coursePapers.length > 0 ? (
-            <div className="course-paper-cards">
-              {coursePapers.map((paper) => (
-                <button type="button" className="course-paper-card" key={paper.id} onClick={() => openCoursePaper(paper)}>
-                  <span className="course-paper-card-title">{paper.title}</span>
-                  {paper.description && <span className="course-paper-card-description">{paper.description}</span>}
-                  <span className="course-paper-card-meta">
-                    {paper.timeLimitMinutes ? `⏱ ${paper.timeLimitMinutes < 60 ? `${paper.timeLimitMinutes} min` : `${Math.floor(paper.timeLimitMinutes / 60)} h${paper.timeLimitMinutes % 60 ? ` ${String(paper.timeLimitMinutes % 60).padStart(2, "0")}` : ""}`}` : "Sans limite de temps"}
-                    {paper.passMark !== null ? ` · Réussite ${paper.passMark} %` : ""}
-                  </span>
-                  <span className="course-paper-card-cta">Ouvrir le sujet →</span>
-                </button>
-              ))}
-            </div>
+          {coursePaperGroups.length > 0 ? (
+            <p>Entraînez-vous avec les sujets types de ce concours, organisés par épreuve.</p>
           ) : (
             <p>Les sujets types publiés pour ce concours apparaîtront ici.</p>
           )}
-          <button className={coursePapers.length > 0 ? "outline full" : "primary full"} style={coursePapers.length > 0 ? { marginTop: 14 } : undefined} disabled={!subjects.length} onClick={() => practice()}>Commencer un entraînement <Icon name="arrow" /></button>
+          <button className="primary full" disabled={coursePaperGroups.length === 0} onClick={() => goToPapers({ hub: true, groupId: "", paperId: "" })}>Voir tous les sujets types <Icon name="arrow" /></button>
         </aside>
       </div>
     </div>

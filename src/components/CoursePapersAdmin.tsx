@@ -5,12 +5,16 @@ import { LessonContentReader } from './LessonContentReader'
 import { RichLessonEditor, sanitizeLessonHtml } from './RichLessonEditor'
 import {
   createCoursePaper,
+  createCoursePaperGroup,
   deleteCoursePaper,
+  deleteCoursePaperGroup,
+  listCoursePaperGroups,
   listCoursePapers,
   updateCoursePaper,
+  updateCoursePaperGroup,
 } from '../features/coursePapers'
 import { DEFAULT_COURSE_PAPER_TITLE } from '../types/coursePaper'
-import type { CoursePaper } from '../types/coursePaper'
+import type { CoursePaper, CoursePaperGroup } from '../types/coursePaper'
 
 interface Props {
   courseId: string
@@ -46,6 +50,11 @@ function describePaper(paper: CoursePaper) {
  */
 export function CoursePapersAdmin({ courseId, userId }: Props) {
   const [papers, setPapers] = useState<CoursePaper[]>([])
+  const [groups, setGroups] = useState<CoursePaperGroup[]>([])
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null)
+  // 'new' = creation form, a group id = rename form, null = closed.
+  const [groupTarget, setGroupTarget] = useState<'new' | string | null>(null)
+  const [groupTitle, setGroupTitle] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -59,11 +68,13 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
 
   const refresh = useCallback(async () => {
     try {
-      setPapers(await listCoursePapers(courseId))
+      const [paperList, groupList] = await Promise.all([listCoursePapers(courseId), listCoursePaperGroups(courseId)])
+      setPapers(paperList)
+      setGroups(groupList)
       setError('')
     } catch (e) {
       console.error(e)
-      setError('Impossible de charger les sujets types de ce concours.')
+      setError('Impossible de charger les épreuves de ce concours.')
     } finally {
       setLoading(false)
     }
@@ -72,19 +83,109 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
   // The parent keys this component by concours id, so state starts fresh for each concours.
   useEffect(() => {
     let cancelled = false
-    listCoursePapers(courseId)
-      .then(list => { if (!cancelled) setPapers(list) })
-      .catch(e => { console.error(e); if (!cancelled) setError('Impossible de charger les sujets types de ce concours.') })
+    Promise.all([listCoursePapers(courseId), listCoursePaperGroups(courseId)])
+      .then(([paperList, groupList]) => { if (!cancelled) { setPapers(paperList); setGroups(groupList) } })
+      .catch(e => { console.error(e); if (!cancelled) setError('Impossible de charger les épreuves de ce concours.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [courseId])
 
   const openPaper = papers.find(paper => paper.id === openPaperId) ?? null
+  const openGroup = groups.find(group => group.id === openGroupId) ?? null
+  const groupPapers = openGroup ? papers.filter(paper => paper.groupId === openGroup.id) : []
+  const ungroupedPapers = papers.filter(paper => !groups.some(group => group.id === paper.groupId))
   const dirty = Boolean(openPaper) && draftHtml !== openPaper!.html
+
+  function startGroupCreate() {
+    setError(''); setMessage('')
+    setGroupTitle('')
+    setGroupTarget('new')
+  }
+
+  function startGroupRename(group: CoursePaperGroup) {
+    setError(''); setMessage('')
+    setGroupTitle(group.title)
+    setGroupTarget(group.id)
+  }
+
+  async function saveGroup() {
+    const title = groupTitle.trim()
+    if (!title) { setError('Le nom de l’épreuve est obligatoire.'); return }
+    setBusy(true); setError(''); setMessage('')
+    try {
+      if (groupTarget === 'new') {
+        const nextOrder = groups.reduce((max, group) => Math.max(max, group.order), -1) + 1
+        await createCoursePaperGroup(courseId, title, nextOrder, userId)
+        setMessage('Épreuve créée en brouillon. Ouvrez-la pour y ajouter des sujets types.')
+      } else if (groupTarget) {
+        await updateCoursePaperGroup(groupTarget, { title }, userId)
+        setMessage('Épreuve renommée.')
+      }
+      await refresh()
+      setGroupTarget(null)
+    } catch (e) {
+      console.error(e)
+      setError(e instanceof Error ? e.message : 'Impossible d’enregistrer l’épreuve.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function setGroupPublication(group: CoursePaperGroup, publish: boolean) {
+    setBusy(true); setError(''); setMessage('')
+    try {
+      await updateCoursePaperGroup(group.id, { status: publish ? 'published' : 'draft' }, userId)
+      await refresh()
+      const publishedInside = papers.filter(paper => paper.groupId === group.id && paper.status === 'published').length
+      setMessage(publish
+        ? publishedInside > 0 ? 'Épreuve publiée.' : 'Épreuve publiée. Elle restera masquée pour les étudiants tant qu’elle n’a pas de sujet type publié.'
+        : 'Épreuve dépubliée.')
+    } catch (e) {
+      console.error(e)
+      setError(e instanceof Error ? e.message : 'Impossible de modifier la publication.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeGroup(group: CoursePaperGroup) {
+    const count = papers.filter(paper => paper.groupId === group.id).length
+    if (!(await confirmAction({
+      title: 'Supprimer cette épreuve ?',
+      description: <>L’épreuve <strong>« {group.title} »</strong> sera supprimée définitivement{count > 0 ? <>, avec ses <strong>{count} sujet{count > 1 ? 's' : ''} type{count > 1 ? 's' : ''}</strong></> : null}. Cette action est irréversible.</>,
+    }))) return
+    setBusy(true); setError(''); setMessage('')
+    try {
+      await deleteCoursePaperGroup(group.id)
+      if (openGroupId === group.id) { setOpenGroupId(null); setOpenPaperId(null); setSettingsTarget(null) }
+      await refresh()
+      setMessage('Épreuve supprimée avec ses sujets types.')
+    } catch (e) {
+      console.error(e)
+      setError(e instanceof Error ? e.message : 'Impossible de supprimer l’épreuve.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function movePaper(paper: CoursePaper, groupId: string) {
+    if (!groupId) return
+    setBusy(true); setError(''); setMessage('')
+    try {
+      await updateCoursePaper(paper.id, { groupId }, userId)
+      await refresh()
+      setMessage('Sujet type déplacé dans l’épreuve.')
+    } catch (e) {
+      console.error(e)
+      setError(e instanceof Error ? e.message : 'Impossible de déplacer le sujet type.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   function startCreate() {
     setError(''); setMessage('')
-    setForm(EMPTY_FORM)
+    setForm({ ...EMPTY_FORM, title: `${DEFAULT_COURSE_PAPER_TITLE} ${groupPapers.length + 1}` })
     setSettingsTarget('new')
   }
 
@@ -115,8 +216,9 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
     try {
       const input = { title: form.title, description: form.description, timeLimitMinutes: result.timeLimit, passMark: result.passMark }
       if (settingsTarget === 'new') {
-        const nextOrder = papers.reduce((max, paper) => Math.max(max, paper.order), -1) + 1
-        const id = await createCoursePaper(courseId, input, nextOrder, userId)
+        if (!openGroup) throw new Error('Ouvrez d’abord une épreuve.')
+        const nextOrder = groupPapers.reduce((max, paper) => Math.max(max, paper.order), -1) + 1
+        const id = await createCoursePaper(courseId, openGroup.id, input, nextOrder, userId)
         const list = await listCoursePapers(courseId)
         setPapers(list)
         setSettingsTarget(null)
@@ -240,7 +342,7 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
   if (openPaper) {
     return (
       <section className="panel course-papers-section course-paper-editor" style={{ marginBottom: 0 }}>
-        <button type="button" className="back" onClick={() => void closeEditor()}>← Retour aux sujets types</button>
+        <button type="button" className="back" onClick={() => void closeEditor()}>← Retour {openGroup ? `à l’épreuve « ${openGroup.title} »` : 'à la liste'}</button>
         {error && <div className="form-error" role="alert">{error}</div>}
         {message && <div className="form-success" role="status">{message}</div>}
         <div className="lesson-workspace-head">
@@ -281,41 +383,142 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
     )
   }
 
+  const groupForm = groupTarget && (
+    <div className="compact-create-form course-paper-form">
+      <div className="lesson-workspace-head"><div>
+        <span className="pill">{groupTarget === 'new' ? 'NOUVELLE ÉPREUVE' : 'RENOMMER'}</span>
+        <h3>{groupTarget === 'new' ? 'Créer une épreuve' : 'Renommer l’épreuve'}</h3>
+      </div></div>
+      <div className="form-grid">
+        <label className="wide">Nom de l’épreuve
+          <input className="fake-input" autoFocus value={groupTitle} onChange={e => setGroupTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void saveGroup() }} placeholder="Ex. EPREUVE MATHS" />
+        </label>
+      </div>
+      <div className="editor-actions">
+        <button type="button" className="primary" disabled={busy || !groupTitle.trim()} onClick={() => void saveGroup()}>{busy ? 'Enregistrement...' : groupTarget === 'new' ? 'Créer en brouillon' : 'Enregistrer'}</button>
+        <button type="button" className="outline" disabled={busy} onClick={() => setGroupTarget(null)}>Annuler</button>
+      </div>
+    </div>
+  )
+
+  const feedback = (
+    <>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      {message && <div className="form-success" role="status">{message}</div>}
+    </>
+  )
+
+  function renderPaperRow(paper: CoursePaper) {
+    return (
+      <div className="admin-course course-paper-row" key={paper.id}>
+        <div>
+          <strong>{paper.title}</strong>
+          <span>{describePaper(paper)}{paper.html.trim() ? '' : ' · Contenu vide'}</span>
+          {paper.description && <span>{paper.description}</span>}
+        </div>
+        <div className="admin-list-actions">
+          <span className={`status ${paper.status === 'published' ? 'published' : 'draft'}`}>{paper.status === 'published' ? 'Publié' : 'Brouillon'}</span>
+          <button type="button" className="primary small-btn" disabled={busy} onClick={() => openEditor(paper)}>Rédiger</button>
+          <button type="button" className="outline small-btn" disabled={busy} onClick={() => startSettings(paper)}>Paramètres</button>
+          <button type="button" className="outline small-btn" disabled={busy} onClick={() => void setPublication(paper, paper.status !== 'published')}>{paper.status === 'published' ? 'Dépublier' : 'Publier'}</button>
+          <button type="button" className="outline small-btn danger-outline" disabled={busy} onClick={() => void removePaper(paper)}>Supprimer</button>
+        </div>
+      </div>
+    )
+  }
+
+  // Level 2: the Sujets types of one épreuve.
+  if (openGroup) {
+    return (
+      <section className="panel course-papers-section" style={{ marginBottom: 0 }}>
+        <button type="button" className="back" onClick={() => { setOpenGroupId(null); setSettingsTarget(null); setError(''); setMessage('') }}>← Retour aux épreuves</button>
+        <div className="section-head">
+          <div>
+            <div className="eyebrow">ÉPREUVE · {openGroup.status === 'published' ? 'PUBLIÉE' : 'BROUILLON'}</div>
+            <h2>{openGroup.title}</h2>
+            <p>Créez ici les sujets types de cette épreuve (Sujet type 1, 2, 3…). Chacun a son propre éditeur, sa description, sa limite de temps et sa note de réussite.</p>
+          </div>
+          <div className="admin-list-actions">
+            <button type="button" className="primary small-btn" disabled={busy || settingsTarget === 'new'} onClick={startCreate}>+ Nouveau sujet type</button>
+            <button type="button" className="outline small-btn" disabled={busy} onClick={() => startGroupRename(openGroup)}>Renommer</button>
+            <button type="button" className="outline small-btn" disabled={busy} onClick={() => void setGroupPublication(openGroup, openGroup.status !== 'published')}>{openGroup.status === 'published' ? 'Dépublier' : 'Publier'}</button>
+            <button type="button" className="outline small-btn danger-outline" disabled={busy} onClick={() => void removeGroup(openGroup)}>Supprimer</button>
+          </div>
+        </div>
+        {feedback}
+        {groupForm}
+        {settingsForm}
+        {groupPapers.length === 0
+          ? <div className="empty-state compact">Aucun sujet type dans cette épreuve. Créez le premier avec « Nouveau sujet type ».</div>
+          : <div className="admin-list course-paper-list">{groupPapers.map(renderPaperRow)}</div>}
+      </section>
+    )
+  }
+
+  // Level 1: the épreuves of the concours.
   return (
     <section className="panel course-papers-section" style={{ marginBottom: 0 }}>
       <div className="section-head">
         <div>
           <div className="eyebrow">TESTEZ VOS CONNAISSANCES</div>
           <h2>Sujets types de ce concours</h2>
-          <p>Rédigez des sujets d’examen blanc propres à ce concours, avec le même éditeur que les leçons. Les étudiants peuvent les ouvrir à tout moment, même sans avoir terminé les leçons.</p>
+          <p>Créez d’abord une épreuve (par exemple EPREUVE MATHS ou EPREUVE FRS), puis ses sujets types. Les étudiants les ouvrent à tout moment, même sans avoir terminé les leçons.</p>
         </div>
-        <button type="button" className="primary small-btn" disabled={busy || settingsTarget === 'new'} onClick={startCreate}>+ Nouveau sujet type</button>
+        <button type="button" className="primary small-btn" disabled={busy || groupTarget === 'new'} onClick={startGroupCreate}>+ Nouvelle épreuve</button>
       </div>
-      {error && <div className="form-error" role="alert">{error}</div>}
-      {message && <div className="form-success" role="status">{message}</div>}
-      {settingsForm}
+      {feedback}
+      {groupForm}
       {loading
-        ? <div className="empty-state compact">Chargement des sujets types…</div>
-        : papers.length === 0
-          ? <div className="empty-state compact">Aucun sujet type pour ce concours. Créez-en un pour proposer un examen blanc aux étudiants.</div>
+        ? <div className="empty-state compact">Chargement des épreuves…</div>
+        : groups.length === 0 && ungroupedPapers.length === 0
+          ? <div className="empty-state compact">Aucune épreuve pour ce concours. Créez-en une pour y ajouter des sujets types.</div>
           : <div className="admin-list course-paper-list">
-            {papers.map(paper => (
+            {groups.map(group => {
+              const inside = papers.filter(paper => paper.groupId === group.id)
+              const published = inside.filter(paper => paper.status === 'published').length
+              return (
+                <div className="admin-course course-paper-row" key={group.id}>
+                  <div>
+                    <strong>{group.title}</strong>
+                    <span>{inside.length === 0 ? 'Aucun sujet type' : `${inside.length} sujet${inside.length > 1 ? 's' : ''} type${inside.length > 1 ? 's' : ''}, ${published} publié${published > 1 ? 's' : ''}`}</span>
+                  </div>
+                  <div className="admin-list-actions">
+                    <span className={`status ${group.status === 'published' ? 'published' : 'draft'}`}>{group.status === 'published' ? 'Publiée' : 'Brouillon'}</span>
+                    <button type="button" className="primary small-btn" disabled={busy} onClick={() => { setOpenGroupId(group.id); setError(''); setMessage('') }}>Ouvrir</button>
+                    <button type="button" className="outline small-btn" disabled={busy} onClick={() => startGroupRename(group)}>Renommer</button>
+                    <button type="button" className="outline small-btn" disabled={busy} onClick={() => void setGroupPublication(group, group.status !== 'published')}>{group.status === 'published' ? 'Dépublier' : 'Publier'}</button>
+                    <button type="button" className="outline small-btn danger-outline" disabled={busy} onClick={() => void removeGroup(group)}>Supprimer</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>}
+      {ungroupedPapers.length > 0 && (
+        <div className="course-paper-orphans">
+          <h3>Sujets types sans épreuve</h3>
+          <p>Ces sujets ont été créés avant les épreuves. Les étudiants ne les voient pas tant qu’ils ne sont pas rangés dans une épreuve.</p>
+          {settingsForm}
+          <div className="admin-list course-paper-list">
+            {ungroupedPapers.map(paper => (
               <div className="admin-course course-paper-row" key={paper.id}>
                 <div>
                   <strong>{paper.title}</strong>
-                  <span>{describePaper(paper)}{paper.html.trim() ? '' : ' · Contenu vide'}</span>
-                  {paper.description && <span>{paper.description}</span>}
+                  <span>{describePaper(paper)}</span>
                 </div>
                 <div className="admin-list-actions">
-                  <span className={`status ${paper.status === 'published' ? 'published' : 'draft'}`}>{paper.status === 'published' ? 'Publié' : 'Brouillon'}</span>
+                  <select className="fake-input course-paper-move" aria-label={`Ranger « ${paper.title} » dans une épreuve`} disabled={busy || groups.length === 0} value="" onChange={e => void movePaper(paper, e.target.value)}>
+                    <option value="">{groups.length === 0 ? 'Créez d’abord une épreuve' : 'Ranger dans une épreuve…'}</option>
+                    {groups.map(group => <option key={group.id} value={group.id}>{group.title}</option>)}
+                  </select>
                   <button type="button" className="primary small-btn" disabled={busy} onClick={() => openEditor(paper)}>Rédiger</button>
                   <button type="button" className="outline small-btn" disabled={busy} onClick={() => startSettings(paper)}>Paramètres</button>
-                  <button type="button" className="outline small-btn" disabled={busy} onClick={() => void setPublication(paper, paper.status !== 'published')}>{paper.status === 'published' ? 'Dépublier' : 'Publier'}</button>
                   <button type="button" className="outline small-btn danger-outline" disabled={busy} onClick={() => void removePaper(paper)}>Supprimer</button>
                 </div>
               </div>
             ))}
-          </div>}
+          </div>
+        </div>
+      )}
     </section>
   )
 }

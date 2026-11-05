@@ -12,7 +12,6 @@
 .course-paper-editor .lesson-workspace-head { flex-wrap: wrap; gap: 12px; }
 
 /* Student: card list inside the "Testez vos connaissances" aside */
-.course-paper-cards { display: grid; gap: 10px; margin: 4px 0 2px; }
 .course-paper-card {
   display: grid; gap: 6px; width: 100%; text-align: left;
   padding: 14px 16px; border: 1px solid #cfe1df; border-radius: 12px; background: #fff;
@@ -47,3 +46,16 @@
   .course-paper-timer-actions button { flex: 1 1 0; }
   .course-paper-row .admin-list-actions { width: 100%; }
 }
+
+/* Admin: épreuves level */
+.course-paper-orphans { margin-top: 26px; padding-top: 18px; border-top: 1px dashed var(--line, #dfe7f0); }
+.course-paper-orphans h3 { margin: 0 0 4px; }
+.course-paper-orphans > p { margin: 0 0 14px; color: var(--muted, #6d7d91); font-size: 13px; }
+.course-paper-move { min-width: 190px; max-width: 100%; }
+.course-papers-section > .back { margin-bottom: 12px; }
+
+/* Student: épreuves and Sujets types grids */
+.course-paper-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.course-paper-grid .course-paper-card { padding: 18px; min-height: 120px; align-content: start; }
+.course-paper-grid .course-paper-card-cta { align-self: end; }
+@media (max-width: 640px) { .course-paper-grid { grid-template-columns: 1fr; } }

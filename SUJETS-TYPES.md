@@ -1,44 +1,46 @@
 # Sujets types par concours
 
-Chaque concours peut avoir plusieurs "Sujets types" (examens blancs). Un sujet type est un
-document rédigé par l'admin dans le même éditeur riche que les leçons. Ce n'est pas un
-ensemble de questions choisies par matière.
+Hiérarchie : **Testez vos connaissances → Épreuve (Maths, FRS…) → Sujet type 1, 2, 3…**
 
-## Côté admin
-- Ouvrir un concours enregistré : la section "Sujets types de ce concours" apparaît (jamais pour un concours non enregistré).
-- Plusieurs sujets par concours. Paramètres : titre (défaut "Sujet type"), description, limite de temps (facultative, en minutes), note de réussite (facultative, en pourcentage).
-- Un nouveau sujet est un brouillon. On peut le rédiger, le publier, le dépublier, le supprimer. Publier est refusé tant que le contenu est vide.
-- Supprimer un concours supprime ses sujets types (`deleteCourse` dans `adminRepository.ts`).
+Une épreuve est seulement un groupe nommé (pas d'éditeur). Chaque sujet type est un document
+rédigé dans le même éditeur riche que les leçons, avec son titre, sa description, sa limite de
+temps et sa note de réussite.
+
+## Côté admin (dans un concours enregistré)
+- Section "Sujets types de ce concours" = liste des épreuves. Créer, renommer, publier, dépublier, supprimer une épreuve.
+- "Ouvrir" une épreuve : liste de ses sujets types. Créer (titre par défaut "Sujet type N"), rédiger, paramétrer, publier, dépublier, supprimer.
+- Un nouveau sujet type ou une nouvelle épreuve est un brouillon. Publier un sujet vide est refusé.
+- Supprimer une épreuve supprime ses sujets types. Supprimer un concours supprime tout (sujets types et épreuves).
+- Anciens sujets créés avant les épreuves (sans épreuve) : section "Sujets types sans épreuve", avec un sélecteur pour les ranger dans une épreuve. Ils sont invisibles pour les étudiants tant qu'ils ne sont pas rangés.
 
 ## Côté étudiant
-- La carte "Testez vos connaissances" de la page du concours liste les sujets types publiés de CE concours.
-- Le sujet s'ouvre dans le même lecteur responsive que les leçons (`LessonContentReader`).
-- Aucune progression n'est exigée : un étudiant inscrit peut ouvrir un sujet à tout moment.
-- Si une limite de temps existe, un chronomètre facultatif (démarrer, pause, réinitialiser) est proposé. Il ne bloque jamais la lecture.
-- Le bouton "Commencer un entraînement" (quiz existants) est conservé sous les sujets types.
+- Page du concours : la carte "Testez vos connaissances" n'affiche plus de sujets, seulement le bouton "Voir tous les sujets types" (désactivé s'il n'y a rien de publié). "Commencer un entraînement" a été retiré de cette carte.
+- Le bouton ouvre la liste des épreuves, puis les sujets types de l'épreuve choisie, puis le contenu dans le lecteur responsive des leçons. Le bouton retour du navigateur remonte d'un niveau.
+- Visibilité : un sujet type n'est visible que si lui ET son épreuve sont publiés. Une épreuve sans sujet type publié est masquée.
+- Aucune progression n'est exigée. Chronomètre facultatif si une limite de temps existe.
 
 ## Architecture
-- Nouvelle collection `coursePapers` : `courseId`, `title`, `description`, `timeLimitMinutes`, `passMark`, `status` (`draft` | `published`), `order`, `html`, `createdBy`, `updatedBy`, `createdAt`, `updatedAt`. Raison : un sujet appartient à un seul concours, avec son propre cycle de publication, ce qui ne rentre ni dans `contentNodes` (partagés entre concours) ni dans `questionSets`.
-- Règles Firestore : lecture et écriture réservées aux gestionnaires. Les étudiants n'y accèdent jamais directement.
-- Deux fonctions callable (region `africa-south1`) : `listStudentCoursePapers` (liste sans contenu) et `getStudentCoursePaper` (contenu). Elles exigent un compte actif, une inscription active et un concours publié, comme `getStudentLessonContent`.
-- Images collées dans l'éditeur : `content-subjects/course-papers/{courseId}/{paperId}/images/` (règle Storage existante, aucune modification).
+- `coursePaperGroups` (nouveau) : `courseId`, `title`, `status`, `order`, `createdBy`, `updatedBy`, `createdAt`, `updatedAt`.
+- `coursePapers` : champ `groupId` ajouté (vide pour les anciens sujets).
+- Règles Firestore : les deux collections sont réservées aux gestionnaires. Les étudiants passent par les callables.
+- `listStudentCoursePapers` renvoie maintenant `{ groups: [{ id, title, order, papers: [...] }] }` (épreuves publiées contenant au moins un sujet publié). `getStudentCoursePaper` vérifie aussi que l'épreuve est publiée. Les deux exigent compte actif, inscription active et concours publié.
+- Images de l'éditeur : `content-subjects/course-papers/{courseId}/{paperId}/images/` (aucune modification Storage).
 
 ## Déploiement requis (en plus de Cloudflare)
 ```
 firebase deploy --only firestore:rules
 firebase deploy --only functions:listStudentCoursePapers,functions:getStudentCoursePaper
 ```
-Sans cela, l'admin ne peut pas enregistrer de sujet et les étudiants ne voient aucun sujet.
+Les règles sont obligatoires pour l'admin (collection `coursePaperGroups`). Les fonctions sont obligatoires pour les étudiants (nouvelle forme de réponse). Déployer d'abord les règles et les fonctions, puis le site, et faire un rechargement forcé (Ctrl+F5) côté étudiant.
 
 ## Fichiers
-- Créés : `src/types/coursePaper.ts`, `src/features/coursePapers/*`, `src/components/CoursePapersAdmin.tsx`, `src/components/CoursePaperView.tsx`, `src/components/LessonContentReader.tsx` (extrait de `App.tsx`), `src/styles/course-papers.css`.
+- Créés : `src/types/coursePaper.ts`, `src/features/coursePapers/*`, `src/components/CoursePapersAdmin.tsx`, `CoursePapersBrowser.tsx`, `CoursePaperView.tsx`, `LessonContentReader.tsx` (extrait de `App.tsx`), `src/styles/course-papers.css`.
 - Modifiés : `src/App.tsx`, `src/features/admin/adminRepository.ts`, `src/main.tsx`, `firestore.rules`, `functions/src/index.ts`, `functions/lib/index.js` (compilé).
 
 ## Vérifications
-- `npm run build` : OK. `npm run lint` : 99 problèmes, identique à avant (2 erreurs et 97 avertissements déjà présents). `functions` : `tsc` OK, 10 tests OK.
+- `npm run build` OK. Lint : 99 problèmes, identique à avant. `functions` : `tsc` OK, 10 tests OK.
 - Non testé dans un navigateur ni avec l'émulateur Firebase.
 
 ## Limites connues
-- La note de réussite est informative (pas de correction automatique, le sujet est un document).
-- Le chronomètre est côté client et facultatif.
-- Les anciens sujets ne sont pas réordonnables par glisser-déposer (ordre de création).
+- La note de réussite est informative (pas de correction automatique). Le chronomètre est côté client et facultatif.
+- Pas de réordonnancement par glisser-déposer (ordre de création).

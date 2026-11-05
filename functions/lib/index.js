@@ -827,6 +827,7 @@ function coursePaperSummary(id, data) {
     return {
         id,
         courseId: String(data.courseId ?? ''),
+        groupId: String(data.groupId ?? ''),
         title: String(data.title ?? ''),
         description: String(data.description ?? ''),
         timeLimitMinutes: typeof data.timeLimitMinutes === 'number' ? data.timeLimitMinutes : null,
@@ -838,15 +839,29 @@ function coursePaperSummary(id, data) {
 export const listStudentCoursePapers = onCall({ region: 'africa-south1' }, async (request) => {
     const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : '';
     await assertCoursePaperAccess(request, courseId);
-    const snapshot = await db.collection('coursePapers')
-        .where('courseId', '==', courseId)
-        .where('status', '==', 'published')
-        .get();
-    // The document (html) is deliberately not part of the list.
-    const papers = snapshot.docs
-        .map(item => coursePaperSummary(item.id, item.data()))
+    const [groupSnapshot, paperSnapshot] = await Promise.all([
+        db.collection('coursePaperGroups').where('courseId', '==', courseId).where('status', '==', 'published').get(),
+        db.collection('coursePapers').where('courseId', '==', courseId).where('status', '==', 'published').get(),
+    ]);
+    // A Sujet type is visible only when it and its épreuve are both published, and an
+    // épreuve without any published Sujet type is hidden. The documents (html) are never listed.
+    const papersByGroup = new Map();
+    for (const item of paperSnapshot.docs) {
+        const summary = coursePaperSummary(item.id, item.data());
+        if (!summary.groupId)
+            continue;
+        papersByGroup.set(summary.groupId, [...(papersByGroup.get(summary.groupId) ?? []), summary]);
+    }
+    const groups = groupSnapshot.docs
+        .map(item => ({
+        id: item.id,
+        title: String(item.data().title ?? ''),
+        order: Number(item.data().order ?? 0),
+        papers: (papersByGroup.get(item.id) ?? []).sort((a, b) => a.order - b.order),
+    }))
+        .filter(group => group.papers.length > 0)
         .sort((a, b) => a.order - b.order);
-    return { papers };
+    return { groups };
 });
 export const getStudentCoursePaper = onCall({ region: 'africa-south1' }, async (request) => {
     const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : '';
@@ -856,7 +871,12 @@ export const getStudentCoursePaper = onCall({ region: 'africa-south1' }, async (
         throw new HttpsError('invalid-argument', 'Sujet type invalide.');
     const paperSnapshot = await db.doc(`coursePapers/${paperId}`).get();
     const data = paperSnapshot.data();
-    if (!paperSnapshot.exists || !data || data.status !== 'published' || data.courseId !== courseId) {
+    if (!paperSnapshot.exists || !data || data.status !== 'published' || data.courseId !== courseId || !data.groupId) {
+        throw new HttpsError('not-found', 'Sujet type introuvable.');
+    }
+    const groupSnapshot = await db.doc(`coursePaperGroups/${String(data.groupId)}`).get();
+    const groupData = groupSnapshot.data();
+    if (!groupSnapshot.exists || !groupData || groupData.status !== 'published' || groupData.courseId !== courseId) {
         throw new HttpsError('not-found', 'Sujet type introuvable.');
     }
     return { paper: coursePaperSummary(paperSnapshot.id, data), html: String(data.html ?? '') };

@@ -77,6 +77,13 @@ service cloud.firestore {
       allow delete: if manager();
     }
 
+    // Épreuves: named groups of Sujets types inside a concours (no content of their own).
+    match /coursePaperGroups/{id} {
+      allow read: if manager();
+      allow create, update: if manager();
+      allow delete: if manager();
+    }
+
     match /contactMessages/{id} {
       allow create: if request.resource.data.firstName is string
         && request.resource.data.firstName.size() > 0
