@@ -6,6 +6,18 @@ export type ExportStudent = {
   status: 'active' | 'suspended'
   createdAt?: Date
   courseNames: string[]
+  /** One entry per current concours: the payment used to enrol (Excel export only). */
+  payments?: Array<{ title: string; method?: 'mvola' | 'orange_money' | 'airtel_money'; reference?: string }>
+}
+
+const PAYMENT_METHOD_LABELS = { mvola: 'MVola', orange_money: 'Orange Money', airtel_money: 'Airtel Money' } as const
+
+/** One value per concours; the concours name is added only when the student has several, so a single value stays clean. */
+function paymentCell(student: ExportStudent, pick: (payment: NonNullable<ExportStudent['payments']>[number]) => string | undefined) {
+  const entries = student.payments ?? []
+  if (!entries.length) return ''
+  const values = entries.map(entry => ({ title: entry.title, value: pick(entry) || 'Non renseigné' }))
+  return values.length === 1 ? values[0].value : values.map(item => `${item.title} : ${item.value}`).join(' ; ')
 }
 
 type Cell = string | number
@@ -70,12 +82,14 @@ function zipStore(entries: Array<{ name: string; content: string }>) {
 }
 
 function xlsxXml(students: ExportStudent[]) {
-  const headers = ['Étudiant', 'Email', 'Téléphone', 'Concours', 'Membre depuis', 'Statut']
+  const headers = ['Étudiant', 'Email', 'Téléphone', 'Concours', 'Moyen de paiement', 'Référence de paiement', 'Membre depuis', 'Statut']
   const rows: Cell[][] = students.map(student => [
     student.displayName,
     student.email,
     student.phone || 'Non renseigné',
     student.courseNames.join(', ') || 'Aucun concours',
+    paymentCell(student, entry => entry.method ? PAYMENT_METHOD_LABELS[entry.method] : undefined),
+    paymentCell(student, entry => entry.reference),
     student.createdAt ? student.createdAt.toLocaleDateString('fr-FR') : '',
     student.status === 'active' ? 'Actif' : 'Suspendu',
   ])
@@ -85,7 +99,7 @@ function xlsxXml(students: ExportStudent[]) {
     const ref = `${col(c + 1)}${r + 1}`
     return typeof value === 'number' ? `<c r="${ref}"><v>${value}</v></c>` : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escXml(String(value))}</t></is></c>`
   }).join('')}</row>`).join('')
-  return `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="26" customWidth="1"/><col min="2" max="2" width="34" customWidth="1"/><col min="3" max="3" width="20" customWidth="1"/><col min="4" max="4" width="48" customWidth="1"/><col min="5" max="6" width="18" customWidth="1"/></cols><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:F${all.length}"/></worksheet>`
+  return `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="26" customWidth="1"/><col min="2" max="2" width="34" customWidth="1"/><col min="3" max="3" width="20" customWidth="1"/><col min="4" max="4" width="48" customWidth="1"/><col min="5" max="5" width="30" customWidth="1"/><col min="6" max="6" width="34" customWidth="1"/><col min="7" max="8" width="18" customWidth="1"/></cols><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:H${all.length}"/></worksheet>`
 }
 
 export async function exportStudentsToExcel(students: ExportStudent[]) {

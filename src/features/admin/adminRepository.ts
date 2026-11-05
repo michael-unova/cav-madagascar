@@ -517,6 +517,22 @@ export async function updateSubject(
     updatedBy: userId,
     updatedAt: serverTimestamp(),
   })
+  // Each concours keeps its own copy of the matière's name (as `title`), matricule, niveau and description,
+  // and that copy is what students see. Keep every copy of THIS matière in step with the edit. A duplicated
+  // matière has its own id, so it is never affected by changes to the original (and vice versa).
+  const copyPatch: Record<string, string> = {}
+  if (input.name) copyPatch.title = input.name.trim()
+  if (input.matricule) copyPatch.matricule = input.matricule.trim().toUpperCase()
+  if (input.niveau) copyPatch.niveau = input.niveau.trim()
+  if (input.description !== undefined) copyPatch.description = input.description.trim()
+  if (Object.keys(copyPatch).length) {
+    const copies = await getDocs(query(collection(firestore, 'courseSubjects'), where('subjectId', '==', subjectId)))
+    for (let index = 0; index < copies.docs.length; index += 400) {
+      const batch = writeBatch(firestore)
+      copies.docs.slice(index, index + 400).forEach((item) => batch.update(item.ref, { ...copyPatch, updatedAt: serverTimestamp() }))
+      await batch.commit()
+    }
+  }
   if (input.status === 'published') {
     const links = await getDocs(query(collection(firestore, 'courseSubjects'), where('subjectId', '==', subjectId)))
     const courses = await getDocs(collection(firestore, 'courses'))

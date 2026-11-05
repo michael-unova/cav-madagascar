@@ -5251,6 +5251,8 @@ type StudentEnrollmentRecord = {
   key: string;
   enrollmentId: string;
   historyId?: string;
+  /** Payment that opened this enrollment (used by the Excel export). */
+  paymentId?: string;
   courseId: string;
   title: string;
   state: "active" | "expired" | "revoked";
@@ -5365,7 +5367,7 @@ function AdminUsers() {
         if (isCurrent) coveredPaymentIds.add(historyId);
         const source = isCurrent && current ? current : entry;
         const state = isCurrent && current ? stateOf(current) : String(entry.status ?? "") === "revoked" ? "revoked" : "expired";
-        pushRecord(userId, { key: `h-${historyId}`, enrollmentId, historyId, courseId, title, state, enrolledAt: toDate(source.enrolledAt) ?? toDate(entry.enrolledAt), expiresAt: toDate(source.expiresAt) ?? toDate(entry.expiresAt), revokedAt: toDate(source.revokedAt) });
+        pushRecord(userId, { key: `h-${historyId}`, enrollmentId, historyId, paymentId: historyId, courseId, title, state, enrolledAt: toDate(source.enrolledAt) ?? toDate(entry.enrolledAt), expiresAt: toDate(source.expiresAt) ?? toDate(entry.expiresAt), revokedAt: toDate(source.revokedAt) });
       }
       for (const entry of enrollmentsSnapshot) {
         const userId = String(entry.userId ?? "");
@@ -5373,7 +5375,7 @@ function AdminUsers() {
         const title = courseMap.get(courseId);
         if (!userId || !courseId || !title || String(entry.status ?? "") === "pending") continue;
         if (coveredPaymentIds.has(String(entry.paymentId ?? "")) && String(entry.paymentId ?? "")) continue;
-        pushRecord(userId, { key: `e-${String(entry.docId ?? "")}`, enrollmentId: String(entry.docId ?? `${userId}_${courseId}`), courseId, title, state: stateOf(entry), enrolledAt: toDate(entry.enrolledAt), expiresAt: toDate(entry.expiresAt), revokedAt: toDate(entry.revokedAt) });
+        pushRecord(userId, { key: `e-${String(entry.docId ?? "")}`, enrollmentId: String(entry.docId ?? `${userId}_${courseId}`), paymentId: String(entry.paymentId ?? "") || undefined, courseId, title, state: stateOf(entry), enrolledAt: toDate(entry.enrolledAt), expiresAt: toDate(entry.expiresAt), revokedAt: toDate(entry.revokedAt) });
       }
       const rank = { active: 0, expired: 1, revoked: 1 } as const;
       for (const list of recordsByUser.values()) {
@@ -5484,7 +5486,20 @@ function AdminUsers() {
       const exports = await import("./lib/export/userExports");
       // The screen shows newest accounts first; exports are always alphabetical.
       const ordered = sortAlphabetically(filtered);
-      if (kind === "excel") await exports.exportStudentsToExcel(ordered);
+      if (kind === "excel") {
+        // Payment method and reference of each current concours, for verification. Read only when exporting.
+        const paymentsById = new Map((await listAllPayments()).map((payment) => [payment.id, payment]));
+        const withPayments = ordered.map((student) => {
+          const entries = student.enrollmentRecords
+            .filter((record) => record.state === "active")
+            .map((record) => {
+              const payment = record.paymentId ? paymentsById.get(record.paymentId) : undefined;
+              return { title: record.title, method: payment?.method, reference: payment?.reference };
+            });
+          return { ...student, payments: entries };
+        });
+        await exports.exportStudentsToExcel(withPayments);
+      }
       if (kind === "word") await exports.exportStudentsToWord(ordered);
       if (kind === "pdf") await exports.exportStudentsToPdf(ordered);
     } catch (e) {
