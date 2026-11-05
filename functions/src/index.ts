@@ -852,10 +852,64 @@ async function assertCoursePaperAccess(request: CallableRequest, courseId: strin
   }
 }
 
+/**
+ * Épreuves group the Sujets types of a concours. Papers written before épreuves existed have no
+ * `epreuveId`: they are moved, once, into one default épreuve whose id is fixed per concours, so
+ * running this twice (or from two places at once) never creates a second one. The default épreuve
+ * is published so papers that were visible to students stay visible; each paper keeps its own status.
+ */
+async function ensureCourseEpreuves(courseId: string) {
+  const papersSnapshot = await db.collection('coursePapers').where('courseId', '==', courseId).get()
+  const orphans = papersSnapshot.docs.filter(item => !String(item.data().epreuveId ?? ''))
+  if (!orphans.length) return
+  const epreuveRef = db.doc(`courseEpreuves/default-${courseId}`)
+  await db.runTransaction(async transaction => {
+    const existing = await transaction.get(epreuveRef)
+    if (!existing.exists) {
+      transaction.set(epreuveRef, {
+        courseId,
+        title: 'Épreuve',
+        status: 'published',
+        order: 0,
+        createdBy: 'migration',
+        updatedBy: 'migration',
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    }
+  })
+  for (let index = 0; index < orphans.length; index += 400) {
+    const batch = db.batch()
+    orphans.slice(index, index + 400).forEach(item => batch.update(item.ref, { epreuveId: epreuveRef.id }))
+    await batch.commit()
+  }
+}
+
+/** Admin side: moves papers written before épreuves existed into a default épreuve (see ensureCourseEpreuves). */
+export const ensureCoursePaperEpreuves = onCall({ region: 'africa-south1' }, async request => {
+  const uid = request.auth?.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
+  await requireAdmin(uid)
+  const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : ''
+  if (!courseId) throw new HttpsError('invalid-argument', 'Concours invalide.')
+  await ensureCourseEpreuves(courseId)
+  return { ok: true }
+})
+
+/** Ids of the published épreuves of a concours. A Sujet type is visible only inside one of them. */
+async function publishedEpreuveIds(courseId: string) {
+  const snapshot = await db.collection('courseEpreuves')
+    .where('courseId', '==', courseId)
+    .where('status', '==', 'published')
+    .get()
+  return new Map(snapshot.docs.map(item => [item.id, item.data()]))
+}
+
 function coursePaperSummary(id: string, data: DocumentData) {
   return {
     id,
     courseId: String(data.courseId ?? ''),
+    epreuveId: String(data.epreuveId ?? ''),
     title: String(data.title ?? ''),
     description: String(data.description ?? ''),
     timeLimitMinutes: typeof data.timeLimitMinutes === 'number' ? data.timeLimitMinutes : null,
@@ -865,19 +919,60 @@ function coursePaperSummary(id: string, data: DocumentData) {
   }
 }
 
-export const listStudentCoursePapers = onCall({ region: 'africa-south1' }, async request => {
+/** Student side: the épreuves of a concours that hold at least one published Sujet type. */
+export const listStudentCourseEpreuves = onCall({ region: 'africa-south1' }, async request => {
   const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : ''
   await assertCoursePaperAccess(request, courseId)
+  await ensureCourseEpreuves(courseId)
 
+  const [epreuves, papersSnapshot] = await Promise.all([
+    publishedEpreuveIds(courseId),
+    db.collection('coursePapers').where('courseId', '==', courseId).where('status', '==', 'published').get(),
+  ])
+  const counts = new Map<string, number>()
+  papersSnapshot.docs.forEach(item => {
+    const epreuveId = String(item.data().epreuveId ?? '')
+    if (epreuves.has(epreuveId)) counts.set(epreuveId, (counts.get(epreuveId) ?? 0) + 1)
+  })
+  const list = [...epreuves.entries()]
+    .filter(([id]) => (counts.get(id) ?? 0) > 0)
+    .map(([id, data]) => ({
+      id,
+      courseId,
+      title: String(data.title ?? ''),
+      order: Number(data.order ?? 0),
+      paperCount: counts.get(id) ?? 0,
+      createdAt: data.createdAt?.toMillis?.() ?? 0,
+    }))
+    .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)
+    .map(({ createdAt: _createdAt, ...item }) => item)
+  return { epreuves: list }
+})
+
+/** Student side: the published Sujets types of one épreuve (without their document). */
+export const listStudentCoursePapers = onCall({ region: 'africa-south1' }, async request => {
+  const courseId = typeof request.data?.courseId === 'string' ? request.data.courseId : ''
+  const epreuveId = typeof request.data?.epreuveId === 'string' ? request.data.epreuveId : ''
+  await assertCoursePaperAccess(request, courseId)
+  await ensureCourseEpreuves(courseId)
+
+  const epreuves = await publishedEpreuveIds(courseId)
+  if (epreuveId && !epreuves.has(epreuveId)) return { papers: [] }
   const snapshot = await db.collection('coursePapers')
     .where('courseId', '==', courseId)
     .where('status', '==', 'published')
     .get()
 
-  // The document (html) is deliberately not part of the list.
+  // The document (html) is deliberately not part of the list. A paper is only listed
+  // when its épreuve is published too.
   const papers = snapshot.docs
-    .map(item => coursePaperSummary(item.id, item.data()))
-    .sort((a, b) => a.order - b.order)
+    .filter(item => {
+      const owner = String(item.data().epreuveId ?? '')
+      return epreuves.has(owner) && (!epreuveId || owner === epreuveId)
+    })
+    .map(item => ({ ...coursePaperSummary(item.id, item.data()), createdAt: item.data().createdAt?.toMillis?.() ?? 0 }))
+    .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)
+    .map(({ createdAt: _createdAt, ...item }) => item)
   return { papers }
 })
 
@@ -890,6 +985,10 @@ export const getStudentCoursePaper = onCall({ region: 'africa-south1' }, async r
   const paperSnapshot = await db.doc(`coursePapers/${paperId}`).get()
   const data = paperSnapshot.data()
   if (!paperSnapshot.exists || !data || data.status !== 'published' || data.courseId !== courseId) {
+    throw new HttpsError('not-found', 'Sujet type introuvable.')
+  }
+  // A paper inside an unpublished épreuve is hidden from students, like the épreuve itself.
+  if (!(await publishedEpreuveIds(courseId)).has(String(data.epreuveId ?? ''))) {
     throw new HttpsError('not-found', 'Sujet type introuvable.')
   }
 

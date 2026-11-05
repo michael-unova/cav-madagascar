@@ -22,6 +22,7 @@ function mapPaper(id: string, data: Record<string, unknown>): CoursePaper {
   return {
     id,
     courseId: String(data.courseId ?? ''),
+    epreuveId: String(data.epreuveId ?? ''),
     title: String(data.title ?? ''),
     description: String(data.description ?? ''),
     timeLimitMinutes: numberOrNull(data.timeLimitMinutes),
@@ -55,18 +56,20 @@ export function normalizePaperInput(input: CoursePaperInput): CoursePaperInput {
   }
 }
 
-/** Admin side: all papers of a concours, drafts included. */
-export async function listCoursePapers(courseId: string): Promise<CoursePaper[]> {
+/** Admin side: all papers of a concours (or of one épreuve of it), drafts included. */
+export async function listCoursePapers(courseId: string, epreuveId?: string): Promise<CoursePaper[]> {
   const snap = await getDocs(query(collection(db, COLLECTION), where('courseId', '==', courseId)))
   return snap.docs
     .map(item => mapPaper(item.id, item.data()))
+    .filter(paper => epreuveId === undefined || paper.epreuveId === epreuveId)
     .sort((a, b) => a.order - b.order || (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0))
 }
 
-export async function createCoursePaper(courseId: string, input: CoursePaperInput, order: number, userId: string): Promise<string> {
+export async function createCoursePaper(courseId: string, epreuveId: string, input: CoursePaperInput, order: number, userId: string): Promise<string> {
   const clean = normalizePaperInput(input)
   const ref = await addDoc(collection(db, COLLECTION), {
     courseId,
+    epreuveId,
     ...clean,
     status: 'draft' satisfies CoursePaperStatus,
     order,
@@ -110,10 +113,10 @@ export async function deleteCoursePapersForCourse(courseId: string): Promise<voi
   await Promise.all(snap.docs.map(item => deleteDoc(item.ref)))
 }
 
-/** Student side: published papers of a concours (no document content). */
-export async function listStudentCoursePapers(courseId: string): Promise<CoursePaperSummary[]> {
-  const callable = httpsCallable<{ courseId: string }, { papers: CoursePaperSummary[] }>(getFirebaseFunctions(), 'listStudentCoursePapers')
-  const response = await callable({ courseId })
+/** Student side: published papers of one épreuve of a concours (no document content). */
+export async function listStudentCoursePapers(courseId: string, epreuveId: string): Promise<CoursePaperSummary[]> {
+  const callable = httpsCallable<{ courseId: string; epreuveId: string }, { papers: CoursePaperSummary[] }>(getFirebaseFunctions(), 'listStudentCoursePapers')
+  const response = await callable({ courseId, epreuveId })
   return response.data.papers
 }
 

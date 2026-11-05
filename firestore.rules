@@ -77,6 +77,14 @@ service cloud.firestore {
       allow delete: if manager();
     }
 
+    // Épreuves group the Sujets types of a concours (for example "EPREUVE MATHS"). Same rule as the
+    // papers: students get them through the callables, never by reading the collection.
+    match /courseEpreuves/{id} {
+      allow read: if manager();
+      allow create, update: if manager();
+      allow delete: if manager();
+    }
+
     match /contactMessages/{id} {
       allow create: if request.resource.data.firstName is string
         && request.resource.data.firstName.size() > 0

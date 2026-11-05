@@ -132,10 +132,11 @@ import { sortAlphabetically, sortNewestFirst } from "./features/admin/userSortin
 import { isRecentVisit, markVisit } from "./lib/recentVisit";
 import { callableErrorMessage } from "./lib/firebase/callableError";
 import { LessonContentReader } from "./components/LessonContentReader";
-import { CoursePapersAdmin } from "./components/CoursePapersAdmin";
+import { CourseEpreuvesAdmin } from "./components/CourseEpreuvesAdmin";
 import { CoursePaperView } from "./components/CoursePaperView";
-import { listStudentCoursePapers } from "./features/coursePapers";
-import type { CoursePaperSummary } from "./types/coursePaper";
+import { listStudentCourseEpreuves, listStudentCoursePapers } from "./features/coursePapers";
+import { CourseEpreuveList, CourseEpreuvePapers } from "./components/CourseTestScreens";
+import type { CourseEpreuveSummary, CoursePaperSummary } from "./types/coursePaper";
 
 type Role = "visitor" | "student" | "admin" | "teacher";
 
@@ -1897,8 +1898,17 @@ function CoursePage({
   const [subjects, setSubjects] = useState<CourseSubject[]>([]);
   const [nodes, setNodes] = useState<ContentNode[]>([]);
   const [chapterSets, setChapterSets] = useState<QuestionSet[]>([]);
-  const [coursePapers, setCoursePapers] = useState<CoursePaperSummary[]>([]);
+  // "Testez vos connaissances": épreuves of the concours, then the Sujets types of one épreuve.
+  const [courseEpreuves, setCourseEpreuves] = useState<CourseEpreuveSummary[]>([]);
+  const [epreuvesState, setEpreuvesState] = useState<"loading" | "ready" | "error">("loading");
+  const [testScreen, setTestScreen] = useState<"" | "epreuves" | "papers">("");
+  const [selectedEpreuveId, setSelectedEpreuveId] = useState("");
+  const [loadedPapers, setLoadedPapers] = useState<{ epreuveId: string; items: CoursePaperSummary[]; failed: boolean } | null>(null);
   const [selectedPaperId, setSelectedPaperId] = useState("");
+  const papersReady = loadedPapers?.epreuveId === selectedEpreuveId;
+  const coursePapers = papersReady ? loadedPapers.items : [];
+  const papersLoading = Boolean(selectedEpreuveId) && !papersReady;
+  const papersFailed = papersReady && loadedPapers.failed;
   const [progress, setProgress] = useState(0);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -1941,7 +1951,7 @@ function CoursePage({
       ? window.history.state as Record<string, unknown>
       : {};
     window.history.pushState(
-      { ...currentState, __cavCourseView: true, subjectId, nodeId, paperId: "", courseId: course?.id ?? null },
+      { ...currentState, __cavCourseView: true, subjectId, nodeId, paperId: "", testScreen: "", epreuveId: "", courseId: course?.id ?? null },
       "",
       window.location.href,
     );
@@ -1972,23 +1982,39 @@ function CoursePage({
     if (!course?.id) return;
     let cancelled = false;
     setSelectedPaperId("");
-    listStudentCoursePapers(course.id)
-      .then(items => { if (!cancelled) setCoursePapers(items); })
-      .catch(error => { console.error(error); if (!cancelled) setCoursePapers([]); });
+    setSelectedEpreuveId("");
+    setTestScreen("");
+    listStudentCourseEpreuves(course.id)
+      .then(items => { if (!cancelled) { setCourseEpreuves(items); setEpreuvesState("ready"); } })
+      .catch(error => { console.error(error); if (!cancelled) { setCourseEpreuves([]); setEpreuvesState("error"); } });
     return () => { cancelled = true; };
   }, [course?.id]);
+  // The Sujets types of the épreuve being viewed.
+  useEffect(() => {
+    if (!course?.id || !selectedEpreuveId) return;
+    let cancelled = false;
+    const epreuveId = selectedEpreuveId;
+    listStudentCoursePapers(course.id, epreuveId)
+      .then(items => { if (!cancelled) setLoadedPapers({ epreuveId, items, failed: false }); })
+      .catch(error => { console.error(error); if (!cancelled) setLoadedPapers({ epreuveId, items: [], failed: true }); });
+    return () => { cancelled = true; };
+  }, [course?.id, selectedEpreuveId]);
   useEffect(() => {
     const onCourseViewPopState = (event: PopStateEvent) => {
-      const state = event.state as { __cavCourseView?: boolean; subjectId?: string; nodeId?: string; paperId?: string; courseId?: string | null } | null;
+      const state = event.state as { __cavCourseView?: boolean; subjectId?: string; nodeId?: string; paperId?: string; testScreen?: "" | "epreuves" | "papers"; epreuveId?: string; courseId?: string | null } | null;
       if (state?.__cavCourseView && (!state.courseId || state.courseId === course?.id)) {
         setSelectedSubjectId(state.subjectId ?? "");
         setSelectedNodeId(state.nodeId ?? "");
         setSelectedPaperId(state.paperId ?? "");
+        setTestScreen(state.testScreen ?? "");
+        setSelectedEpreuveId(state.epreuveId ?? "");
       } else {
         // Returning to the app-level history entry means leaving this local view.
         setSelectedSubjectId("");
         setSelectedNodeId("");
         setSelectedPaperId("");
+        setTestScreen("");
+        setSelectedEpreuveId("");
       }
     };
     window.addEventListener("popstate", onCourseViewPopState);
@@ -2365,20 +2391,28 @@ function CoursePage({
   };
 
   const selectedPaper = coursePapers.find((paper) => paper.id === selectedPaperId);
-  const openCoursePaper = (paper: CoursePaperSummary) => {
+  const selectedEpreuve = courseEpreuves.find((item) => item.id === selectedEpreuveId);
+  // Opens one of the three "Testez vos connaissances" screens. Each one is a history entry,
+  // so the browser Back button and phone swipe gestures step back one screen at a time.
+  const pushTestView = (screen: "epreuves" | "papers", epreuveId: string, paperId: string) => {
     const currentState = window.history.state && typeof window.history.state === "object"
       ? window.history.state as Record<string, unknown>
       : {};
     window.history.pushState(
-      { ...currentState, __cavCourseView: true, subjectId: "", nodeId: "", paperId: paper.id, courseId: course?.id ?? null },
+      { ...currentState, __cavCourseView: true, subjectId: "", nodeId: "", paperId, testScreen: screen, epreuveId, courseId: course?.id ?? null },
       "",
       window.location.href,
     );
     setSelectedSubjectId("");
     setSelectedNodeId("");
-    setSelectedPaperId(paper.id);
+    setTestScreen(screen);
+    setSelectedEpreuveId(epreuveId);
+    setSelectedPaperId(paperId);
     window.scrollTo({ top: 0 });
   };
+  const openEpreuveList = () => pushTestView("epreuves", "", "");
+  const openEpreuve = (epreuve: CourseEpreuveSummary) => pushTestView("papers", epreuve.id, "");
+  const openCoursePaper = (paper: CoursePaperSummary) => pushTestView("papers", selectedEpreuveId, paper.id);
 
   if (!course)
     return (
@@ -2394,7 +2428,31 @@ function CoursePage({
         courseId={course.id}
         courseTitle={course.title}
         paper={selectedPaper}
+        backLabel="← Retour à l’épreuve"
         onBack={() => leaveCourseView(() => setSelectedPaperId(""))}
+      />
+    );
+
+  if (testScreen === "papers" && selectedEpreuve)
+    return (
+      <CourseEpreuvePapers
+        key={selectedEpreuve.id}
+        epreuveTitle={selectedEpreuve.title}
+        papers={coursePapers}
+        loading={papersLoading}
+        error={papersFailed ? "Impossible de charger les sujets types de cette épreuve. Réessayez dans un instant." : ""}
+        onOpen={openCoursePaper}
+        onBack={() => leaveCourseView(() => { setTestScreen("epreuves"); setSelectedEpreuveId(""); })}
+      />
+    );
+
+  if (testScreen === "epreuves")
+    return (
+      <CourseEpreuveList
+        courseTitle={course.title}
+        epreuves={courseEpreuves}
+        onOpen={openEpreuve}
+        onBack={() => leaveCourseView(() => setTestScreen(""))}
       />
     );
 
@@ -2707,24 +2765,14 @@ function CoursePage({
         <aside className="practice-card">
           <div className="eyebrow">ENTRAÎNEMENT</div>
           <h3>Testez vos connaissances</h3>
-          {coursePapers.length > 0 ? (
-            <div className="course-paper-cards">
-              {coursePapers.map((paper) => (
-                <button type="button" className="course-paper-card" key={paper.id} onClick={() => openCoursePaper(paper)}>
-                  <span className="course-paper-card-title">{paper.title}</span>
-                  {paper.description && <span className="course-paper-card-description">{paper.description}</span>}
-                  <span className="course-paper-card-meta">
-                    {paper.timeLimitMinutes ? `⏱ ${paper.timeLimitMinutes < 60 ? `${paper.timeLimitMinutes} min` : `${Math.floor(paper.timeLimitMinutes / 60)} h${paper.timeLimitMinutes % 60 ? ` ${String(paper.timeLimitMinutes % 60).padStart(2, "0")}` : ""}`}` : "Sans limite de temps"}
-                    {paper.passMark !== null ? ` · Réussite ${paper.passMark} %` : ""}
-                  </span>
-                  <span className="course-paper-card-cta">Ouvrir le sujet →</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p>Les sujets types publiés pour ce concours apparaîtront ici.</p>
-          )}
-          <button className={coursePapers.length > 0 ? "outline full" : "primary full"} style={coursePapers.length > 0 ? { marginTop: 14 } : undefined} disabled={!subjects.length} onClick={() => practice()}>Commencer un entraînement <Icon name="arrow" /></button>
+          <p className="course-paper-aside-text">
+            {epreuvesState === "error"
+              ? "Impossible de charger les sujets types pour le moment."
+              : epreuvesState === "ready" && courseEpreuves.length === 0
+                ? "Les sujets types publiés pour ce concours apparaîtront ici."
+                : "Entraînez-vous avec les sujets types d’examen blanc de ce concours."}
+          </p>
+          <button className="primary full" disabled={epreuvesState !== "ready" || courseEpreuves.length === 0} onClick={openEpreuveList}>Voir tous les sujets types <Icon name="arrow" /></button>
         </aside>
       </div>
     </div>
@@ -4160,7 +4208,7 @@ function AdminCourses({
           )}
         </div>
       </section>
-      {editingId && <CoursePapersAdmin key={editingId} courseId={editingId} userId={userId} />}
+      {editingId && <CourseEpreuvesAdmin key={editingId} courseId={editingId} userId={userId} />}
 
         </div>
       </div>

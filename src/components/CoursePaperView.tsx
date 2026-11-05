@@ -8,6 +8,8 @@ interface Props {
   courseId: string
   courseTitle: string
   paper: CoursePaperSummary
+  /** Where "back" leads, for example "← Retour à l'épreuve". */
+  backLabel?: string
   onBack: () => void
 }
 
@@ -31,7 +33,7 @@ function formatDuration(minutes: number) {
  * A Sujet type is read like a lesson (same responsive reader). When the admin set a
  * time limit, the student can start an optional countdown. It never blocks reading.
  */
-export function CoursePaperView({ courseId, courseTitle, paper, onBack }: Props) {
+export function CoursePaperView({ courseId, courseTitle, paper, backLabel = '← Retour au concours', onBack }: Props) {
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -81,7 +83,7 @@ export function CoursePaperView({ courseId, courseTitle, paper, onBack }: Props)
 
   return (
     <div className="page course-paper-page">
-      <button type="button" className="back" onClick={onBack}>← Retour au concours</button>
+      <button type="button" className="back" onClick={onBack}>{backLabel}</button>
       <div className="page-title">
         <div>
           <div className="eyebrow">{courseTitle.toUpperCase()}</div>

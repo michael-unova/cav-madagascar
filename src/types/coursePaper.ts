@@ -7,6 +7,8 @@ export type CoursePaperStatus = 'draft' | 'published'
 export interface CoursePaper {
   id: string
   courseId: string
+  /** The épreuve (group) this Sujet type belongs to. */
+  epreuveId: string
   title: string
   description: string
   /** Optional time limit in minutes. */
@@ -27,3 +29,28 @@ export interface CoursePaper {
 export type CoursePaperSummary = Omit<CoursePaper, 'html' | 'createdBy' | 'updatedBy' | 'createdAt' | 'updatedAt'>
 
 export const DEFAULT_COURSE_PAPER_TITLE = 'Sujet type'
+
+/**
+ * An "épreuve" of a concours (for example "EPREUVE MATHS"): a named group that holds
+ * several Sujets types (Sujet type 1, 2, 3…). It has no content of its own.
+ */
+export interface CourseEpreuve {
+  id: string
+  courseId: string
+  title: string
+  status: CoursePaperStatus
+  order: number
+  createdBy: string
+  updatedBy: string
+  createdAt?: Date
+  updatedAt?: Date
+}
+
+/** What a student sees in the list of épreuves: only those holding at least one published Sujet type. */
+export interface CourseEpreuveSummary {
+  id: string
+  courseId: string
+  title: string
+  order: number
+  paperCount: number
+}

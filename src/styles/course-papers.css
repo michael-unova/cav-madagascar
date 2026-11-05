@@ -47,3 +47,10 @@
   .course-paper-timer-actions button { flex: 1 1 0; }
   .course-paper-row .admin-list-actions { width: 100%; }
 }
+
+/* Student: "Voir tous les sujets types" screens (épreuves, then the Sujets types of one épreuve) */
+.course-test-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 14px; margin-top: 4px; }
+.course-test-grid .course-paper-card { padding: 18px 20px; gap: 8px; }
+.course-test-grid .course-paper-card-title { font-size: 17px; }
+.course-paper-aside-text { margin: 0 0 14px; }
+@media (max-width: 700px) { .course-test-grid { grid-template-columns: 1fr; } }

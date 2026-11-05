@@ -10,11 +10,14 @@ import {
   updateCoursePaper,
 } from '../features/coursePapers'
 import { DEFAULT_COURSE_PAPER_TITLE } from '../types/coursePaper'
-import type { CoursePaper } from '../types/coursePaper'
+import type { CourseEpreuve, CoursePaper } from '../types/coursePaper'
 
 interface Props {
   courseId: string
+  /** The épreuve whose Sujets types are managed here. */
+  epreuve: CourseEpreuve
   userId: string
+  onBack: () => void
 }
 
 interface SettingsForm {
@@ -41,10 +44,10 @@ function describePaper(paper: CoursePaper) {
 }
 
 /**
- * "Sujets types de ce concours": mock exam papers written in the same rich editor
- * as lessons. Only rendered for a concours that is already saved.
+ * The Sujets types of one épreuve (Sujet type 1, 2, 3…): mock exam papers written in the
+ * same rich editor as lessons.
  */
-export function CoursePapersAdmin({ courseId, userId }: Props) {
+export function CoursePapersAdmin({ courseId, epreuve, userId, onBack }: Props) {
   const [papers, setPapers] = useState<CoursePaper[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -59,7 +62,7 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
 
   const refresh = useCallback(async () => {
     try {
-      setPapers(await listCoursePapers(courseId))
+      setPapers(await listCoursePapers(courseId, epreuve.id))
       setError('')
     } catch (e) {
       console.error(e)
@@ -67,24 +70,25 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [courseId])
+  }, [courseId, epreuve.id])
 
-  // The parent keys this component by concours id, so state starts fresh for each concours.
+  // The parent keys this component by épreuve id, so state starts fresh for each épreuve.
   useEffect(() => {
     let cancelled = false
-    listCoursePapers(courseId)
+    listCoursePapers(courseId, epreuve.id)
       .then(list => { if (!cancelled) setPapers(list) })
       .catch(e => { console.error(e); if (!cancelled) setError('Impossible de charger les sujets types de ce concours.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [courseId])
+  }, [courseId, epreuve.id])
 
   const openPaper = papers.find(paper => paper.id === openPaperId) ?? null
   const dirty = Boolean(openPaper) && draftHtml !== openPaper!.html
 
   function startCreate() {
     setError(''); setMessage('')
-    setForm(EMPTY_FORM)
+    // Sujet type 1, 2, 3… The admin can rename it.
+    setForm({ ...EMPTY_FORM, title: `${DEFAULT_COURSE_PAPER_TITLE} ${papers.length + 1}` })
     setSettingsTarget('new')
   }
 
@@ -116,8 +120,8 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
       const input = { title: form.title, description: form.description, timeLimitMinutes: result.timeLimit, passMark: result.passMark }
       if (settingsTarget === 'new') {
         const nextOrder = papers.reduce((max, paper) => Math.max(max, paper.order), -1) + 1
-        const id = await createCoursePaper(courseId, input, nextOrder, userId)
-        const list = await listCoursePapers(courseId)
+        const id = await createCoursePaper(courseId, epreuve.id, input, nextOrder, userId)
+        const list = await listCoursePapers(courseId, epreuve.id)
         setPapers(list)
         setSettingsTarget(null)
         setMessage('Sujet type créé en brouillon. Rédigez maintenant son contenu.')
@@ -283,11 +287,12 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
 
   return (
     <section className="panel course-papers-section" style={{ marginBottom: 0 }}>
+      <button type="button" className="back" onClick={onBack}>← Retour aux épreuves</button>
       <div className="section-head">
         <div>
-          <div className="eyebrow">TESTEZ VOS CONNAISSANCES</div>
-          <h2>Sujets types de ce concours</h2>
-          <p>Rédigez des sujets d’examen blanc propres à ce concours, avec le même éditeur que les leçons. Les étudiants peuvent les ouvrir à tout moment, même sans avoir terminé les leçons.</p>
+          <div className="eyebrow">ÉPREUVE · {epreuve.status === 'published' ? 'PUBLIÉE' : 'BROUILLON'}</div>
+          <h2>{epreuve.title}</h2>
+          <p>Ajoutez les sujets types de cette épreuve (Sujet type 1, 2, 3…). Chacun se rédige avec le même éditeur que les leçons. Les étudiants peuvent les ouvrir à tout moment, même sans avoir terminé les leçons.</p>
         </div>
         <button type="button" className="primary small-btn" disabled={busy || settingsTarget === 'new'} onClick={startCreate}>+ Nouveau sujet type</button>
       </div>
@@ -297,7 +302,7 @@ export function CoursePapersAdmin({ courseId, userId }: Props) {
       {loading
         ? <div className="empty-state compact">Chargement des sujets types…</div>
         : papers.length === 0
-          ? <div className="empty-state compact">Aucun sujet type pour ce concours. Créez-en un pour proposer un examen blanc aux étudiants.</div>
+          ? <div className="empty-state compact">Aucun sujet type dans cette épreuve. Créez-en un pour proposer un examen blanc aux étudiants.</div>
           : <div className="admin-list course-paper-list">
             {papers.map(paper => (
               <div className="admin-course course-paper-row" key={paper.id}>
